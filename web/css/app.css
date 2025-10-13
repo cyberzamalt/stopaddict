@@ -1,1 +1,8 @@
-/* scaffold */
+:root { font-family: system-ui, sans-serif; }
+main { max-width: 720px; margin: 2rem auto; padding: 1rem; }
+button { padding: .6rem 1rem; cursor: pointer; }
+.feedback { margin:.75rem 0; padding:.5rem .75rem; border-radius:.5rem; }
+.feedback.info  { background:#f3f4f6; color:#111827; }
+.feedback.ok    { background:#ecfdf5; color:#065f46; }
+.feedback.error { background:#fef2f2; color:#991b1b; }
+pre { background:#0b1020; color:#e5e7eb; padding:1rem; border-radius:.5rem; overflow:auto; }

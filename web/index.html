@@ -1,1 +1,21 @@
-<!-- scaffold -->
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>StopAddict</title>
+    <link rel="stylesheet" href="/stopaddict/web/css/app.css" />
+  </head>
+  <body>
+    <main>
+      <h1>StopAddict</h1>
+
+      <button id="btnImport" data-i18n="import">Importer JSON</button>
+      <input id="fileJson" type="file" accept="application/json" hidden />
+
+      <p id="feedback" role="status" aria-live="polite"></p>
+      <pre id="preview" hidden></pre>
+    </main>
+
+    <script src="/stopaddict/web/js/app.js" defer></script>
+  </body>
+</html>
