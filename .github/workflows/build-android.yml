@@ -1,0 +1,51 @@
+name: Android APK (Capacitor)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java (JDK 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Capacitor CLI and deps
+        run: |
+          npm install -g @capacitor/cli
+          npm install
+
+      - name: Init Capacitor (web dir = web)
+        run: npm run cap:init
+
+      - name: Add Android platform
+        run: npm run cap:add:android
+
+      - name: Sync web → Android
+        run: npm run cap:sync
+
+      - name: Build Debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: stopaddict-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
