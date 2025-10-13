@@ -17,7 +17,8 @@ jobs:
           node-version: 18
 
       - name: Install deps
-        run: npm ci
+        run: npm install --no-audit --no-fund
+
 
       # Génère/synchronise le projet Capacitor (utilise les scripts de ton package.json)
       - name: Init & sync Capacitor
