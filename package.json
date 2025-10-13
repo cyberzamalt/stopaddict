@@ -5,8 +5,8 @@
   "description": "StopAddict mobile wrapper",
   "license": "MIT",
   "scripts": {
-    "cap:init": "npx cap init stopaddict com.cyberzamalt.stopaddict --web-dir=web --yes || echo cap-already-inited",
-    "cap:add:android": "npx cap add android --yes",
+    "cap:init": "npx cap init stopaddict com.cyberzamalt.stopaddict --web-dir=web || echo cap-already-inited",
+    "cap:add:android": "npx cap add android || echo cap-android-exists",
     "cap:sync": "npx cap sync android",
     "cap:copy": "npx cap copy android"
   },
