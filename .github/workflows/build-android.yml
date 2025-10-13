@@ -14,37 +14,37 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 18
 
-      - name: Setup Java (JDK 17)
+      - name: Install deps
+        run: npm ci
+
+      # Génère/synchronise le projet Capacitor (utilise les scripts de ton package.json)
+      - name: Init & sync Capacitor
+        run: |
+          npm run cap:init
+          npm run cap:add:android
+          npm run cap:sync
+
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
+      # >>> La ligne importante : accepte les licences + installe SDK & build-tools
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          api-level: 34
+          build-tools: "34.0.0"
+          accept-licenses: true
 
-      - name: Install Capacitor CLI and deps
-        run: |
-          npm install -g @capacitor/cli
-          npm install
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug
 
-      - name: Init Capacitor (web dir = web)
-        run: npm run cap:init
-
-      - name: Add Android platform
-        run: npm run cap:add:android
-
-      - name: Sync web → Android
-        run: npm run cap:sync
-
-      - name: Build Debug APK
-        run: |
-          cd android
-          ./gradlew assembleDebug
-
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: stopaddict-debug-apk
