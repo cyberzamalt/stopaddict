@@ -1,56 +1,93 @@
 // web/js/app.js
+(() => {
+  const $ = (sel) => document.querySelector(sel);
 
-const i18n = {
-  fr: {
-    import: "Importer JSON",
-    pick_file: "Choisir un fichier JSON…",
-    parsing: "Lecture du fichier…",
-    import_success: "Import réussi ✔",
-    invalid: "Fichier invalide ✖",
-  },
-};
-const t = (k) => (i18n.fr[k] ?? k);
-const $ = (s) => document.querySelector(s);
+  const btnImport  = $("#btnImport");
+  const inputFile  = $("#fileJson");
+  const feedbackEl = $("#feedback");
+  const previewEl  = $("#preview");
+  const ecoAmount  = $("#economies-amount");
 
-document.addEventListener("DOMContentLoaded", () => {
-  const btn = $("#btnImport");
-  const file = $("#fileJson");
-  const feedback = $("#feedback");
-  const preview = $("#preview");
+  /** Utilitaires feedback */
+  function clearFeedback() {
+    feedbackEl.className = "feedback";
+    feedbackEl.textContent = "";
+  }
+  function setFeedback(type, msg) {
+    feedbackEl.className = `feedback ${type}`;
+    feedbackEl.textContent = msg;
+  }
 
-  document.querySelectorAll("[data-i18n]").forEach(el => {
-    el.textContent = t(el.getAttribute("data-i18n"));
+  /** Affiche un extrait joli du JSON (limité) */
+  function showPreview(obj) {
+    const pretty = JSON.stringify(obj, null, 2) || "";
+    const maxChars = 4000; // éviter de tout afficher si très gros
+    previewEl.textContent = pretty.length > maxChars ? pretty.slice(0, maxChars) + "\n…(tronqué)" : pretty;
+    previewEl.hidden = false;
+  }
+
+  /** Sanity-check très léger : on accepte large, mais on vérifie qu’on a un objet */
+  function isPlausibleData(data) {
+    // On tolère plusieurs structures, mais il faut au minimum un objet non null.
+    if (data && typeof data === "object") {
+      return true;
+    }
+    return false;
+  }
+
+  /** Sauvegarde le JSON pour les prochaines étapes (export CSV, graphiques…) */
+  function saveData(data) {
+    localStorage.setItem("stopaddict:data", JSON.stringify({
+      importedAt: new Date().toISOString(),
+      payload: data
+    }));
+  }
+
+  /** Gestion import */
+  btnImport?.addEventListener("click", () => {
+    inputFile?.click();
   });
 
-  const setFeedback = (msg, type = "info") => {
-    feedback.className = `feedback ${type}`;
-    feedback.textContent = msg;
-  };
+  inputFile?.addEventListener("change", async (e) => {
+    clearFeedback();
+    previewEl.hidden = true;
 
-  btn.addEventListener("click", () => {
-    setFeedback(t("pick_file"), "info");
-    file.click();
-  });
+    const file = e.target.files?.[0];
+    if (!file) {
+      setFeedback("info", "Aucun fichier sélectionné.");
+      return;
+    }
 
-  file.addEventListener("change", async () => {
-    if (!file.files?.[0]) return;
-    setFeedback(t("parsing"), "info");
     try {
-      const text = await file.files[0].text();
-      const data = JSON.parse(text);
-      window.__data = data;
+      const text = await file.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (err) {
+        setFeedback("error", "Le fichier n’est pas un JSON valide.");
+        return;
+      }
 
-      const sample = typeof data === "object" ? JSON.stringify(data, null, 2) : String(data);
-      preview.hidden = false;
-      preview.textContent = sample.slice(0, 1000);
+      if (!isPlausibleData(data)) {
+        setFeedback("error", "Structure JSON non reconnue (attendu: un objet).");
+        return;
+      }
 
-      setFeedback(t("import_success"), "ok");
-    } catch {
-      preview.hidden = true;
-      preview.textContent = "";
-      setFeedback(t("invalid"), "error");
+      // Ok : on prévisualise et on stocke
+      saveData(data);
+      setFeedback("ok", "Import réussi. Données enregistrées (local).");
+      showPreview(data);
+
+      // Optionnel : mettre quelque chose dans la carte “Économies estimées”
+      if (ecoAmount) {
+        ecoAmount.textContent = "—"; // Le calcul viendra dans une étape suivante
+      }
+    } catch (err) {
+      console.error(err);
+      setFeedback("error", "Une erreur est survenue pendant l’import.");
     } finally {
-      file.value = "";
+      // Réinitialise l’input pour pouvoir ré-importer le même fichier si besoin
+      inputFile.value = "";
     }
   });
-});
+})();
