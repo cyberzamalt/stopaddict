@@ -4,7 +4,8 @@
     <meta charset="utf-8" />
     <title>StopAddict</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="/stopaddict/web/css/app.css" />
+    <!-- Chemin relatif pour l’APK -->
+    <link rel="stylesheet" href="css/app.css" />
   </head>
   <body>
     <main>
@@ -16,7 +17,7 @@
       <section class="card">
         <h2 data-i18n="import">Importer JSON</h2>
         <div class="row">
-          <button id="btnImport" data-i18n="import">Importer JSON</button>
+          <button id="btnImport" type="button" data-i18n="import">Importer JSON</button>
           <input id="fileJson" type="file" accept="application/json" hidden />
         </div>
         <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
@@ -24,16 +25,21 @@
       </section>
 
       <!-- Économies estimées (UI uniquement pour l’instant) -->
-      <section id="economies-card" class="card">
+      <section id="economies-card" class="card" aria-describedby="economies-disclaimer">
         <h2>Économies estimées</h2>
         <div id="economies-amount">—</div>
         <p id="economies-disclaimer">
           Estimation basée sur vos réglages et vos saisies. Ne reflète pas forcément vos vraies économies.
-          <button id="eco-info" aria-label="Plus d’informations" title="Plus d’informations">i</button>
+          <button id="eco-info" type="button" aria-label="Plus d’informations" title="Plus d’informations">i</button>
         </p>
       </section>
+
+      <noscript>
+        <p class="feedback error">JavaScript est requis pour utiliser l’application.</p>
+      </noscript>
     </main>
 
-    <script src="/stopaddict/web/js/app.js" defer></script>
+    <!-- Chemin relatif pour l’APK -->
+    <script src="js/app.js" defer></script>
   </body>
 </html>
