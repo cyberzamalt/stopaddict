@@ -3,17 +3,35 @@
   <head>
     <meta charset="utf-8" />
     <title>StopAddict</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="/stopaddict/web/css/app.css" />
   </head>
   <body>
     <main>
-      <h1>StopAddict</h1>
+      <header class="app-header">
+        <h1>StopAddict</h1>
+      </header>
 
-      <button id="btnImport" data-i18n="import">Importer JSON</button>
-      <input id="fileJson" type="file" accept="application/json" hidden />
+      <!-- Import JSON -->
+      <section class="card">
+        <h2 data-i18n="import">Importer JSON</h2>
+        <div class="row">
+          <button id="btnImport" data-i18n="import">Importer JSON</button>
+          <input id="fileJson" type="file" accept="application/json" hidden />
+        </div>
+        <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
+        <pre id="preview" hidden></pre>
+      </section>
 
-      <p id="feedback" role="status" aria-live="polite"></p>
-      <pre id="preview" hidden></pre>
+      <!-- Économies estimées (UI uniquement pour l’instant) -->
+      <section id="economies-card" class="card">
+        <h2>Économies estimées</h2>
+        <div id="economies-amount">—</div>
+        <p id="economies-disclaimer">
+          Estimation basée sur vos réglages et vos saisies. Ne reflète pas forcément vos vraies économies.
+          <button id="eco-info" aria-label="Plus d’informations" title="Plus d’informations">i</button>
+        </p>
+      </section>
     </main>
 
     <script src="/stopaddict/web/js/app.js" defer></script>
