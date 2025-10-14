@@ -1,8 +1,29 @@
-:root { font-family: system-ui, sans-serif; }
-main { max-width: 720px; margin: 2rem auto; padding: 1rem; }
-button { padding: .6rem 1rem; cursor: pointer; }
-.feedback { margin:.75rem 0; padding:.5rem .75rem; border-radius:.5rem; }
+:root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; line-height: 1.4; color: #0f172a; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #f8fafc; }
+main { max-width: 880px; margin: 2rem auto; padding: 0 1rem 3rem; }
+
+.app-header { margin-bottom: 1rem; }
+.app-header h1 { margin: 0; font-size: 1.6rem; }
+
+.card { background: #fff; border: 1px solid #e5e7eb; border-radius: .75rem; padding: 1rem; margin: 1rem 0; }
+.card h2 { margin: 0 0 .75rem 0; font-size: 1.1rem; }
+
+.row { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
+
+button { padding: .6rem 1rem; cursor: pointer; border-radius: .5rem; border: 1px solid #e5e7eb; background: #f3f4f6; }
+button:hover { background: #e5e7eb; }
+
+.feedback { margin:.75rem 0; padding:.5rem .75rem; border-radius: .5rem; }
 .feedback.info  { background:#f3f4f6; color:#111827; }
 .feedback.ok    { background:#ecfdf5; color:#065f46; }
 .feedback.error { background:#fef2f2; color:#991b1b; }
-pre { background:#0b1020; color:#e5e7eb; padding:1rem; border-radius:.5rem; overflow:auto; }
+
+pre { background:#0b1020; color:#e5e7eb; padding:1rem; border-radius:.5rem; overflow:auto; max-height: 40vh; }
+
+/* Carte Économies */
+#economies-card { }
+#economies-card h2 { margin: 0 0 .5rem 0; }
+#economies-amount { font-weight: 700; font-size: 1.25rem; margin-bottom: .5rem; }
+#economies-disclaimer { font-size: .9rem; opacity: .85; margin: 0; }
+#eco-info { margin-left: .4rem; border: 1px solid #e5e7eb; background: #f3f4f6; padding: 0 .4rem; border-radius: .3rem; cursor: help; }
