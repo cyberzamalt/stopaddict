@@ -22,7 +22,7 @@ button:hover { background: #e5e7eb; }
 pre { background:#0b1020; color:#e5e7eb; padding:1rem; border-radius:.5rem; overflow:auto; max-height: 40vh; }
 
 /* Carte Économies */
-#economies-card { }
+#economies-card {}
 #economies-card h2 { margin: 0 0 .5rem 0; }
 #economies-amount { font-weight: 700; font-size: 1.25rem; margin-bottom: .5rem; }
 #economies-disclaimer { font-size: .9rem; opacity: .85; margin: 0; }
