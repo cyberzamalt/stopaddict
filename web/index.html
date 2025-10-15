@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <title>StopAddict</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="/stopaddict/web/css/app.css" />
+  <link rel="stylesheet" href="./css/app.css" />
 </head>
 <body>
   <main>
@@ -34,7 +34,7 @@
       <h2>Clopes <span class="pill" id="cigsToday">0</span></h2>
       <div class="row">
         <button class="btn minus" data-type="cig">−</button>
-        <button class="btn plus" data-type="cig">+</button>
+        <button class="btn plus"  data-type="cig">+</button>
       </div>
       <p class="limit" id="limitCigs"></p>
     </section>
@@ -43,7 +43,7 @@
       <h2>Pétards <span class="pill" id="weedToday">0</span></h2>
       <div class="row">
         <button class="btn minus" data-type="weed">−</button>
-        <button class="btn plus" data-type="weed">+</button>
+        <button class="btn plus"  data-type="weed">+</button>
       </div>
       <p class="limit" id="limitWeed"></p>
     </section>
@@ -52,18 +52,18 @@
       <h2>Alcool <span class="pill" id="alcoToday">0</span></h2>
       <div class="row">
         <button class="btn minus" data-type="beer">Bière −</button>
-        <button class="btn plus" data-type="beer">Bière +</button>
+        <button class="btn plus"  data-type="beer">Bière +</button>
 
         <button class="btn minus" data-type="strong">Alcool fort −</button>
-        <button class="btn plus" data-type="strong">Alcool fort +</button>
+        <button class="btn plus"  data-type="strong">Alcool fort +</button>
 
         <button class="btn minus" data-type="liquor">Liqueur −</button>
-        <button class="btn plus" data-type="liquor">Liqueur +</button>
+        <button class="btn plus"  data-type="liquor">Liqueur +</button>
       </div>
       <p class="limit" id="limitAlcohol"></p>
     </section>
 
-    <!-- Réglages rapides (prix & limites) -->
+    <!-- Réglages rapides -->
     <section class="card">
       <h2>Réglages rapides</h2>
       <div class="grid2">
@@ -81,9 +81,7 @@
           <label>Clopes <input type="number" id="limitDayCigs"></label>
           <label>Joints <input type="number" id="limitDayWeed"></label>
           <label>Verres (total) <input type="number" id="limitDayAlcohol"></label>
-          <p class="muted small">
-            Si une limite est définie, un rappel s’affiche quand tu la dépasses.
-          </p>
+          <p class="muted small">Si une limite est définie, un rappel s’affiche quand tu la dépasses.</p>
         </div>
       </div>
       <div class="row">
@@ -103,7 +101,7 @@
       <pre id="preview" hidden></pre>
     </section>
 
-    <!-- Mention économies -->
+    <!-- Économies (disclaimer) -->
     <section class="card">
       <h2>Économies estimées</h2>
       <div id="economies-amount">—</div>
@@ -114,6 +112,13 @@
     </section>
   </main>
 
-  <script src="/stopaddict/web/js/app.js" defer></script>
+  <!-- JS modules (ordre important) -->
+  <script src="./js/utils.js"   defer></script>
+  <script src="./js/state.js"   defer></script>
+  <script src="./js/counters.js" defer></script>
+  <script src="./js/settings.js" defer></script>
+  <script src="./js/export.js"   defer></script>
+  <script src="./js/stats.js"    defer></script>
+  <script src="./js/app.js"      defer></script>
 </body>
 </html>
