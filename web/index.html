@@ -13,12 +13,13 @@
         <h1>StopAddict</h1>
       </header>
 
-      <!-- Import JSON -->
+      <!-- Import / Export -->
       <section class="card">
-        <h2>Importer JSON</h2>
+        <h2>Données</h2>
         <div class="row">
           <button id="btnImport">Importer JSON</button>
           <input id="fileJson" type="file" accept="application/json" hidden />
+          <button id="btnExport">Exporter CSV</button>
         </div>
         <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
         <pre id="preview" hidden></pre>
@@ -41,15 +42,29 @@
           <label>Date/heure&nbsp;
             <input id="agDate" type="datetime-local" />
           </label>
-
           <label>Clopes&nbsp;
             <input id="agCigs" type="number" min="0" inputmode="numeric" placeholder="ex: 1, 2, 3…" />
           </label>
-
           <button id="agAdd">Ajouter</button>
         </div>
-
         <ul id="agList" class="list"></ul>
+      </section>
+
+      <!-- Stats -->
+      <section class="card">
+        <h2>Stats</h2>
+        <div class="tabs">
+          <button id="tabDay"   class="tab active">Jour</button>
+          <button id="tabWeek"  class="tab">Semaine</button>
+          <button id="tabMonth" class="tab">Mois</button>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="chart" width="900" height="320" aria-label="Graphique des consommations" role="img"></canvas>
+        </div>
+        <div id="chartLegend" class="chart-legend">
+          <span class="dot bar"></span> Consommation
+          <span class="dot limit"></span> Limite/jour (si définie)
+        </div>
       </section>
     </main>
 
