@@ -37,6 +37,7 @@
         <button class="btn plus"  data-type="cig">+</button>
       </div>
       <p class="limit" id="limitCigs"></p>
+      <p class="alert hide" id="alertCigs"></p>
     </section>
 
     <section id="cardWeed" class="card hide">
@@ -46,6 +47,7 @@
         <button class="btn plus"  data-type="weed">+</button>
       </div>
       <p class="limit" id="limitWeed"></p>
+      <p class="alert hide" id="alertWeed"></p>
     </section>
 
     <section id="cardAlcohol" class="card hide">
@@ -61,6 +63,7 @@
         <button class="btn plus"  data-type="liquor">Liqueur +</button>
       </div>
       <p class="limit" id="limitAlcohol"></p>
+      <p class="alert hide" id="alertAlcohol"></p>
     </section>
 
     <!-- Graphique -->
@@ -75,6 +78,21 @@
       </div>
       <div id="chartRoot" class="chart-root" aria-live="polite"></div>
       <p class="muted small">La ligne horizontale indique la limite quotidienne (somme des limites activées).</p>
+    </section>
+
+    <!-- Agenda / Journal -->
+    <section id="cardAgenda" class="card">
+      <div class="row between">
+        <h2>Agenda</h2>
+        <div class="row">
+          <button id="agendaPrev"   class="btn">◀</button>
+          <button id="agendaToday"  class="btn">Aujourd’hui</button>
+          <button id="agendaNext"   class="btn">▶</button>
+        </div>
+      </div>
+      <h3 id="agendaDate" class="agenda-date">—</h3>
+      <ul id="agendaList" class="agenda-list"></ul>
+      <p id="agendaEmpty" class="muted small hide">Aucune entrée ce jour.</p>
     </section>
 
     <!-- Réglages rapides -->
@@ -126,7 +144,6 @@
     </section>
   </main>
 
-  <!-- ES Modules : un seul point d’entrée -->
   <script type="module" src="./js/app.js"></script>
 </body>
 </html>
