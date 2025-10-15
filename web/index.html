@@ -1,73 +1,119 @@
 <!doctype html>
 <html lang="fr">
-  <head>
-    <meta charset="utf-8" />
-    <title>StopAddict</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="/stopaddict/web/css/app.css" />
-  </head>
+<head>
+  <meta charset="utf-8" />
+  <title>StopAddict</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/stopaddict/web/css/app.css" />
+</head>
+<body>
+  <main>
+    <header class="app-header">
+      <h1>StopAddict</h1>
+      <div class="header-stats">
+        <div><strong>Aujourd’hui</strong><span id="todayTotal">—</span></div>
+        <div><strong>Semaine</strong><span id="weekTotal">—</span></div>
+        <div><strong>Mois</strong><span id="monthTotal">—</span></div>
+        <div><strong>Coût jour</strong><span id="todayCost">—</span></div>
+      </div>
+    </header>
 
-  <body>
-    <main>
-      <header class="app-header">
-        <h1>StopAddict</h1>
-      </header>
+    <!-- Toggles d’activation -->
+    <section class="card">
+      <h2>Activer ce que tu suis</h2>
+      <div class="row">
+        <label><input type="checkbox" id="enableCigs"> Je fume</label>
+        <label><input type="checkbox" id="enableWeed"> Je fume des joints</label>
+        <label><input type="checkbox" id="enableAlcohol"> Je bois</label>
+      </div>
+      <p class="muted small">Tu peux tout changer quand tu veux. Les modules non activés n’apparaissent pas.</p>
+    </section>
 
-      <!-- Import / Export -->
-      <section class="card">
-        <h2>Données</h2>
-        <div class="row">
-          <button id="btnImport">Importer JSON</button>
-          <input id="fileJson" type="file" accept="application/json" hidden />
-          <button id="btnExport">Exporter CSV</button>
+    <!-- Cartes Compteurs -->
+    <section id="cardCigs" class="card hide">
+      <h2>Clopes <span class="pill" id="cigsToday">0</span></h2>
+      <div class="row">
+        <button class="btn minus" data-type="cig">−</button>
+        <button class="btn plus" data-type="cig">+</button>
+      </div>
+      <p class="limit" id="limitCigs"></p>
+    </section>
+
+    <section id="cardWeed" class="card hide">
+      <h2>Pétards <span class="pill" id="weedToday">0</span></h2>
+      <div class="row">
+        <button class="btn minus" data-type="weed">−</button>
+        <button class="btn plus" data-type="weed">+</button>
+      </div>
+      <p class="limit" id="limitWeed"></p>
+    </section>
+
+    <section id="cardAlcohol" class="card hide">
+      <h2>Alcool <span class="pill" id="alcoToday">0</span></h2>
+      <div class="row">
+        <button class="btn minus" data-type="beer">Bière −</button>
+        <button class="btn plus" data-type="beer">Bière +</button>
+
+        <button class="btn minus" data-type="strong">Alcool fort −</button>
+        <button class="btn plus" data-type="strong">Alcool fort +</button>
+
+        <button class="btn minus" data-type="liquor">Liqueur −</button>
+        <button class="btn plus" data-type="liquor">Liqueur +</button>
+      </div>
+      <p class="limit" id="limitAlcohol"></p>
+    </section>
+
+    <!-- Réglages rapides (prix & limites) -->
+    <section class="card">
+      <h2>Réglages rapides</h2>
+      <div class="grid2">
+        <div>
+          <h3>Prix</h3>
+          <label>Prix paquet (€) <input type="number" step="0.1" id="pricePack"></label>
+          <label>Clopes / paquet <input type="number" id="cigsPerPack"></label>
+          <label>Prix joint (€) <input type="number" step="0.1" id="priceJoint"></label>
+          <label>Prix bière (€) <input type="number" step="0.1" id="priceBeer"></label>
+          <label>Prix alcool fort (€) <input type="number" step="0.1" id="priceStrong"></label>
+          <label>Prix liqueur (€) <input type="number" step="0.1" id="priceLiquor"></label>
         </div>
-        <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
-        <pre id="preview" hidden></pre>
-      </section>
-
-      <!-- Économies estimées -->
-      <section id="economies-card" class="card">
-        <h2>Économies estimées</h2>
-        <div id="economies-amount">—</div>
-        <p id="economies-disclaimer">
-          Estimation basée sur vos réglages et vos saisies. Ne reflète pas forcément vos vraies économies.
-          <button id="eco-info" aria-label="Plus d’informations" title="Plus d’informations">i</button>
-        </p>
-      </section>
-
-      <!-- Agenda -->
-      <section class="card">
-        <h2>Agenda</h2>
-        <div class="row">
-          <label>Date/heure&nbsp;
-            <input id="agDate" type="datetime-local" />
-          </label>
-          <label>Clopes&nbsp;
-            <input id="agCigs" type="number" min="0" inputmode="numeric" placeholder="ex: 1, 2, 3…" />
-          </label>
-          <button id="agAdd">Ajouter</button>
+        <div>
+          <h3>Limites / jour</h3>
+          <label>Clopes <input type="number" id="limitDayCigs"></label>
+          <label>Joints <input type="number" id="limitDayWeed"></label>
+          <label>Verres (total) <input type="number" id="limitDayAlcohol"></label>
+          <p class="muted small">
+            Si une limite est définie, un rappel s’affiche quand tu la dépasses.
+          </p>
         </div>
-        <ul id="agList" class="list"></ul>
-      </section>
+      </div>
+      <div class="row">
+        <button id="btnSaveSettings" class="btn primary">Enregistrer</button>
+      </div>
+    </section>
 
-      <!-- Stats -->
-      <section class="card">
-        <h2>Stats</h2>
-        <div class="tabs">
-          <button id="tabDay"   class="tab active">Jour</button>
-          <button id="tabWeek"  class="tab">Semaine</button>
-          <button id="tabMonth" class="tab">Mois</button>
-        </div>
-        <div class="chart-wrap">
-          <canvas id="chart" width="900" height="320" aria-label="Graphique des consommations" role="img"></canvas>
-        </div>
-        <div id="chartLegend" class="chart-legend">
-          <span class="dot bar"></span> Consommation
-          <span class="dot limit"></span> Limite/jour (si définie)
-        </div>
-      </section>
-    </main>
+    <!-- Import / Export -->
+    <section class="card">
+      <h2>Import / Export</h2>
+      <div class="row">
+        <button id="btnImport">Importer JSON</button>
+        <input id="fileJson" type="file" accept="application/json" hidden />
+        <button id="btnExport">Exporter CSV</button>
+      </div>
+      <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
+      <pre id="preview" hidden></pre>
+    </section>
 
-    <script src="/stopaddict/web/js/app.js" defer></script>
-  </body>
+    <!-- Mention économies -->
+    <section class="card">
+      <h2>Économies estimées</h2>
+      <div id="economies-amount">—</div>
+      <p class="muted small">
+        Estimation basée sur tes réglages et tes saisies. Ne reflète pas forcément la réalité :
+        honnêteté d’usage, façon de gérer l’argent, etc.
+      </p>
+    </section>
+  </main>
+
+  <script src="/stopaddict/web/js/app.js" defer></script>
+</body>
 </html>
