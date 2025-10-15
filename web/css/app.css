@@ -22,8 +22,11 @@ button:hover { background: #e5e7eb; }
 pre { background:#0b1020; color:#e5e7eb; padding:1rem; border-radius:.5rem; overflow:auto; max-height: 40vh; }
 
 /* Carte Économies */
-#economies-card {}
-#economies-card h2 { margin: 0 0 .5rem 0; }
 #economies-amount { font-weight: 700; font-size: 1.25rem; margin-bottom: .5rem; }
 #economies-disclaimer { font-size: .9rem; opacity: .85; margin: 0; }
 #eco-info { margin-left: .4rem; border: 1px solid #e5e7eb; background: #f3f4f6; padding: 0 .4rem; border-radius: .3rem; cursor: help; }
+
+/* Agenda */
+.list { list-style: none; padding-left: 0; margin: .5rem 0 0 0; }
+.list li { padding: .35rem 0; border-bottom: 1px solid #eee; }
+.list li.day { font-weight: 600; margin-top: .5rem; }
