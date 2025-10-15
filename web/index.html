@@ -63,6 +63,20 @@
       <p class="limit" id="limitAlcohol"></p>
     </section>
 
+    <!-- Graphique -->
+    <section id="cardChart" class="card">
+      <div class="row between">
+        <h2>Graphique</h2>
+        <div class="segmented">
+          <button class="seg" data-range="day">Jour</button>
+          <button class="seg" data-range="week">Semaine</button>
+          <button class="seg" data-range="month">Mois</button>
+        </div>
+      </div>
+      <div id="chartRoot" class="chart-root" aria-live="polite"></div>
+      <p class="muted small">La ligne horizontale indique la limite quotidienne (somme des limites activées).</p>
+    </section>
+
     <!-- Réglages rapides -->
     <section class="card">
       <h2>Réglages rapides</h2>
