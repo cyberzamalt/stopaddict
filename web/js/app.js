@@ -1,93 +1,160 @@
-// web/js/app.js
-(() => {
-  const $ = (sel) => document.querySelector(sel);
+// ====== Config stockage ======
+const STORAGE_KEY = 'stopaddict:data';
 
-  const btnImport  = $("#btnImport");
-  const inputFile  = $("#fileJson");
-  const feedbackEl = $("#feedback");
-  const previewEl  = $("#preview");
-  const ecoAmount  = $("#economies-amount");
+// ====== Helpers DOM ======
+const $ = (id) => document.getElementById(id);
 
-  /** Utilitaires feedback */
-  function clearFeedback() {
-    feedbackEl.className = "feedback";
-    feedbackEl.textContent = "";
-  }
-  function setFeedback(type, msg) {
-    feedbackEl.className = `feedback ${type}`;
-    feedbackEl.textContent = msg;
-  }
+const $btnImport = $('btnImport');
+const $fileJson  = $('fileJson');
+const $feedback  = $('feedback');
+const $preview   = $('preview');
 
-  /** Affiche un extrait joli du JSON (limité) */
-  function showPreview(obj) {
-    const pretty = JSON.stringify(obj, null, 2) || "";
-    const maxChars = 4000; // éviter de tout afficher si très gros
-    previewEl.textContent = pretty.length > maxChars ? pretty.slice(0, maxChars) + "\n…(tronqué)" : pretty;
-    previewEl.hidden = false;
-  }
+const $ecoAmount = $('economies-amount');
 
-  /** Sanity-check très léger : on accepte large, mais on vérifie qu’on a un objet */
-  function isPlausibleData(data) {
-    // On tolère plusieurs structures, mais il faut au minimum un objet non null.
-    if (data && typeof data === "object") {
-      return true;
-    }
-    return false;
-  }
+// Agenda
+const $agDate = $('agDate');
+const $agCigs = $('agCigs');
+const $agAdd  = $('agAdd');
+const $agList = $('agList');
 
-  /** Sauvegarde le JSON pour les prochaines étapes (export CSV, graphiques…) */
-  function saveData(data) {
-    localStorage.setItem("stopaddict:data", JSON.stringify({
-      importedAt: new Date().toISOString(),
-      payload: data
-    }));
-  }
+// ====== Utilitaires ======
+function showFeedback(msg, type = 'info') {
+  if (!$feedback) return;
+  $feedback.className = `feedback ${type}`;
+  $feedback.textContent = msg;
+}
 
-  /** Gestion import */
-  btnImport?.addEventListener("click", () => {
-    inputFile?.click();
-  });
+function getData() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  return raw ? JSON.parse(raw) : { settings: { pricePerPack: 0, cigsPerPack: 20 }, entries: [] };
+}
+function setData(d) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
+}
 
-  inputFile?.addEventListener("change", async (e) => {
-    clearFeedback();
-    previewEl.hidden = true;
+// ====== Import JSON ======
+async function onImportFromFile(file) {
+  try {
+    const text = await file.text();
+    const json = JSON.parse(text);
 
-    const file = e.target.files?.[0];
-    if (!file) {
-      setFeedback("info", "Aucun fichier sélectionné.");
+    // Validation simple
+    if (!json || typeof json !== 'object' || !Array.isArray(json.entries)) {
+      showFeedback("Fichier invalide (pas de 'entries').", 'error');
       return;
     }
 
-    try {
-      const text = await file.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (err) {
-        setFeedback("error", "Le fichier n’est pas un JSON valide.");
-        return;
-      }
+    setData(json);
 
-      if (!isPlausibleData(data)) {
-        setFeedback("error", "Structure JSON non reconnue (attendu: un objet).");
-        return;
-      }
-
-      // Ok : on prévisualise et on stocke
-      saveData(data);
-      setFeedback("ok", "Import réussi. Données enregistrées (local).");
-      showPreview(data);
-
-      // Optionnel : mettre quelque chose dans la carte “Économies estimées”
-      if (ecoAmount) {
-        ecoAmount.textContent = "—"; // Le calcul viendra dans une étape suivante
-      }
-    } catch (err) {
-      console.error(err);
-      setFeedback("error", "Une erreur est survenue pendant l’import.");
-    } finally {
-      // Réinitialise l’input pour pouvoir ré-importer le même fichier si besoin
-      inputFile.value = "";
+    // Affiche un aperçu
+    if ($preview) {
+      $preview.hidden = false;
+      $preview.textContent = JSON.stringify(json, null, 2);
     }
+
+    // MAJ UI dépendantes
+    renderAgenda();
+    renderEconomies();
+
+    showFeedback('Import réussi. Données enregistrées (local).', 'ok');
+  } catch (e) {
+    console.error(e);
+    showFeedback('Erreur pendant l’import (format JSON ?).', 'error');
+  }
+}
+
+if ($btnImport) {
+  $btnImport.addEventListener('click', () => $fileJson?.click());
+}
+if ($fileJson) {
+  $fileJson.addEventListener('change', (e) => {
+    const file = e.target.files?.[0];
+    if (file) onImportFromFile(file);
   });
-})();
+}
+
+// ====== Économies (estimation simple) ======
+function renderEconomies() {
+  if (!$ecoAmount) return;
+
+  const data = getData();
+  const settings = data.settings || {};
+  const pricePerPack = Number(settings.pricePerPack || 0);
+  const cigsPerPack  = Number(settings.cigsPerPack || 20);
+
+  // total clopes
+  const totalCigs = (data.entries || []).reduce((s, e) => s + Number(e.cigarettes || 0), 0);
+  if (!pricePerPack || !cigsPerPack || !totalCigs) {
+    $ecoAmount.textContent = '—';
+    return;
+  }
+  const packs = totalCigs / cigsPerPack;
+  const euros = packs * pricePerPack;
+
+  $ecoAmount.textContent = `${euros.toFixed(2)} € (≈ ${packs.toFixed(2)} paquets)`;
+}
+
+// ====== Agenda (ajout + rendu) ======
+function initAgenda() {
+  // Valeur par défaut: maintenant (corrigé timezone) au format "YYYY-MM-DDTHH:mm"
+  if ($agDate) {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    $agDate.value = now.toISOString().slice(0, 16);
+  }
+
+  if ($agAdd) $agAdd.addEventListener('click', onAgendaAdd);
+}
+
+function onAgendaAdd() {
+  const isoLocal = $agDate?.value;      // "YYYY-MM-DDTHH:mm"
+  const cigs     = Number($agCigs?.value || 0);
+
+  if (!isoLocal || !cigs) {
+    showFeedback('Renseigne la date/heure et la quantité.', 'error');
+    return;
+  }
+  // Convertit en ISO UTC propre
+  const date = new Date(isoLocal);
+
+  const data = getData();
+  data.entries.push({ date: date.toISOString(), cigarettes: cigs });
+  data.entries.sort((a, b) => new Date(a.date) - new Date(b.date));
+  setData(data);
+
+  if ($agCigs) $agCigs.value = '';
+  renderAgenda();
+  renderEconomies();
+  showFeedback('Ajout enregistré.', 'ok');
+}
+
+function renderAgenda() {
+  if (!$agList) return;
+
+  const data = getData();
+  const byDay = {};
+  for (const e of (data.entries || [])) {
+    const d = new Date(e.date);
+    const day = d.toISOString().slice(0, 10); // YYYY-MM-DD
+    (byDay[day] ||= []).push(e);
+  }
+
+  const days = Object.keys(byDay).sort().reverse().slice(0, 30); // 30 derniers jours
+  let html = '';
+  for (const day of days) {
+    const total = byDay[day].reduce((s, e) => s + Number(e.cigarettes || 0), 0);
+    html += `<li class="day">${day} — ${total} clopes</li>`;
+    for (const e of byDay[day]) {
+      const t = new Date(e.date).toISOString().slice(11, 16); // HH:mm
+      html += `<li>${t} · ${e.cigarettes}</li>`;
+    }
+  }
+  $agList.innerHTML = html || '<li>Aucune donnée</li>';
+}
+
+// ====== Boot ======
+document.addEventListener('DOMContentLoaded', () => {
+  initAgenda();
+  renderAgenda();
+  renderEconomies();
+});
