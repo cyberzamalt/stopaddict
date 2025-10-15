@@ -1,337 +1,279 @@
-// ====== Clé de stockage ======
-const STORAGE_KEY = 'stopaddict:data';
+/* ---------- stockage ---------- */
+const KEY = "sa:data";
+function load() {
+  const def = {
+    settings: {
+      enable: { cigs: true, weed: false, alcohol: false },
+      price: {
+        pricePerPack: 10, cigsPerPack: 20,
+        joint: 5, beer: 2.5, strong: 3, liquor: 4
+      },
+      limits: { day: { cigs: 0, weed: 0, alcohol: 0 } }
+    },
+    entries: [] // {ts: ISO, type:'cig'|'weed'|'beer'|'strong'|'liquor', qty:1}
+  };
+  try { return JSON.parse(localStorage.getItem(KEY)) ?? def; }
+  catch { return def; }
+}
+function save(data) { localStorage.setItem(KEY, JSON.stringify(data)); }
 
-// ====== Selecteurs ======
-const $ = (id) => document.getElementById(id);
+let state = load();
 
-const $btnImport = $('btnImport');
-const $btnExport = $('btnExport');
-const $fileJson  = $('fileJson');
-const $feedback  = $('feedback');
-const $preview   = $('preview');
+/* ---------- helpers temps ---------- */
+const DAY_MS = 86400000;
+function startOfDay(d = new Date()) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
+function inRange(ts, a, b) { const t = +new Date(ts); return t >= +a && t <= +b; }
+function isToday(ts) { const a = startOfDay(); const b = new Date(+a + DAY_MS - 1); return inRange(ts, a, b); }
 
-const $ecoAmount = $('economies-amount');
+function startOfWeek(d = new Date()) {
+  const x = startOfDay(d); const day = x.getDay() || 7; // Lundi=1..Dim=7
+  x.setDate(x.getDate() - (day - 1)); return x;
+}
+function startOfMonth(d = new Date()) { const x = startOfDay(d); x.setDate(1); return x; }
 
-// Agenda
-const $agDate = $('agDate');
-const $agCigs = $('agCigs');
-const $agAdd  = $('agAdd');
-const $agList = $('agList');
+/* ---------- DOM ---------- */
+const $ = s => document.querySelector(s);
 
-// Stats
-const $tabDay   = $('tabDay');
-const $tabWeek  = $('tabWeek');
-const $tabMonth = $('tabMonth');
-const $chart    = $('chart');
-const $legend   = $('chartLegend');
+const enableCigs = $("#enableCigs");
+const enableWeed = $("#enableWeed");
+const enableAlcohol = $("#enableAlcohol");
 
-// ====== Helpers ======
-function showFeedback(msg, type = 'info') {
-  if (!$feedback) return;
-  $feedback.className = `feedback ${type}`;
-  $feedback.textContent = msg;
+const cardCigs = $("#cardCigs");
+const cardWeed = $("#cardWeed");
+const cardAlcohol = $("#cardAlcohol");
+
+const cigsToday = $("#cigsToday");
+const weedToday = $("#weedToday");
+const alcoToday = $("#alcoToday");
+
+const todayTotal = $("#todayTotal");
+const weekTotal = $("#weekTotal");
+const monthTotal = $("#monthTotal");
+const todayCost = $("#todayCost");
+
+const limitCigs = $("#limitCigs");
+const limitWeed = $("#limitWeed");
+const limitAlcohol = $("#limitAlcohol");
+
+const pricePack = $("#pricePack");
+const cigsPerPack = $("#cigsPerPack");
+const priceJoint = $("#priceJoint");
+const priceBeer = $("#priceBeer");
+const priceStrong = $("#priceStrong");
+const priceLiquor = $("#priceLiquor");
+
+const limitDayCigs = $("#limitDayCigs");
+const limitDayWeed = $("#limitDayWeed");
+const limitDayAlcohol = $("#limitDayAlcohol");
+
+const btnSaveSettings = $("#btnSaveSettings");
+
+const btnImport = $("#btnImport");
+const fileJson = $("#fileJson");
+const btnExport = $("#btnExport");
+const feedback = $("#feedback");
+const preview = $("#preview");
+
+/* ---------- UI init ---------- */
+function initToggles() {
+  enableCigs.checked    = !!state.settings.enable.cigs;
+  enableWeed.checked    = !!state.settings.enable.weed;
+  enableAlcohol.checked = !!state.settings.enable.alcohol;
+
+  renderActivation();
+  enableCigs.onchange = () => { state.settings.enable.cigs = enableCigs.checked; save(state); renderActivation(); };
+  enableWeed.onchange = () => { state.settings.enable.weed = enableWeed.checked; save(state); renderActivation(); };
+  enableAlcohol.onchange = () => { state.settings.enable.alcohol = enableAlcohol.checked; save(state); renderActivation(); };
+}
+function renderActivation() {
+  cardCigs.classList.toggle("hide", !state.settings.enable.cigs);
+  cardWeed.classList.toggle("hide", !state.settings.enable.weed);
+  cardAlcohol.classList.toggle("hide", !state.settings.enable.alcohol);
 }
 
-function getData() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  return raw ? JSON.parse(raw) : { settings: { pricePerPack: 0, cigsPerPack: 20 }, entries: [] };
-}
-function setData(d) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
-}
+function initSettingsForm() {
+  const p = state.settings.price;
+  pricePack.value = p.pricePerPack;
+  cigsPerPack.value = p.cigsPerPack;
+  priceJoint.value = p.joint;
+  priceBeer.value = p.beer;
+  priceStrong.value = p.strong;
+  priceLiquor.value = p.liquor;
 
-function to2(n) { return n.toString().padStart(2, '0'); }
-function localDayKey(d) {
-  return `${d.getFullYear()}-${to2(d.getMonth()+1)}-${to2(d.getDate())}`;
-}
+  const L = state.settings.limits.day;
+  limitDayCigs.value = L.cigs || 0;
+  limitDayWeed.value = L.weed || 0;
+  limitDayAlcohol.value = L.alcohol || 0;
 
-// ====== Import JSON ======
-async function onImportFromFile(file) {
-  try {
-    const text = await file.text();
-    const json = JSON.parse(text);
-
-    if (!json || typeof json !== 'object' || !Array.isArray(json.entries)) {
-      showFeedback("Fichier invalide (pas de 'entries').", 'error');
-      return;
-    }
-
-    setData(json);
-
-    if ($preview) {
-      $preview.hidden = false;
-      $preview.textContent = JSON.stringify(json, null, 2);
-    }
-
-    renderAgenda();
-    renderEconomies();
-    renderChart(); // MAJ graphique
-    showFeedback('Import réussi. Données enregistrées (local).', 'ok');
-  } catch (e) {
-    console.error(e);
-    showFeedback('Erreur pendant l’import (format JSON ?).', 'error');
-  }
-}
-
-if ($btnImport) $btnImport.addEventListener('click', () => $fileJson?.click());
-if ($fileJson)  $fileJson.addEventListener('change', (e) => {
-  const file = e.target.files?.[0];
-  if (file) onImportFromFile(file);
-});
-
-// ====== Export CSV ======
-function exportCSV() {
-  const data = getData();
-  const rows = [];
-  rows.push(['date', 'cigarettes']); // entête simple
-  for (const e of (data.entries || [])) {
-    rows.push([e.date, Number(e.cigarettes || 0)]);
-  }
-  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const url  = URL.createObjectURL(blob);
-
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'stopaddict.csv';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-
-  showFeedback('Export CSV généré.', 'ok');
-}
-if ($btnExport) $btnExport.addEventListener('click', exportCSV);
-
-// ====== Économies ======
-function renderEconomies() {
-  if (!$ecoAmount) return;
-
-  const data = getData();
-  const settings = data.settings || {};
-  const pricePerPack = Number(settings.pricePerPack || 0);
-  const cigsPerPack  = Number(settings.cigsPerPack || 20);
-
-  const totalCigs = (data.entries || []).reduce((s, e) => s + Number(e.cigarettes || 0), 0);
-  if (!pricePerPack || !cigsPerPack || !totalCigs) {
-    $ecoAmount.textContent = '—';
-    return;
-  }
-  const packs = totalCigs / cigsPerPack;
-  const euros = packs * pricePerPack;
-  $ecoAmount.textContent = `${euros.toFixed(2)} € (≈ ${packs.toFixed(2)} paquets)`;
-}
-
-// ====== Agenda (ajout + rendu) ======
-function initAgenda() {
-  if ($agDate) {
-    const now = new Date();
-    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-    $agDate.value = now.toISOString().slice(0, 16);
-  }
-  if ($agAdd) $agAdd.addEventListener('click', onAgendaAdd);
-}
-
-function onAgendaAdd() {
-  const isoLocal = $agDate?.value;
-  const cigs     = Number($agCigs?.value || 0);
-
-  if (!isoLocal || !cigs) {
-    showFeedback('Renseigne la date/heure et la quantité.', 'error');
-    return;
-  }
-  const date = new Date(isoLocal); // local → UTC automatique via toISOString
-
-  const data = getData();
-  data.entries.push({ date: date.toISOString(), cigarettes: cigs });
-  data.entries.sort((a, b) => new Date(a.date) - new Date(b.date));
-  setData(data);
-
-  if ($agCigs) $agCigs.value = '';
-  renderAgenda();
-  renderEconomies();
-  renderChart();
-  showFeedback('Ajout enregistré.', 'ok');
-}
-
-function renderAgenda() {
-  if (!$agList) return;
-
-  const data = getData();
-  const byDay = {};
-  for (const e of (data.entries || [])) {
-    const d = new Date(e.date);
-    const day = localDayKey(d);
-    (byDay[day] ||= []).push(e);
-  }
-
-  const days = Object.keys(byDay).sort().reverse().slice(0, 30);
-  let html = '';
-  for (const day of days) {
-    const total = byDay[day].reduce((s, e) => s + Number(e.cigarettes || 0), 0);
-    html += `<li class="day">${day} — ${total} clopes</li>`;
-    for (const e of byDay[day]) {
-      const d = new Date(e.date);
-      const t = `${to2(d.getHours())}:${to2(d.getMinutes())}`;
-      html += `<li>${t} · ${e.cigarettes}</li>`;
-    }
-  }
-  $agList.innerHTML = html || '<li>Aucune donnée</li>';
-}
-
-// ====== Stats / Graphique ======
-let chartMode = 'day'; // 'day' | 'week' | 'month'
-if ($tabDay)   $tabDay.addEventListener('click', () => { setTab('day'); });
-if ($tabWeek)  $tabWeek.addEventListener('click', () => { setTab('week'); });
-if ($tabMonth) $tabMonth.addEventListener('click', () => { setTab('month'); });
-
-function setTab(m) {
-  chartMode = m;
-  for (const el of [$tabDay, $tabWeek, $tabMonth]) el?.classList.remove('active');
-  if (m === 'day')   $tabDay?.classList.add('active');
-  if (m === 'week')  $tabWeek?.classList.add('active');
-  if (m === 'month') $tabMonth?.classList.add('active');
-  renderChart();
-}
-
-function aggregateForChart(mode) {
-  const data = getData();
-  const entries = data.entries || [];
-
-  // Convertit en local
-  const mapped = entries.map(e => ({ d: new Date(e.date), v: Number(e.cigarettes || 0) }));
-
-  if (mode === 'day') {
-    // cible : aujourd’hui en local
-    const now = new Date();
-    const dayKey = localDayKey(now);
-    const hours = Array(24).fill(0);
-    for (const { d, v } of mapped) {
-      if (localDayKey(d) === dayKey) {
-        hours[d.getHours()] += v;
-      }
-    }
-    return {
-      labels: Array.from({ length: 24 }, (_, i) => `${to2(i)}h`),
-      values: hours,
-      limit: Number((data.settings || {}).dailyLimit || 0),
-      title: `Aujourd'hui`
+  btnSaveSettings.onclick = () => {
+    state.settings.price = {
+      pricePerPack: +pricePack.value || 0,
+      cigsPerPack: +cigsPerPack.value || 20,
+      joint: +priceJoint.value || 0,
+      beer: +priceBeer.value || 0,
+      strong: +priceStrong.value || 0,
+      liquor: +priceLiquor.value || 0
     };
-  }
-
-  if (mode === 'week') {
-    // derniers 7 jours glissants (local)
-    const days = [];
-    const totals = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const key = localDayKey(d);
-      days.push(key);
-      totals.push(0);
-    }
-    for (const { d, v } of mapped) {
-      const key = localDayKey(d);
-      const idx = days.indexOf(key);
-      if (idx !== -1) totals[idx] += v;
-    }
-    return { labels: days, values: totals, limit: 0, title: '7 derniers jours' };
-  }
-
-  // month : derniers 30 jours glissants
-  const days = [];
-  const totals = [];
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const key = localDayKey(d);
-    days.push(key);
-    totals.push(0);
-  }
-  for (const { d, v } of mapped) {
-    const key = localDayKey(d);
-    const idx = days.indexOf(key);
-    if (idx !== -1) totals[idx] += v;
-  }
-  return { labels: days, values: totals, limit: 0, title: '30 derniers jours' };
+    state.settings.limits.day = {
+      cigs: +limitDayCigs.value || 0,
+      weed: +limitDayWeed.value || 0,
+      alcohol: +limitDayAlcohol.value || 0
+    };
+    save(state);
+    flash("Réglages enregistrés.", "ok");
+    renderAll();
+  };
 }
 
-function renderChart() {
-  if (!$chart) return;
-  const ctx = $chart.getContext('2d');
-  const DPR = window.devicePixelRatio || 1;
-
-  // Nettoyage
-  ctx.save();
-  ctx.setTransform(1,0,0,1,0,0);
-  ctx.clearRect(0,0,$chart.width,$chart.height);
-  ctx.restore();
-
-  const { labels, values, limit, title } = aggregateForChart(chartMode);
-  const W = $chart.width, H = $chart.height;
-
-  // Marges
-  const m = { top: 30, right: 16, bottom: 40, left: 40 };
-  const plotW = W - m.left - m.right;
-  const plotH = H - m.top - m.bottom;
-
-  // Échelle
-  const maxVal = Math.max(1, Math.max(...values, limit || 0));
-  const barW = plotW / values.length * 0.8;
-  const stepX = plotW / values.length;
-
-  // Axes
-  ctx.strokeStyle = '#e5e7eb';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(m.left, H - m.bottom);
-  ctx.lineTo(W - m.right, H - m.bottom);
-  ctx.moveTo(m.left, m.top);
-  ctx.lineTo(m.left, H - m.bottom);
-  ctx.stroke();
-
-  // Titre
-  ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 14px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif';
-  ctx.fillText(title, m.left, m.top - 10);
-
-  // Barres
-  for (let i = 0; i < values.length; i++) {
-    const x = m.left + i * stepX + (stepX - barW)/2;
-    const h = Math.round(values[i] / maxVal * plotH);
-    const y = H - m.bottom - h;
-
-    ctx.fillStyle = '#60a5fa';
-    ctx.fillRect(x, y, barW, h);
-
-    // Labels X espacés (éviter surcharge)
-    if (i % Math.ceil(values.length / 8) === 0 || i === values.length - 1) {
-      ctx.fillStyle = '#475569';
-      ctx.font = '11px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif';
-      const lab = labels[i];
-      const tw = ctx.measureText(lab).width;
-      ctx.fillText(lab, x + barW/2 - tw/2, H - m.bottom + 14);
-    }
+/* ---------- comptage ---------- */
+function addEntry(type, qty = 1) {
+  state.entries.push({ ts: new Date().toISOString(), type, qty });
+  save(state);
+  renderAll();
+}
+function removeOneToday(type) {
+  // supprime la dernière entrée d’aujourd’hui pour ce type
+  for (let i = state.entries.length - 1; i >= 0; i--) {
+    const e = state.entries[i];
+    if (e.type === type && isToday(e.ts)) { state.entries.splice(i,1); break; }
   }
-
-  // Ligne de limite (jour seulement si définie)
-  if (chartMode === 'day' && limit > 0) {
-    const ly = H - m.bottom - Math.round(limit / maxVal * plotH);
-    ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([6,4]);
-    ctx.beginPath();
-    ctx.moveTo(m.left, ly);
-    ctx.lineTo(W - m.right, ly);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
+  save(state); renderAll();
+}
+function sumToday(typeList) {
+  return state.entries
+    .filter(e => isToday(e.ts) && typeList.includes(e.type))
+    .reduce((s,e)=> s + (e.qty||1), 0);
+}
+function sumRange(typeList, start, end) {
+  return state.entries
+    .filter(e => inRange(e.ts,start,end) && typeList.includes(e.type))
+    .reduce((s,e)=> s + (e.qty||1), 0);
 }
 
-// ====== Boot ======
-document.addEventListener('DOMContentLoaded', () => {
-  initAgenda();
-  renderAgenda();
-  renderEconomies();
-  setTab('day'); // active + rendu
+/* ---------- coûts / économies ---------- */
+function costToday() {
+  const p = state.settings.price;
+  const cigs = sumToday(["cig"]);
+  const weed = sumToday(["weed"]);
+  const beer = sumToday(["beer"]);
+  const strong = sumToday(["strong"]);
+  const liquor = sumToday(["liquor"]);
+
+  const cigCost = p.pricePerPack && p.cigsPerPack ? (cigs / p.cigsPerPack) * p.pricePerPack : 0;
+  const weedCost = weed * p.joint;
+  const alcoCost = beer * p.beer + strong * p.strong + liquor * p.liquor;
+  return cigCost + weedCost + alcoCost;
+}
+function economiesHint() {
+  // très simple pour l’instant : ce que tu n’as PAS consommé si une limite existe
+  const L = state.settings.limits.day;
+  const p = state.settings.price;
+  let euros = 0;
+
+  if (L.cigs) {
+    const left = Math.max(0, L.cigs - sumToday(["cig"]));
+    euros += p.pricePerPack && p.cigsPerPack ? (left / p.cigsPerPack) * p.pricePerPack : 0;
+  }
+  if (L.weed) {
+    const left = Math.max(0, L.weed - sumToday(["weed"]));
+    euros += left * p.joint;
+  }
+  if (L.alcohol) {
+    const left = Math.max(0, L.alcohol - sumToday(["beer","strong","liquor"]));
+    // pondération simple bière=1, fort=1, liqueur=1 -> on prend la moyenne des prix
+    const avg = (p.beer + p.strong + p.liquor) / 3;
+    euros += left * (avg || 0);
+  }
+  return euros;
+}
+
+/* ---------- rendu ---------- */
+function renderCounters() {
+  cigsToday.textContent = sumToday(["cig"]);
+  weedToday.textContent = sumToday(["weed"]);
+  alcoToday.textContent = sumToday(["beer","strong","liquor"]);
+
+  // limites
+  const L = state.settings.limits.day;
+  limitCigs.textContent = L.cigs ? `Limite jour: ${L.cigs}` : "";
+  limitWeed.textContent = L.weed ? `Limite jour: ${L.weed}` : "";
+  limitAlcohol.textContent = L.alcohol ? `Limite jour: ${L.alcohol}` : "";
+}
+function renderHeaderStats() {
+  const a = startOfDay();
+  const b = new Date(+a + DAY_MS - 1);
+  const wA = startOfWeek();
+  const wB = new Date(+startOfWeek() + 7*DAY_MS - 1);
+  const mA = startOfMonth();
+  const mB = new Date(mA.getFullYear(), mA.getMonth()+1, 0, 23,59,59,999);
+
+  const typesAll = ["cig","weed","beer","strong","liquor"];
+  todayTotal.textContent = sumRange(typesAll, a, b);
+  weekTotal.textContent  = sumRange(typesAll, wA, wB);
+  monthTotal.textContent = sumRange(typesAll, mA, mB);
+
+  todayCost.textContent = costToday().toFixed(2) + " €";
+  $("#economies-amount").textContent = economiesHint().toFixed(2) + " €";
+}
+function renderAll() { renderCounters(); renderHeaderStats(); }
+
+/* ---------- boutons +/- ---------- */
+document.addEventListener("click", (e)=>{
+  const btn = e.target.closest("button");
+  if (!btn) return;
+
+  if (btn.classList.contains("plus")) {
+    const type = btn.dataset.type;
+    if (type) addEntry(type, 1);
+  }
+  if (btn.classList.contains("minus")) {
+    const type = btn.dataset.type;
+    if (type) removeOneToday(type);
+  }
 });
+
+/* ---------- import / export ---------- */
+btnImport.onclick = () => fileJson.click();
+fileJson.onchange = async () => {
+  const f = fileJson.files?.[0];
+  if (!f) return;
+  try {
+    const text = await f.text();
+    const json = JSON.parse(text);
+    // attend structure {settings?, entries?}
+    if (json.settings) state.settings = { ...state.settings, ...json.settings };
+    if (Array.isArray(json.entries)) state.entries = json.entries;
+    save(state);
+    preview.hidden = false;
+    preview.textContent = JSON.stringify(json, null, 2);
+    flash("Import réussi. Données enregistrées.", "ok");
+    initSettingsForm(); renderAll();
+  } catch (err) {
+    flash("Import invalide.", "error");
+  } finally {
+    fileJson.value = "";
+  }
+};
+
+btnExport.onclick = () => {
+  const rows = [["ts","type","qty"]];
+  for (const e of state.entries) rows.push([e.ts, e.type, e.qty ?? 1]);
+  const csv = rows.map(r => r.join(",")).join("\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "stopaddict_export.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+function flash(msg, kind="info") {
+  feedback.className = "feedback " + kind;
+  feedback.textContent = msg;
+  setTimeout(()=>{ feedback.className = "feedback"; feedback.textContent = ""; }, 3500);
+}
+
+/* ---------- boot ---------- */
+initToggles();
+initSettingsForm();
+renderAll();
