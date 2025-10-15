@@ -14,6 +14,7 @@ main { max-width: 960px; margin: 2rem auto; padding: 0 1rem 4rem; }
 .card h2 { margin: 0 0 .75rem 0; font-size: 1.1rem; }
 
 .row { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+.row.between { justify-content: space-between; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } .header-stats{ grid-template-columns: 1fr 1fr; } }
 
@@ -25,6 +26,11 @@ input[type="number"] { width: 120px; }
 .btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
 .btn.plus { background: #10b981; color: #fff; border-color: #10b981; }
 .btn.minus { background: #ef4444; color: #fff; border-color: #ef4444; }
+
+.segmented { display: inline-flex; border:1px solid #e5e7eb; border-radius:.5rem; overflow:hidden; }
+.seg { background:#f8fafc; border:0; padding:.4rem .8rem; cursor:pointer; }
+.seg:not(.active):hover { background:#eef2f7; }
+.seg.active { background:#111827; color:#fff; }
 
 .pill { background: #e5e7eb; border-radius: 999px; padding: .15rem .6rem; font-size: .9rem; margin-left: .4rem; }
 .muted { color: #475569; }
@@ -39,3 +45,13 @@ pre { background:#0b1020; color:#e5e7eb; padding:1rem; border-radius:.5rem; over
 
 .limit { margin: .5rem 0 0; color:#7f1d1d; }
 .hide { display: none; }
+
+/* ---- Chart ---- */
+.chart-root { width: 100%; overflow: hidden; }
+.chart-svg { width: 100%; height: auto; }
+.axis { stroke:#cbd5e1; stroke-width:1; }
+.grid line { stroke:#e5e7eb; stroke-width:1; }
+.yTick, .xTick { font-size: 11px; fill:#64748b; }
+.series { fill:none; stroke:#2563eb; stroke-width:2.5; }
+.area { fill:url(#area); }
+.limitLine { stroke:#ef4444; stroke-dasharray:6 6; stroke-width:2; }
