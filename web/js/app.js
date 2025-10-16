@@ -5,6 +5,7 @@ import { initStatsHeader }  from "./stats.js";
 import { initLimits }       from "./limits.js";
 import { initCharts }       from "./charts.js";
 import { initCalendar }     from "./calendar.js";
+import { initEconomy }      from "./economy.js";
 
 document.addEventListener("DOMContentLoaded", () => {
   initCounters();
@@ -14,4 +15,5 @@ document.addEventListener("DOMContentLoaded", () => {
   initLimits();
   initCharts();
   initCalendar();
+  initEconomy();
 });
