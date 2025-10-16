@@ -1,122 +1,162 @@
-import { $, DAY_MS } from "./utils.js";
-import { state, seriesDay, seriesWeek, seriesMonth, totalDailyLimit } from "./state.js";
+// web/js/charts.js
+import { state } from "./state.js";
+import { startOfDay } from "./utils.js";
 
-/* Petit moteur de chart en SVG (sans lib) */
-function linePath(points, x0, y0, xScale, yScale) {
-  if (!points.length) return "";
-  return points.map((v, i) => {
-    const x = x0 + i * xScale;
-    const y = y0 - v * yScale;
-    return (i ? "L" : "M") + x + " " + y;
-  }).join(" ");
-}
-function horizLine(yValue, n, x0, y0, xScale, yScale) {
-  const y = y0 - yValue * yScale;
-  const x1 = x0, x2 = x0 + (n - 1) * xScale;
-  return `M${x1} ${y}L${x2} ${y}`;
-}
+const DAY_MS = 86400000;
 
-function computeScales(values, innerW, innerH) {
-  const vmax = Math.max(4, Math.max(0, ...values));   // plancher 4
-  const padded = vmax + Math.ceil(vmax * 0.15);       // +15% headroom
-  return { vmax: padded, yScale: innerH / padded };
-}
+function bucketizeDay(entries) {
+  const a = startOfDay(new Date());
+  const b = new Date(+a + DAY_MS - 1);
+  const buckets = Array(24).fill(0);
 
-function renderChart(container, labels, values, limitValue) {
-  const W = 720, H = 260, pad = 30;
-  const innerW = W - pad * 2, innerH = H - pad * 2;
-  const n = values.length || 1;
-  const x0 = pad, y0 = H - pad;
-  const xScale = n > 1 ? innerW / (n - 1) : 1;
-
-  const { yScale, vmax } = computeScales(values, innerW, innerH);
-
-  container.innerHTML = `
-  <svg viewBox="0 0 ${W} ${H}" class="chart-svg" role="img" aria-label="Évolution">
-    <defs>
-      <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%"   stop-opacity="0.18"></stop>
-        <stop offset="100%" stop-opacity="0"></stop>
-      </linearGradient>
-    </defs>
-    <g>
-      <!-- axes -->
-      <line x1="${pad}" y1="${y0}" x2="${W-pad}" y2="${y0}" class="axis"/>
-      <line x1="${pad}" y1="${pad}" x2="${pad}"   y2="${H-pad}" class="axis"/>
-      <!-- ticks Y -->
-      ${[0, 0.25, 0.5, 0.75, 1].map(t=>{
-        const y = y0 - t * vmax * yScale;
-        const val = Math.round(t * vmax);
-        return `<g class="grid">
-          <line x1="${pad}" y1="${y}" x2="${W-pad}" y2="${y}"></line>
-          <text x="${pad-6}" y="${y+4}" class="yTick">${val}</text>
-        </g>`;
-      }).join("")}
-      <!-- ticks X (quelques labels) -->
-      ${labels.map((lb,i)=>{
-        if (n<=8 || i===0 || i===Math.floor(n/2) || i===n-1) {
-          const x = x0 + i*xScale;
-          return `<text x="${x}" y="${H-8}" class="xTick" text-anchor="middle">${lb}</text>`;
-        }
-        return "";
-      }).join("")}
-      <!-- zone + ligne -->
-      ${values.length ? (()=>{
-        const path = linePath(values, x0, y0, xScale, yScale);
-        const area = path + ` L ${x0 + (n-1)*xScale} ${y0} L ${x0} ${y0} Z`;
-        return `
-          <path d="${area}" class="area"></path>
-          <path d="${path}" class="series"></path>
-        `;
-      })() : ""}
-      <!-- limite -->
-      ${limitValue>0 ? `<path d="${horizLine(limitValue, n, x0, y0, xScale, yScale)}" class="limitLine"></path>` : ""}
-    </g>
-  </svg>`;
-}
-
-function buildDayLabels()   { return Array.from({length:24},(_,h)=> (h<10?"0":"")+h+"h"); }
-function buildWeekLabels(d0){ const days = ["L","M","M","J","V","S","D"]; return days; }
-function buildMonthLabels(n){ return Array.from({length:n},(_,i)=> String(i+1)); }
-
-export function initChart() {
-  const wrap = $("#cardChart");
-  const svgWrap = $("#chartRoot");
-  const btns = wrap.querySelectorAll("[data-range]");
-  let range = "day"; // par défaut Jour
-
-  function render() {
-    let labels = [], values = [], limit = totalDailyLimit(state); // somme des limites
-    const now = new Date();
-
-    if (range==="day") {
-      values = seriesDay(state, now);            // 24 valeurs
-      labels = buildDayLabels();
-    } else if (range==="week") {
-      const { values: v, labels: l } = seriesWeek(state, now);
-      values = v; labels = l;                    // 7 valeurs, labels L..D
-    } else {
-      const { values: v, labels: l } = seriesMonth(state, now);
-      values = v; labels = l;                    // n jours
+  for (const e of entries) {
+    const t = new Date(e.ts);
+    if (t >= a && t <= b) {
+      buckets[t.getHours()] += (e.qty || 1);
     }
-    renderChart(svgWrap, labels, values, limit);
+  }
+  return { labels: Array.from({length:24}, (_,h)=>`${h}h`), data: buckets };
+}
+
+function bucketizeWeek(entries) {
+  const a = startOfDay(new Date());
+  const day = (a.getDay() || 7) - 1; // 0..6 (lundi=0)
+  a.setDate(a.getDate() - day);
+  const buckets = Array(7).fill(0);
+  for (const e of entries) {
+    const t = startOfDay(new Date(e.ts));
+    const idx = Math.floor((t - a)/DAY_MS);
+    if (idx >= 0 && idx < 7) buckets[idx] += (e.qty || 1);
+  }
+  const labels = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
+  return { labels, data: buckets };
+}
+
+function bucketizeMonth(entries) {
+  const now = new Date();
+  const a = new Date(now.getFullYear(), now.getMonth(), 1);
+  const days = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+  const buckets = Array(days).fill(0);
+  for (const e of entries) {
+    const t = new Date(e.ts);
+    if (t.getMonth() === now.getMonth() && t.getFullYear() === now.getFullYear()) {
+      const d = t.getDate()-1;
+      buckets[d] += (e.qty||1);
+    }
+  }
+  const labels = Array.from({length:days}, (_,i)=> String(i+1));
+  return { labels, data: buckets };
+}
+
+function getEnabledTypes() {
+  const en = state.settings.enable || {};
+  const all = [];
+  if (en.cigs) all.push("cig");
+  if (en.weed) all.push("weed");
+  if (en.alcohol) all.push("beer","strong","liquor");
+  return all.length ? all : ["cig","weed","beer","strong","liquor"];
+}
+
+function prepareData(range) {
+  const types = getEnabledTypes();
+  const list = state.entries.filter(e => types.includes(e.type));
+  if (range === "week")  return bucketizeWeek(list);
+  if (range === "month") return bucketizeMonth(list);
+  return bucketizeDay(list);
+}
+
+function drawChart(ctx, labels, data, opts={}) {
+  const W = ctx.canvas.width, H = ctx.canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  const pad = 32;
+  const innerW = W - pad*2;
+  const innerH = H - pad*2;
+
+  const maxVal = Math.max(1, ...data, opts.limitLine || 0);
+  const barW = innerW / data.length;
+
+  // Axes
+  ctx.strokeStyle = "#e5e7eb";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad, H-pad);
+  ctx.lineTo(W-pad, H-pad);
+  ctx.moveTo(pad, pad);
+  ctx.lineTo(pad, H-pad);
+  ctx.stroke();
+
+  // Bars
+  ctx.fillStyle = "#0ea5e9";
+  data.forEach((v,i)=>{
+    const h = (v/maxVal) * (innerH-10);
+    const x = pad + i*barW + 2;
+    const y = H - pad - h;
+    ctx.fillRect(x, y, Math.max(2, barW-4), h);
+  });
+
+  // Limit line (jour)
+  if (opts.limitLine) {
+    const y = H - pad - (opts.limitLine/maxVal) * (innerH-10);
+    ctx.strokeStyle = "#f59e0b";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6,6]);
+    ctx.beginPath();
+    ctx.moveTo(pad, y);
+    ctx.lineTo(W-pad, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
   }
 
-  btns.forEach(b=>{
-    b.addEventListener("click", ()=>{
-      btns.forEach(x=>x.classList.remove("active"));
-      b.classList.add("active");
-      range = b.dataset.range;
+  // Labels X (échantillonnés)
+  ctx.fillStyle = "#475569";
+  ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+  const skip = Math.ceil(labels.length / 12);
+  labels.forEach((lab,i)=>{
+    if (i % skip !== 0) return;
+    const x = pad + i*barW + barW/2;
+    ctx.fillText(lab, x-10, H - pad + 14);
+  });
+}
+
+function computeDayLimit() {
+  const L = (state.settings.limits && state.settings.limits.day) || {};
+  const en = state.settings.enable || {};
+  let limit = 0;
+  if (en.cigs)    limit += +L.cigs    || 0;
+  if (en.weed)    limit += +L.weed    || 0;
+  if (en.alcohol) limit += +L.alcohol || 0;
+  return limit || 0;
+}
+
+export function initCharts() {
+  const canvas = document.getElementById("chartCanvas");
+  const ctx = canvas.getContext("2d");
+  const buttons = Array.from(document.querySelectorAll("#chartRange .btn"));
+
+  let range = "day";
+  function render() {
+    const {labels, data} = prepareData(range);
+    const opts = { limitLine: range === "day" ? computeDayLimit() : 0 };
+    drawChart(ctx, labels, data, opts);
+  }
+
+  buttons.forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      buttons.forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      range = btn.dataset.range;
       render();
     });
   });
 
-  // premières valeurs
-  wrap.querySelector('[data-range="day"]').classList.add("active");
   render();
 
-  // réagir aux changements globaux (ajouts, import, réglages)
+  // Réagir aux changements de données
   document.addEventListener("sa:changed", render);
-  document.addEventListener("sa:imported", render);
   document.addEventListener("sa:settingsSaved", render);
+  document.addEventListener("sa:imported", render);
+
+  // Redessiner si resize (optionnel)
+  window.addEventListener("resize", ()=> render());
 }
