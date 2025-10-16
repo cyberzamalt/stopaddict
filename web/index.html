@@ -55,10 +55,8 @@
       <div class="row">
         <button class="btn minus" data-type="beer">Bière −</button>
         <button class="btn plus"  data-type="beer">Bière +</button>
-
         <button class="btn minus" data-type="strong">Alcool fort −</button>
         <button class="btn plus"  data-type="strong">Alcool fort +</button>
-
         <button class="btn minus" data-type="liquor">Liqueur −</button>
         <button class="btn plus"  data-type="liquor">Liqueur +</button>
       </div>
@@ -78,6 +76,31 @@
         <canvas id="chartCanvas" width="900" height="280"></canvas>
       </div>
       <p class="muted small" id="chartHint">Basé sur tes entrées (tous types confondus). Ligne orange : limite/jour si définie.</p>
+    </section>
+
+    <!-- Calendrier (nouveau) -->
+    <section class="card">
+      <h2>Calendrier</h2>
+      <div class="cal-head">
+        <button id="calPrev" class="btn">◀</button>
+        <div id="calTitle"></div>
+        <button id="calNext" class="btn">▶</button>
+      </div>
+      <div class="cal-grid cal-weekdays">
+        <div>Lun</div><div>Mar</div><div>Mer</div><div>Jeu</div><div>Ven</div><div>Sam</div><div>Dim</div>
+      </div>
+      <div id="calGrid" class="cal-grid cal-days"></div>
+
+      <div id="calEditor" class="cal-editor hide">
+        <div class="cal-editor-head">
+          <strong id="calEditDate">—</strong>
+          <button id="calClose" class="btn">Fermer</button>
+        </div>
+        <div class="row" id="calEditButtons">
+          <!-- Boutons +/- par type (dynamiques) -->
+        </div>
+        <p class="muted small">Ajuste la journée sélectionnée. Chaque “+” ajoute une entrée datée ce jour, chaque “−” retire la dernière entrée de ce jour (pour le type).</p>
+      </div>
     </section>
 
     <!-- Réglages rapides -->
@@ -129,7 +152,6 @@
     </section>
   </main>
 
-  <!-- JS modules (ordre important) -->
   <script type="module" src="./js/app.js"></script>
 </body>
 </html>
