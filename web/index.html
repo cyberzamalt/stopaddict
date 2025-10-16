@@ -18,7 +18,6 @@
       </div>
     </header>
 
-    <!-- Toggles d’activation -->
     <section class="card">
       <h2>Activer ce que tu suis</h2>
       <div class="row">
@@ -29,7 +28,6 @@
       <p class="muted small">Tu peux tout changer quand tu veux. Les modules non activés n’apparaissent pas.</p>
     </section>
 
-    <!-- Cartes Compteurs -->
     <section id="cardCigs" class="card hide">
       <h2>Clopes <span class="pill" id="cigsToday">0</span></h2>
       <div class="row">
@@ -64,7 +62,6 @@
       <p class="alert hide" id="alertAlcohol"></p>
     </section>
 
-    <!-- Graphiques -->
     <section class="card">
       <h2>Statistiques</h2>
       <div class="row" id="chartRange">
@@ -78,7 +75,6 @@
       <p class="muted small" id="chartHint">Basé sur tes entrées (tous types confondus). Ligne orange : limite/jour si définie.</p>
     </section>
 
-    <!-- Calendrier (nouveau) -->
     <section class="card">
       <h2>Calendrier</h2>
       <div class="cal-head">
@@ -96,16 +92,14 @@
           <strong id="calEditDate">—</strong>
           <button id="calClose" class="btn">Fermer</button>
         </div>
-        <div class="row" id="calEditButtons">
-          <!-- Boutons +/- par type (dynamiques) -->
-        </div>
-        <p class="muted small">Ajuste la journée sélectionnée. Chaque “+” ajoute une entrée datée ce jour, chaque “−” retire la dernière entrée de ce jour (pour le type).</p>
+        <div class="row" id="calEditButtons"></div>
+        <p class="muted small">Ajuste la journée sélectionnée. “+” ajoute une entrée datée ce jour, “−” retire la dernière entrée (par type).</p>
       </div>
     </section>
 
-    <!-- Réglages rapides -->
+    <!-- Réglages enrichis -->
     <section class="card">
-      <h2>Réglages rapides</h2>
+      <h2>Réglages</h2>
       <div class="grid2">
         <div>
           <h3>Prix</h3>
@@ -121,7 +115,14 @@
           <label>Clopes <input type="number" id="limitDayCigs"></label>
           <label>Joints <input type="number" id="limitDayWeed"></label>
           <label>Verres (total) <input type="number" id="limitDayAlcohol"></label>
-          <p class="muted small">Si une limite est définie, un rappel s’affiche quand tu la dépasses.</p>
+
+          <h3 style="margin-top:.75rem">Objectifs (baseline manuelle / jour)</h3>
+          <label>Clopes <input type="number" id="goalCigs" placeholder="ex. 5"></label>
+          <label>Joints <input type="number" id="goalWeed" placeholder="ex. 0"></label>
+          <label>Verres <input type="number" id="goalAlcohol" placeholder="ex. 2"></label>
+          <label><input type="checkbox" id="baselineAuto" checked> Baseline auto si objectifs vides (moy. 30j)</label>
+
+          <p class="muted small">Les économies sont calculées à partir de la baseline (objectifs ou moyenne 30j). Jamais d’économie négative.</p>
         </div>
       </div>
       <div class="row">
@@ -129,26 +130,25 @@
       </div>
     </section>
 
-    <!-- Import / Export -->
     <section class="card">
       <h2>Import / Export</h2>
       <div class="row">
         <button id="btnImport">Importer JSON</button>
         <input id="fileJson" type="file" accept="application/json" hidden />
         <button id="btnExport">Exporter CSV</button>
+        <button id="btnExportJson">Exporter JSON</button>
       </div>
       <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
       <pre id="preview" hidden></pre>
+      <p class="muted small">
+        Les économies et coûts sont des estimations basées sur tes réglages et ta saisie. Elles ne reflètent pas forcément ta réalité financière.
+      </p>
     </section>
 
-    <!-- Économies (disclaimer) -->
     <section class="card">
       <h2>Économies estimées</h2>
       <div id="economies-amount">—</div>
-      <p class="muted small">
-        Estimation basée sur tes réglages et tes saisies. Ne reflète pas forcément la réalité :
-        honnêteté d’usage, façon de gérer l’argent, etc.
-      </p>
+      <p class="muted small">Estimation basée sur tes réglages et tes saisies (honnêteté d’usage, façon de gérer l’argent, etc.).</p>
     </section>
   </main>
 
