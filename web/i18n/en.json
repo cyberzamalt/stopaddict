@@ -86,3 +86,18 @@
 
   "nav.skip": "Skip to content"
 }
+,
+  "msg.settings.saved": "Settings saved.",
+  "msg.import.ok": "Import successful. Data updated.",
+  "msg.import.err": "Invalid import (wrong file or format).",
+  "msg.export.csv.ok": "CSV export ready.",
+  "msg.export.json.ok": "JSON export ready.",
+  "msg.clear.confirm": "Confirm erasing all local data?",
+  "msg.clear.ok": "All data erased.",
+
+  "emergency.alert.title": "Emergency numbers (France examples):",
+  "emergency.num.samu": "15 — SAMU (medical emergency)",
+  "emergency.num.police": "17 — Police",
+  "emergency.num.fire": "18 — Fire brigade",
+  "emergency.num.eu": "112 — European emergency number",
+  "emergency.alert.hint": "Call directly from your phone."
