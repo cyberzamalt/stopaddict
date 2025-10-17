@@ -90,3 +90,11 @@ pre{background:#0b1020;color:#e5e7eb;padding:1rem;border-radius:.6rem;overflow:a
   .feedback.info{background:#0f172a;color:#e6edf3}
   .cal-days .cal-cell{background:#0f172a;border-color:#1f2937}
 }
+/* Details/summary (À propos) */
+details{margin:.5rem 0}
+details>summary{cursor:pointer; list-style: none;}
+details>summary::marker{display:none}
+details>summary::-webkit-details-marker{display:none}
+details>summary{padding:.4rem .6rem;border-radius:.5rem;background:#f1f5f9}
+details[open]>summary{background:#e2e8f0}
+details .muted{margin:.5rem 0 0 0}
