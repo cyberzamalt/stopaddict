@@ -1,71 +1,38 @@
-import { $, toast } from "./utils.js";
-import { state, addEntry, removeOneToday, sumToday } from "./state.js";
+// web/js/counters.js
+import { state, save, emit } from "./state.js";
+import { isToday, announce } from "./utils.js";
 
-export function initCounters() {
-  // Activation
-  const enableCigs = $("#enableCigs");
-  const enableWeed = $("#enableWeed");
-  const enableAlcohol = $("#enableAlcohol");
+const LOCK_MS = 120; // petit anti-double clic
 
-  enableCigs.checked    = !!state.settings.enable.cigs;
-  enableWeed.checked    = !!state.settings.enable.weed;
-  enableAlcohol.checked = !!state.settings.enable.alcohol;
-
-  const cardCigs = $("#cardCigs");
-  const cardWeed = $("#cardWeed");
-  const cardAlcohol = $("#cardAlcohol");
-
-  function renderActivation() {
-    cardCigs.classList.toggle("hide", !state.settings.enable.cigs);
-    cardWeed.classList.toggle("hide", !state.settings.enable.weed);
-    cardAlcohol.classList.toggle("hide", !state.settings.enable.alcohol);
+function addEntry(type, qty = 1){
+  state.entries.push({ ts: new Date().toISOString(), type, qty });
+  save(state);
+  emit("sa:changed");
+  announce("Ajout enregistré");
+}
+function removeOneToday(type){
+  for (let i = state.entries.length - 1; i >= 0; i--){
+    const e = state.entries[i];
+    if (e.type === type && isToday(e.ts)) { state.entries.splice(i,1); break; }
   }
-  renderActivation();
+  save(state);
+  emit("sa:changed");
+  announce("Retrait effectué");
+}
 
-  enableCigs.onchange    = () => { state.settings.enable.cigs = enableCigs.checked;    localStorage.setItem("sa:data", JSON.stringify(state)); renderActivation(); };
-  enableWeed.onchange    = () => { state.settings.enable.weed = enableWeed.checked;    localStorage.setItem("sa:data", JSON.stringify(state)); renderActivation(); };
-  enableAlcohol.onchange = () => { state.settings.enable.alcohol = enableAlcohol.checked; localStorage.setItem("sa:data", JSON.stringify(state)); renderActivation(); };
+export function initCounters(){
+  let lastClickAt = 0;
 
-  // Compteurs du jour
-  const cigsToday = $("#cigsToday");
-  const weedToday = $("#weedToday");
-  const alcoToday = $("#alcoToday");
-
-  function renderCounters() {
-    cigsToday.textContent = sumToday(["cig"]);
-    weedToday.textContent = sumToday(["weed"]);
-    alcoToday.textContent = sumToday(["beer","strong","liquor"]);
-  }
-  renderCounters();
-
-  // Plus / Moins
   document.addEventListener("click", (e)=>{
     const btn = e.target.closest("button");
     if (!btn) return;
 
-    if (btn.classList.contains("plus")) {
-      const type = btn.dataset.type;
-      if (type) { addEntry(type, 1); renderCounters(); document.dispatchEvent(new Event("sa:changed")); }
-    }
-    if (btn.classList.contains("minus")) {
-      const type = btn.dataset.type;
-      if (type) { removeOneToday(type); renderCounters(); document.dispatchEvent(new Event("sa:changed")); }
-    }
-  });
+    // garde-fou anti spam touches
+    const now = Date.now();
+    if (now - lastClickAt < LOCK_MS) return;
+    lastClickAt = now;
 
-  // Limites affichage
-  const limitCigs = $("#limitCigs");
-  const limitWeed = $("#limitWeed");
-  const limitAlcohol = $("#limitAlcohol");
-
-  function renderLimits() {
-    const L = state.settings.limits.day;
-    limitCigs.textContent = L.cigs ? `Limite jour: ${L.cigs}` : "";
-    limitWeed.textContent = L.weed ? `Limite jour: ${L.weed}` : "";
-    limitAlcohol.textContent = L.alcohol ? `Limite jour: ${L.alcohol}` : "";
-  }
-  renderLimits();
-
-  document.addEventListener("sa:settingsSaved", renderLimits);
-  document.addEventListener("sa:imported",      () => { renderCounters(); renderLimits(); });
+    if (btn.classList.contains("plus"))  { const t = btn.dataset.type; if (t) addEntry(t, 1); }
+    if (btn.classList.contains("minus")) { const t = btn.dataset.type; if (t) removeOneToday(t); }
+  }, { passive:true });
 }
