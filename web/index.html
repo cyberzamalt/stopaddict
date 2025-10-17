@@ -144,17 +144,45 @@
       <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
       <pre id="preview" hidden></pre>
       <p class="muted small">
-        Les économies et coûts sont des estimations basées sur tes réglages et ta saisie. Elles ne reflètent pas forcément ta réalité financière.
+        Les économies et coûts sont des estimations basées sur tes réglages et ta saisie. Elles ne reflètent pas forcément ta réalité.
       </p>
     </section>
 
+    <!-- ====== À propos & Aide ====== -->
     <section class="card">
-      <h2>Économies estimées</h2>
-      <div id="economies-amount">—</div>
-      <p class="muted small">Estimation basée sur tes réglages et tes saisies (honnêteté d’usage, façon de gérer l’argent, etc.).</p>
+      <h2>À propos & Aide</h2>
+
+      <details>
+        <summary><strong>Rappels importants</strong></summary>
+        <ul class="muted">
+          <li>Les économies sont des <em>estimations</em> (réglages, honnêteté d’usage, habitudes de dépenses).</li>
+          <li>Aucune donnée n’est envoyée : tout est stocké <strong>localement</strong> sur l’appareil.</li>
+          <li>Tu peux <strong>effacer</strong> toutes les données à tout moment (Import/Export).</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary><strong>Majorité & Avertissement</strong></summary>
+        <p class="muted small">Coche si tu as l’âge légal dans ton pays :</p>
+        <label><input type="checkbox" id="ageOk" /> J’atteste être majeur(e).</label>
+      </details>
+
+      <details>
+        <summary><strong>Numéros d’urgence</strong></summary>
+        <p class="muted small">En cas de détresse, appelle directement depuis ton téléphone.</p>
+        <button id="btnEmergency" class="btn">Afficher les numéros utiles</button>
+      </details>
+
+      <details>
+        <summary><strong>Besoin de réinitialiser ?</strong></summary>
+        <p class="muted small">Le bouton “Effacer toutes les données” se trouve dans la section Import/Export.</p>
+        <button id="btnShowEraseHint" class="btn">Y aller</button>
+      </details>
     </section>
   </main>
 
+  <!-- JS modules -->
   <script type="module" src="./js/app.js"></script>
+  <script type="module" src="./js/about.js"></script>
 </body>
 </html>
