@@ -84,9 +84,8 @@
   "about.reset.hint": "Le bouton “Effacer toutes les données” se trouve dans la section Import/Export.",
   "about.reset.go": "Y aller",
 
-  "nav.skip": "Aller au contenu"
-}
-,
+  "nav.skip": "Aller au contenu",
+
   "msg.settings.saved": "Réglages enregistrés.",
   "msg.import.ok": "Import réussi. Données mises à jour.",
   "msg.import.err": "Import invalide (fichier ou format incorrect).",
@@ -101,3 +100,4 @@
   "emergency.num.fire": "18 — Pompiers",
   "emergency.num.eu": "112 — Numéro d'urgence européen",
   "emergency.alert.hint": "Appelle directement depuis ton téléphone."
+}
