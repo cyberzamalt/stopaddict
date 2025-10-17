@@ -8,31 +8,38 @@
   <link rel="stylesheet" href="./css/app.css" />
 </head>
 <body>
-  <a href="#main" class="sr-only skip">Aller au contenu</a>
+  <a href="#main" class="sr-only skip" data-i18n="nav.skip">Aller au contenu</a>
 
   <main id="main">
     <header class="app-header">
-      <h1>StopAddict</h1>
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <h1 data-i18n="app.title">StopAddict</h1>
+        <label class="small">
+          Langue / Language
+          <select id="langSelect" class="btn" style="margin-left:.4rem"></select>
+        </label>
+      </div>
+
       <div class="header-stats">
-        <div><strong>Aujourd’hui</strong><span id="todayTotal">—</span></div>
-        <div><strong>Semaine</strong><span id="weekTotal">—</span></div>
-        <div><strong>Mois</strong><span id="monthTotal">—</span></div>
-        <div><strong>Coût jour</strong><span id="todayCost">—</span></div>
+        <div><strong data-i18n="hdr.today">Aujourd’hui</strong><span id="todayTotal">—</span></div>
+        <div><strong data-i18n="hdr.week">Semaine</strong><span id="weekTotal">—</span></div>
+        <div><strong data-i18n="hdr.month">Mois</strong><span id="monthTotal">—</span></div>
+        <div><strong data-i18n="hdr.costDay">Coût jour</strong><span id="todayCost">—</span></div>
       </div>
     </header>
 
     <section class="card">
-      <h2>Activer ce que tu suis</h2>
+      <h2 data-i18n="toggles.title">Activer ce que tu suis</h2>
       <div class="row">
-        <label><input type="checkbox" id="enableCigs"> Je fume</label>
-        <label><input type="checkbox" id="enableWeed"> Je fume des joints</label>
-        <label><input type="checkbox" id="enableAlcohol"> Je bois</label>
+        <label><input type="checkbox" id="enableCigs"> <span data-i18n="toggles.cigs">Je fume</span></label>
+        <label><input type="checkbox" id="enableWeed"> <span data-i18n="toggles.weed">Je fume des joints</span></label>
+        <label><input type="checkbox" id="enableAlcohol"> <span data-i18n="toggles.alcohol">Je bois</span></label>
       </div>
-      <p class="muted small">Tu peux tout changer quand tu veux. Les modules non activés n’apparaissent pas.</p>
+      <p class="muted small" data-i18n="toggles.hint">Tu peux tout changer quand tu veux…</p>
     </section>
 
     <section id="cardCigs" class="card hide">
-      <h2>Clopes <span class="pill" id="cigsToday">0</span></h2>
+      <h2><span data-i18n="card.cigs">Clopes</span> <span class="pill" id="cigsToday">0</span></h2>
       <div class="row">
         <button class="btn minus" data-type="cig">−</button>
         <button class="btn plus"  data-type="cig">+</button>
@@ -42,7 +49,7 @@
     </section>
 
     <section id="cardWeed" class="card hide">
-      <h2>Pétards <span class="pill" id="weedToday">0</span></h2>
+      <h2><span data-i18n="card.weed">Pétards</span> <span class="pill" id="weedToday">0</span></h2>
       <div class="row">
         <button class="btn minus" data-type="weed">−</button>
         <button class="btn plus"  data-type="weed">+</button>
@@ -52,131 +59,134 @@
     </section>
 
     <section id="cardAlcohol" class="card hide">
-      <h2>Alcool <span class="pill" id="alcoToday">0</span></h2>
+      <h2><span data-i18n="card.alcohol">Alcool</span> <span class="pill" id="alcoToday">0</span></h2>
       <div class="row">
-        <button class="btn minus" data-type="beer">Bière −</button>
-        <button class="btn plus"  data-type="beer">Bière +</button>
-        <button class="btn minus" data-type="strong">Alcool fort −</button>
-        <button class="btn plus"  data-type="strong">Alcool fort +</button>
-        <button class="btn minus" data-type="liquor">Liqueur −</button>
-        <button class="btn plus"  data-type="liquor">Liqueur +</button>
+        <button class="btn minus" data-type="beer"   data-i18n="btn.beer.minus">Bière −</button>
+        <button class="btn plus"  data-type="beer"   data-i18n="btn.beer.plus">Bière +</button>
+        <button class="btn minus" data-type="strong" data-i18n="btn.strong.minus">Alcool fort −</button>
+        <button class="btn plus"  data-type="strong" data-i18n="btn.strong.plus">Alcool fort +</button>
+        <button class="btn minus" data-type="liquor" data-i18n="btn.liquor.minus">Liqueur −</button>
+        <button class="btn plus"  data-type="liquor" data-i18n="btn.liquor.plus">Liqueur +</button>
       </div>
       <p class="limit" id="limitAlcohol"></p>
       <p class="alert hide" id="alertAlcohol"></p>
     </section>
 
     <section class="card">
-      <h2>Statistiques</h2>
+      <h2 data-i18n="stats.title">Statistiques</h2>
       <div class="row" id="chartRange">
-        <button class="btn pill active" data-range="day">Jour</button>
-        <button class="btn pill" data-range="week">Semaine</button>
-        <button class="btn pill" data-range="month">Mois</button>
+        <button class="btn pill active" data-range="day"   data-i18n="stats.day">Jour</button>
+        <button class="btn pill"        data-range="week"  data-i18n="stats.week">Semaine</button>
+        <button class="btn pill"        data-range="month" data-i18n="stats.month">Mois</button>
       </div>
       <div class="chart-wrap">
         <canvas id="chartCanvas" width="900" height="280"></canvas>
       </div>
-      <p class="muted small" id="chartHint">Basé sur tes entrées (tous types confondus). Ligne orange : limite/jour si définie.</p>
+      <p class="muted small" id="chartHint" data-i18n="stats.hint">Basé sur tes entrées…</p>
     </section>
 
     <section class="card">
-      <h2>Calendrier</h2>
+      <h2 data-i18n="cal.title">Calendrier</h2>
       <div class="cal-head">
-        <button id="calPrev" class="btn">◀</button>
+        <button id="calPrev" class="btn" data-i18n="cal.prev">◀</button>
         <div id="calTitle"></div>
-        <button id="calNext" class="btn">▶</button>
+        <button id="calNext" class="btn" data-i18n="cal.next">▶</button>
       </div>
-      <div class="cal-grid cal-weekdays">
-        <div>Lun</div><div>Mar</div><div>Mer</div><div>Jeu</div><div>Ven</div><div>Sam</div><div>Dim</div>
+      <div class="cal-grid cal-weekdays" id="calWeekdays">
+        <div data-i18n="cal.weekdays.mon">Lun</div>
+        <div data-i18n="cal.weekdays.tue">Mar</div>
+        <div data-i18n="cal.weekdays.wed">Mer</div>
+        <div data-i18n="cal.weekdays.thu">Jeu</div>
+        <div data-i18n="cal.weekdays.fri">Ven</div>
+        <div data-i18n="cal.weekdays.sat">Sam</div>
+        <div data-i18n="cal.weekdays.sun">Dim</div>
       </div>
       <div id="calGrid" class="cal-grid cal-days"></div>
 
       <div id="calEditor" class="cal-editor hide">
         <div class="cal-editor-head">
           <strong id="calEditDate">—</strong>
-          <button id="calClose" class="btn">Fermer</button>
+          <button id="calClose" class="btn" data-i18n="cal.close">Fermer</button>
         </div>
         <div class="row" id="calEditButtons"></div>
-        <p class="muted small">Ajuste la journée sélectionnée. “+” ajoute une entrée datée ce jour, “−” retire la dernière entrée (par type).</p>
+        <p class="muted small" data-i18n="cal.editor.hint">Ajuste la journée…</p>
       </div>
     </section>
 
     <section class="card">
-      <h2>Réglages</h2>
+      <h2 data-i18n="settings.title">Réglages</h2>
       <div class="grid2">
         <div>
-          <h3>Prix</h3>
-          <label>Prix paquet (€) <input type="number" step="0.1" id="pricePack"></label>
-          <label>Clopes / paquet <input type="number" id="cigsPerPack"></label>
-          <label>Prix joint (€) <input type="number" step="0.1" id="priceJoint"></label>
-          <label>Prix bière (€) <input type="number" step="0.1" id="priceBeer"></label>
-          <label>Prix alcool fort (€) <input type="number" step="0.1" id="priceStrong"></label>
-          <label>Prix liqueur (€) <input type="number" step="0.1" id="priceLiquor"></label>
+          <h3 data-i18n="settings.price">Prix</h3>
+          <label><span data-i18n="settings.pricePack">Prix paquet (€)</span> <input type="number" step="0.1" id="pricePack"></label>
+          <label><span data-i18n="settings.cigsPerPack">Clopes / paquet</span> <input type="number" id="cigsPerPack"></label>
+          <label><span data-i18n="settings.priceJoint">Prix joint (€)</span> <input type="number" step="0.1" id="priceJoint"></label>
+          <label><span data-i18n="settings.priceBeer">Prix bière (€)</span> <input type="number" step="0.1" id="priceBeer"></label>
+          <label><span data-i18n="settings.priceStrong">Prix alcool fort (€)</span> <input type="number" step="0.1" id="priceStrong"></label>
+          <label><span data-i18n="settings.priceLiquor">Prix liqueur (€)</span> <input type="number" step="0.1" id="priceLiquor"></label>
         </div>
         <div>
-          <h3>Limites / jour</h3>
-          <label>Clopes <input type="number" id="limitDayCigs"></label>
-          <label>Joints <input type="number" id="limitDayWeed"></label>
-          <label>Verres (total) <input type="number" id="limitDayAlcohol"></label>
+          <h3 data-i18n="settings.limits">Limites / jour</h3>
+          <label><span data-i18n="settings.limit.cigs">Clopes</span> <input type="number" id="limitDayCigs"></label>
+          <label><span data-i18n="settings.limit.weed">Joints</span> <input type="number" id="limitDayWeed"></label>
+          <label><span data-i18n="settings.limit.alcohol">Verres (total)</span> <input type="number" id="limitDayAlcohol"></label>
 
-          <h3 style="margin-top:.75rem">Objectifs (baseline manuelle / jour)</h3>
-          <label>Clopes <input type="number" id="goalCigs" placeholder="ex. 5"></label>
-          <label>Joints <input type="number" id="goalWeed" placeholder="ex. 0"></label>
-          <label>Verres <input type="number" id="goalAlcohol" placeholder="ex. 2"></label>
-          <label><input type="checkbox" id="baselineAuto" checked> Baseline auto si objectifs vides (moy. 30j)</label>
+          <h3 style="margin-top:.75rem" data-i18n="settings.goals">Objectifs (baseline manuelle / jour)</h3>
+          <label><span data-i18n="settings.goal.cigs">Clopes</span> <input type="number" id="goalCigs" data-i18n-ph="settings.goal.cigs"></label>
+          <label><span data-i18n="settings.goal.weed">Joints</span> <input type="number" id="goalWeed" data-i18n-ph="settings.goal.weed"></label>
+          <label><span data-i18n="settings.goal.alcohol">Verres</span> <input type="number" id="goalAlcohol" data-i18n-ph="settings.goal.alcohol"></label>
+          <label><input type="checkbox" id="baselineAuto" checked> <span data-i18n="settings.baseline.auto">Baseline auto…</span></label>
 
-          <p class="muted small">Les économies sont calculées à partir de la baseline (objectifs ou moyenne 30j). Jamais d’économie négative.</p>
+          <p class="muted small" data-i18n="settings.econ.hint">Les économies sont calculées…</p>
         </div>
       </div>
       <div class="row">
-        <button id="btnSaveSettings" class="btn primary">Enregistrer</button>
+        <button id="btnSaveSettings" class="btn primary" data-i18n="settings.save">Enregistrer</button>
       </div>
     </section>
 
     <section class="card">
-      <h2>Import / Export</h2>
+      <h2 data-i18n="io.title">Import / Export</h2>
       <div class="row">
-        <button id="btnImport" class="btn">Importer JSON</button>
+        <button id="btnImport" class="btn" data-i18n="io.import">Importer JSON</button>
         <input id="fileJson" type="file" accept="application/json" hidden />
-        <button id="btnExport" class="btn">Exporter CSV</button>
-        <button id="btnExportJson" class="btn">Exporter JSON</button>
-        <button id="btnClearAll" class="btn" title="Efface toutes les données locales">Effacer toutes les données</button>
+        <button id="btnExport" class="btn" data-i18n="io.exportCsv">Exporter CSV</button>
+        <button id="btnExportJson" class="btn" data-i18n="io.exportJson">Exporter JSON</button>
+        <button id="btnClearAll" class="btn" data-i18n="io.clearAll" title="Efface toutes les données locales">Effacer toutes les données</button>
       </div>
       <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
       <pre id="preview" hidden></pre>
-      <p class="muted small">
-        Les économies et coûts sont des estimations basées sur tes réglages et ta saisie. Elles ne reflètent pas forcément ta réalité.
-      </p>
+      <p class="muted small" data-i18n="io.disclaimer">Les économies et coûts…</p>
     </section>
 
-    <!-- ====== À propos & Aide ====== -->
     <section class="card">
-      <h2>À propos & Aide</h2>
+      <h2 data-i18n="about.title">À propos & Aide</h2>
 
       <details>
-        <summary><strong>Rappels importants</strong></summary>
+        <summary><strong data-i18n="about.reminders">Rappels importants</strong></summary>
         <ul class="muted">
-          <li>Les économies sont des <em>estimations</em> (réglages, honnêteté d’usage, habitudes de dépenses).</li>
-          <li>Aucune donnée n’est envoyée : tout est stocké <strong>localement</strong> sur l’appareil.</li>
-          <li>Tu peux <strong>effacer</strong> toutes les données à tout moment (Import/Export).</li>
+          <li data-i18n="about.rem1">Les économies sont des estimations…</li>
+          <li data-i18n="about.rem2">Aucune donnée n’est envoyée…</li>
+          <li data-i18n="about.rem3">Tu peux effacer toutes les données…</li>
         </ul>
       </details>
 
       <details>
-        <summary><strong>Majorité & Avertissement</strong></summary>
-        <p class="muted small">Coche si tu as l’âge légal dans ton pays :</p>
-        <label><input type="checkbox" id="ageOk" /> J’atteste être majeur(e).</label>
+        <summary><strong data-i18n="about.age">Majorité & Avertissement</strong></summary>
+        <p class="muted small" data-i18n="about.age.hint">Coche si tu as l’âge légal…</p>
+        <label><input type="checkbox" id="ageOk" /> <span data-i18n="about.age.check">J’atteste être majeur(e).</span></label>
       </details>
 
       <details>
-        <summary><strong>Numéros d’urgence</strong></summary>
-        <p class="muted small">En cas de détresse, appelle directement depuis ton téléphone.</p>
-        <button id="btnEmergency" class="btn">Afficher les numéros utiles</button>
+        <summary><strong data-i18n="about.emergency">Numéros d’urgence</strong></summary>
+        <p class="muted small" data-i18n="about.emergency.hint">En cas de détresse…</p>
+        <button id="btnEmergency" class="btn" data-i18n="about.emergency.show">Afficher les numéros utiles</button>
       </details>
 
       <details>
-        <summary><strong>Besoin de réinitialiser ?</strong></summary>
-        <p class="muted small">Le bouton “Effacer toutes les données” se trouve dans la section Import/Export.</p>
-        <button id="btnShowEraseHint" class="btn">Y aller</button>
+        <summary><strong data-i18n="about.reset">Besoin de réinitialiser ?</strong></summary>
+        <p class="muted small" data-i18n="about.reset.hint">Le bouton “Effacer…”</p>
+        <button id="btnShowEraseHint" class="btn" data-i18n="about.reset.go">Y aller</button>
       </details>
     </section>
   </main>
@@ -184,5 +194,11 @@
   <!-- JS modules -->
   <script type="module" src="./js/app.js"></script>
   <script type="module" src="./js/about.js"></script>
+  <script type="module" src="./js/i18n.js"></script>
+  <script type="module">
+    import { initI18n } from "./js/i18n.js";
+    // lancer l’i18n après le chargement du DOM
+    document.addEventListener("DOMContentLoaded", () => { initI18n(); });
+  </script>
 </body>
 </html>
