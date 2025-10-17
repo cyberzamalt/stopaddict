@@ -84,9 +84,8 @@
   "about.reset.hint": "The “Erase all data” button is in Import/Export.",
   "about.reset.go": "Go there",
 
-  "nav.skip": "Skip to content"
-}
-,
+  "nav.skip": "Skip to content",
+
   "msg.settings.saved": "Settings saved.",
   "msg.import.ok": "Import successful. Data updated.",
   "msg.import.err": "Invalid import (wrong file or format).",
@@ -101,3 +100,4 @@
   "emergency.num.fire": "18 — Fire brigade",
   "emergency.num.eu": "112 — European emergency number",
   "emergency.alert.hint": "Call directly from your phone."
+}
