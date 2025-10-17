@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="StopAddict - Compteur personnel de consommation">
+  <meta name="description" content="StopAddict - Compteur personnel antidépendance">
   <meta name="theme-color" content="#1e293b">
-  <title>StopAddict v3 - Refactorisé</title>
+  <title>StopAddict v3 - Complet</title>
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
   <style>
-* { box-sizing: border-box; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
   --primary: #1e293b;
   --primary-dark: #0f172a;
@@ -16,41 +16,37 @@
   --accent-green: #10b981;
   --accent-orange: #f97316;
   --accent-blue: #3b82f6;
-  --accent-purple: #8b5cf6;
   --text-main: #1f2937;
   --text-muted: #6b7280;
   --bg-light: #f9fafb;
   --border-light: #e5e7eb;
 }
 
-html, body { margin: 0; padding: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto; background: #fff; color: var(--text-main); line-height: 1.5; }
-
+html, body { font-family: system-ui, -apple-system, Segoe UI, Roboto; background: #fff; color: var(--text-main); line-height: 1.5; }
 body { padding-bottom: 80px; }
 
-/* Conteneur principal */
 .app-shell { width: 100%; max-width: 480px; margin: 0 auto; background: #fff; }
 
-/* Header */
-.hdr { background: linear-gradient(135deg, var(--primary-dark), var(--primary)); color: #fff; padding: 16px 12px; text-align: center; position: sticky; top: 0; z-index: 40; border-bottom: 1px solid var(--border-light); }
+/* HEADER */
+.hdr { background: linear-gradient(135deg, var(--primary-dark), var(--primary)); color: #fff; padding: 16px 12px; text-align: center; position: sticky; top: 0; z-index: 40; }
 .hdr .title { font-size: 18px; font-weight: 900; margin: 0; }
 .hdr .subtitle { font-size: 12px; opacity: 0.8; margin: 4px 0 0; }
 
-/* Écrans */
-.ecran { display: none; }
-.ecran.show { display: block; animation: fadeIn 0.2s; }
+/* ÉCRANS */
+.ecran { display: none; animation: fadeIn 0.2s; }
+.ecran.show { display: block; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-/* Cartes */
+/* CARTES */
 .card { background: #fff; border: 1px solid var(--border-light); border-radius: 12px; padding: 14px; margin: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
 .card.bar-green { border-left: 4px solid var(--accent-green); }
-.card.bar-orange { border-left: 4px solid var(--accent-orange); }
 
-/* Bandeaux */
+/* BANDEAUX */
 .banner { border-radius: 12px; padding: 12px; margin: 8px; }
 .banner.green { background: #ecfdf5; border-left: 4px solid var(--accent-green); }
 .banner.orange { background: #fff7ed; border-left: 4px solid var(--accent-orange); }
 
-/* Grilles */
+/* ROW */
 .row { display: flex; justify-content: space-between; align-items: center; }
 .row-slim { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-size: 14px; }
 .row-slim .label { flex: 1; font-weight: 600; }
@@ -58,7 +54,7 @@ body { padding-bottom: 80px; }
 .row-slim .bar span { display: block; height: 100%; background: var(--accent-orange); transition: width 0.3s; }
 .row-slim .note { flex: 1; text-align: right; font-size: 12px; color: var(--text-muted); }
 
-/* Boutons */
+/* BOUTONS */
 .btn { background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: 8px 12px; font-size: 14px; cursor: pointer; transition: background 0.2s; }
 .btn:hover { background: var(--primary-dark); }
 .btn.alt { background: var(--border-light); color: var(--text-main); }
@@ -66,75 +62,61 @@ body { padding-bottom: 80px; }
 .btn.warn { background: #dc2626; }
 .btn.warn:hover { background: #b91c1c; }
 .btn.small { padding: 6px 10px; font-size: 12px; }
-.btn-round { width: 56px; height: 56px; border-radius: 50%; border: 2px solid var(--border-light); background: #fff; cursor: pointer; font-size: 18px; font-weight: 900; transition: all 0.2s; }
+.btn-round { width: 56px; height: 56px; border-radius: 50%; border: 2px solid var(--border-light); background: #fff; cursor: pointer; font-size: 18px; font-weight: 900; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
 .btn-round:hover { background: var(--bg-light); }
 .btn-round.btn-plus { background: var(--accent-green); color: #fff; border: none; }
 .btn-plus:hover { background: #059669; }
-.btn-round.green { background: var(--accent-green); color: #fff; border: none; }
 
-/* Compteurs */
+/* COMPTEURS */
 .count { font-size: 24px; font-weight: 900; }
+.title { font-weight: 600; }
 
-/* Input */
+/* INPUTS */
 input[type="text"], input[type="number"], input[type="checkbox"], input[type="file"], select { padding: 6px 8px; border: 1px solid var(--border-light); border-radius: 6px; font-size: 14px; }
 input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+input[type="number"] { width: 100%; }
 
-/* Section */
+/* SECTIONS */
 .section-title { font-weight: 900; font-size: 14px; margin: 10px 0 8px; color: var(--primary); }
 
-/* Grid */
+/* GRID */
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .param { padding: 6px 0; }
 .param label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 2px; }
-.param input, .param select { width: 100%; }
 
-/* Tabs */
+/* TABS */
 .tabs { display: flex; gap: 4px; padding: 8px; border-bottom: 1px solid var(--border-light); }
 .tab { flex: 1; padding: 8px 6px; background: #fff; border: 1px solid var(--border-light); border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s; }
 .tab.actif { background: var(--primary); color: #fff; border-color: var(--primary); }
 
-/* Nav */
+/* NAV */
 .nav { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid var(--border-light); display: flex; gap: 0; z-index: 50; max-width: 480px; margin: 0 auto; }
-.nav button { flex: 1; background: none; border: none; padding: 8px 4px; cursor: pointer; font-size: 11px; font-weight: 600; color: var(--text-muted); transition: all 0.2s; }
-.nav button.actif { color: var(--primary); border-top: 2px solid var(--primary); }
+.nav button { flex: 1; background: none; border: none; padding: 8px 4px; cursor: pointer; font-size: 11px; font-weight: 600; color: var(--text-muted); transition: all 0.2s; border-top: 2px solid transparent; }
+.nav button.actif { color: var(--primary); border-top-color: var(--primary); }
 .nav .ico { display: block; font-size: 20px; margin-bottom: 2px; }
 
-/* Modales */
-.modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); align-items: flex-end; justify-content: center; z-index: 50; }
-.modal.show { display: flex; }
+/* MODALES */
+.modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 50; }
+.modal.show { display: flex; align-items: flex-end; justify-content: center; }
 .sheet { background: #fff; width: 100%; max-width: 480px; border-radius: 16px 16px 0 0; padding: 14px; max-height: 80vh; overflow-y: auto; }
 .sheet h3 { margin: 0 0 10px; font-size: 16px; }
 
-/* Calendrier */
-.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-.cal-cell { background: #fff; border: 1px solid var(--border-light); border-radius: 8px; padding: 6px; min-height: 56px; position: relative; cursor: pointer; font-size: 12px; }
-.cal-num { color: var(--text-muted); font-weight: 800; }
-.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin: 2px; }
-.dot.c { background: var(--primary); }
-.dot.j { background: var(--accent-green); }
-.dot.a { background: var(--accent-orange); }
-
-/* Graphiques */
+/* GRAPHIQUES */
 #stats-charts { margin-top: 12px; }
 .chart-block { margin: 10px 0; }
 .chart-caption { font-weight: 600; margin: 8px 0 4px; font-size: 1rem; }
-canvas { width: 100%; height: auto; display: block; max-width: 100%; }
+canvas { width: 100%; height: auto; display: block; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.9rem; }
 .legend-item { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; background: var(--bg-light); border: 1px solid var(--border-light); cursor: pointer; user-select: none; }
 .legend-item.is-muted { opacity: 0.45; text-decoration: line-through; }
 .legend-swatch { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
 .chart-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; flex-wrap: wrap; }
-.chart-actions .btn { flex: 1; min-width: 150px; font-size: 13px; padding: 8px 10px; }
+.chart-actions .btn { flex: 1; min-width: 140px; font-size: 12px; padding: 8px 10px; }
 
-/* Debug */
-.debug-overlay { position: fixed; bottom: 80px; right: 8px; width: 200px; max-height: 40vh; background: #000; color: #0f0; padding: 8px; border-radius: 6px; font-size: 9px; font-family: monospace; overflow-y: auto; display: none; z-index: 45; }
-.debug-overlay.show { display: block; }
-
-/* Snackbar */
+/* SNACKBAR */
 .snackbar { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: var(--primary); color: #fff; padding: 10px 14px; border-radius: 8px; font-size: 13px; max-width: 90%; text-align: center; opacity: 0; transition: opacity 0.3s; z-index: 40; }
 .snackbar.show { opacity: 1; }
 
-/* Responsive */
 @media (max-width: 480px) {
   .card, .banner { margin: 6px; padding: 12px; }
   .hdr { padding: 12px 8px; }
@@ -145,7 +127,7 @@ canvas { width: 100%; height: auto; display: block; max-width: 100%; }
 <body>
 
 <div class="app-shell">
-  <!-- Header -->
+  <!-- HEADER -->
   <div class="hdr">
     <div class="title">🚭 StopAddict v3</div>
     <div class="subtitle" id="date-actuelle">—</div>
@@ -158,7 +140,7 @@ canvas { width: 100%; height: auto; display: block; max-width: 100%; }
         <div class="title">🚬 Clopes</div>
         <div class="count" id="compteur-clopes">0</div>
       </div>
-      <div class="pm" style="display: flex; gap: 8px; margin-top: 8px;">
+      <div style="display: flex; gap: 8px; margin-top: 8px;">
         <button class="btn-round btn-minus" id="btn-clopes-moins" type="button">−</button>
         <button class="btn-round btn-plus" id="btn-clopes-plus" type="button">+</button>
       </div>
@@ -169,9 +151,9 @@ canvas { width: 100%; height: auto; display: block; max-width: 100%; }
         <div class="title">🌿 Pétards</div>
         <div class="count" id="compteur-joints">0</div>
       </div>
-      <div class="pm" style="display: flex; gap: 8px; margin-top: 8px;">
+      <div style="display: flex; gap: 8px; margin-top: 8px;">
         <button class="btn-round btn-minus" id="btn-joints-moins" type="button">−</button>
-        <button class="btn-round btn-plus green" id="btn-joints-plus" type="button">+</button>
+        <button class="btn-round btn-plus" id="btn-joints-plus" type="button">+</button>
       </div>
     </div>
 
@@ -180,16 +162,14 @@ canvas { width: 100%; height: auto; display: block; max-width: 100%; }
         <div class="title">🍺 Alcool</div>
         <div class="count" id="compteur-alcool-total">0</div>
       </div>
-      <div id="seg-alcool" style="margin: 8px 0;"></div>
-      <div class="pm" style="display: flex; gap: 8px; margin-top: 8px;">
+      <div style="display: flex; gap: 8px; margin-top: 8px;">
         <button class="btn-round btn-minus" id="btn-alc-moins" type="button">−</button>
         <button class="btn-round btn-plus" id="btn-alc-plus" type="button">+</button>
       </div>
     </div>
 
-    <div class="banner orange" id="banner-accueil">
+    <div class="banner orange">
       <div style="font-weight: 900; margin-bottom: 8px;" id="hello-accueil">—</div>
-      <div id="chips-accueil" style="margin-bottom: 8px;"></div>
       <div class="row-slim">
         <div class="label">Clopes</div>
         <div class="bar"><span id="bar-clopes"></span></div>
@@ -217,9 +197,8 @@ canvas { width: 100%; height: auto; display: block; max-width: 100%; }
       <button class="tab" data-vue="annee" type="button">Année</button>
     </div>
 
-    <div class="banner green" id="banner-stats">
+    <div class="banner green">
       <div style="font-weight: 900; margin-bottom: 8px;" id="hello-stats">—</div>
-      <div id="chips-stats" style="margin-bottom: 8px;"></div>
       <div class="row-slim">
         <div class="label">Clopes</div>
         <div class="bar"><span id="bar-clopes-periode"></span></div>
@@ -237,26 +216,17 @@ canvas { width: 100%; height: auto; display: block; max-width: 100%; }
       </div>
     </div>
 
-    <div class="card stats-block" id="stats-contenu"></div>
-
-    <div class="card" id="stats-charts">
-      <div class="row" style="justify-content: space-between; align-items: center;">
-        <div style="font-weight: 600; font-size: 16px;">Graphiques</div>
-        <div class="chart-legend" id="chart-legend" aria-label="Légende des séries"></div>
-      </div>
-
+    <div class="card">
+      <div style="font-weight: 600; font-size: 16px; margin-bottom: 8px;">Graphiques</div>
+      <div class="chart-legend" id="chart-legend"></div>
       <div class="chart-block">
         <div class="chart-caption">Consommations (unités)</div>
         <canvas id="chart-consommations" width="960" height="260"></canvas>
-        <div id="empty-consos" class="chart-empty" style="display: none; text-align: center; color: #6b7280; padding: 20px;">Aucune donnée</div>
       </div>
-
       <div class="chart-block">
         <div class="chart-caption">Coût & Économies (€)</div>
         <canvas id="chart-cout-eco" width="960" height="260"></canvas>
-        <div id="empty-cout" class="chart-empty" style="display: none; text-align: center; color: #6b7280; padding: 20px;">Aucune donnée</div>
       </div>
-
       <div class="chart-actions" id="chart-actions"></div>
     </div>
   </div>
@@ -269,33 +239,55 @@ canvas { width: 100%; height: auto; display: block; max-width: 100%; }
         <div style="font-weight: 900; flex: 1; text-align: center;" id="cal-titre">—</div>
         <button class="btn small" id="cal-next" type="button">▶</button>
       </div>
-      <div class="cal-grid" id="cal-entete"></div>
-      <div class="cal-grid" id="cal-grille"></div>
+      <div style="color: var(--text-muted); text-align: center; padding: 20px;">Calendrier (en construction)</div>
     </div>
   </div>
 
   <!-- HABITUDES -->
   <div class="ecran" id="ecran-habitudes">
     <div class="card">
-      <div class="section-title">⚙️ Limites Consommation</div>
+      <div class="section-title">⚙️ Limites Consommation/Jour</div>
       <div class="grid-2">
-        <div class="param"><label>Max Clopes/jour</label><input type="number" id="max-clopes" value="20"></div>
-        <div class="param"><label>Max Joints/jour</label><input type="number" id="max-joints" value="3"></div>
-        <div class="param"><label>Max Alcool/jour</label><input type="number" id="max-alcool" value="2"></div>
+        <div class="param">
+          <label for="max-clopes">Max Clopes</label>
+          <input type="number" id="max-clopes" value="20">
+        </div>
+        <div class="param">
+          <label for="max-joints">Max Joints</label>
+          <input type="number" id="max-joints" value="3">
+        </div>
+        <div class="param">
+          <label for="max-alcool">Max Alcool</label>
+          <input type="number" id="max-alcool" value="2">
+        </div>
       </div>
+      <button class="btn small" id="btn-save-hab" type="button" style="margin-top: 8px;">Enregistrer</button>
     </div>
   </div>
 
   <!-- RÉGLAGES -->
   <div class="ecran" id="ecran-params">
     <div class="card">
-      <div class="section-title">💰 Prix Unitaires</div>
+      <div class="section-title">💰 Prix Unitaires (€)</div>
       <div class="grid-2">
-        <div class="param"><label>Paquet (€)</label><input type="number" step="0.01" id="prix-paquet" value="11.00"></div>
-        <div class="param"><label>Joint (€)</label><input type="number" step="0.01" id="prix-joint" value="5.00"></div>
-        <div class="param"><label>Bière (€)</label><input type="number" step="0.01" id="prix-biere" value="2.50"></div>
-        <div class="param"><label>Fort (€)</label><input type="number" step="0.01" id="prix-fort" value="3.00"></div>
+        <div class="param">
+          <label for="prix-paquet">Paquet</label>
+          <input type="number" step="0.01" id="prix-paquet" value="11.00">
+        </div>
+        <div class="param">
+          <label for="prix-joint">Joint</label>
+          <input type="number" step="0.01" id="prix-joint" value="5.00">
+        </div>
+        <div class="param">
+          <label for="prix-biere">Bière</label>
+          <input type="number" step="0.01" id="prix-biere" value="2.50">
+        </div>
+        <div class="param">
+          <label for="prix-fort">Alcool Fort</label>
+          <input type="number" step="0.01" id="prix-fort" value="3.00">
+        </div>
       </div>
+      <button class="btn small" id="btn-save-params" type="button" style="margin-top: 8px;">Enregistrer</button>
     </div>
 
     <div class="card">
@@ -303,7 +295,9 @@ canvas { width: 100%; height: auto; display: block; max-width: 100%; }
       <div class="grid-2">
         <button class="btn small" id="btn-export-csv" type="button">Exporter CSV</button>
         <button class="btn small" id="btn-export-json" type="button">Exporter JSON</button>
-        <button class="btn small" id="btn-import-json" type="button">Importer JSON</button>
+      </div>
+      <div style="margin-top: 8px;">
+        <button class="btn small alt" id="btn-import-json" type="button">Importer JSON</button>
         <input id="input-import-json" type="file" accept=".json" style="display: none;">
       </div>
     </div>
@@ -318,18 +312,24 @@ canvas { width: 100%; height: auto; display: block; max-width: 100%; }
   </div>
 </div>
 
-<!-- Snackbar -->
+<!-- SNACKBAR -->
 <div class="snackbar" id="snackbar"></div>
 
-<!-- Debug overlay -->
-<div class="debug-overlay" id="debug-overlay"></div>
+<!-- NAV BOTTOM -->
+<div class="nav">
+  <button data-screen="accueil" class="actif" type="button"><span class="ico">🏠</span>Accueil</button>
+  <button data-screen="stats" type="button"><span class="ico">📊</span>Stats</button>
+  <button data-screen="calendrier" type="button"><span class="ico">📅</span>Calendrier</button>
+  <button data-screen="habitudes" type="button"><span class="ico">⚙️</span>Habitudes</button>
+  <button data-screen="params" type="button"><span class="ico">⚙️</span>Réglages</button>
+</div>
 
 <script>
 /* ========================================================================
-   STOPADDICT v3 REFACTORISÉ - VERSION PROPRE ET UNIFIÉE
+   STOPADDICT v3 COMPLETE - REFACTORISÉ AVEC ALL FEATURES
    ======================================================================== */
 
-console.log('[STOPADDICT v3] Démarrage...');
+console.log('[STOPADDICT v3 COMPLETE] Démarrage...');
 
 // ============================================================================
 // SECTION 1 : STORAGE ET STATE
@@ -353,9 +353,9 @@ function loadState() {
     params = JSON.parse(localStorage.getItem(K_PARAMS) || '{}') || {};
     habitudes = JSON.parse(localStorage.getItem(K_HAB) || '{}') || {};
     vueStats = localStorage.getItem(K_VUE) || 'jour';
-    console.log('[LOAD] État chargé depuis localStorage');
+    console.log('[LOAD] État chargé');
   } catch (e) {
-    console.error('[LOAD] Erreur chargement :', e);
+    console.error('[LOAD] Erreur :', e);
     donnees = {};
     params = {};
     habitudes = {};
@@ -369,12 +369,12 @@ function persist() {
     localStorage.setItem(K_HAB, JSON.stringify(habitudes));
     localStorage.setItem(K_VUE, vueStats);
   } catch (e) {
-    console.error('[PERSIST] Erreur sauvegarde :', e);
+    console.error('[PERSIST] Erreur :', e);
   }
 }
 
 // ============================================================================
-// SECTION 2 : HELPERS UI
+// SECTION 2 : HELPERS
 // ============================================================================
 
 function byId(id) { return document.getElementById(id); }
@@ -395,16 +395,19 @@ function goto(screen) {
     document.querySelectorAll('.ecran').forEach(e => e.classList.remove('show'));
     const el = byId('ecran-' + screen);
     if (el) el.classList.add('show');
+    
     document.querySelectorAll('.nav button').forEach(b => b.classList.remove('actif'));
     const navBtn = document.querySelector(`.nav button[data-screen="${screen}"]`);
     if (navBtn) navBtn.classList.add('actif');
+    
+    console.log('[GOTO] Navigation vers:', screen);
   } catch (e) {
-    console.error('[GOTO] Erreur navigation :', e);
+    console.error('[GOTO] Erreur :', e);
   }
 }
 
 // ============================================================================
-// SECTION 3 : HELPERS DATE ET CLÉS
+// SECTION 3 : DATE HELPERS
 // ============================================================================
 
 function keyLocal(d) {
@@ -426,10 +429,10 @@ function getJour(dateStr = null) {
 
 function calculerCoutJour(jour) {
   if (!jour) return 0;
-  const coutClope = (params.prix_paquet || 0) / Math.max(1, 20);
-  const coutJoint = params.prix_joint || 0;
-  const coutBiere = params.prix_biere || 0;
-  const coutFort = params.prix_fort || 0;
+  const coutClope = (params.prix_paquet || 11) / 20;
+  const coutJoint = params.prix_joint || 5;
+  const coutBiere = params.prix_biere || 2.5;
+  const coutFort = params.prix_fort || 3;
   
   return (jour.cl_class || 0) * coutClope +
          (jour.cl_roul || 0) * coutClope +
@@ -437,31 +440,29 @@ function calculerCoutJour(jour) {
          (jour.joints || 0) * coutJoint +
          (jour.alc_biere || 0) * coutBiere +
          (jour.alc_fort || 0) * coutFort +
-         (jour.alc_liqueur || 0) * (params.prix_liqueur || 0);
+         (jour.alc_liqueur || 0) * (params.prix_liqueur || 2.8);
 }
 
 function referenceParJourPourDate(d) {
   try {
-    const limite = (params.limite_clopes || 0) + (params.limite_joints || 0) + (params.limite_biere || 0) + (params.limite_fort || 0) + (params.limite_liqueur || 0);
-    if (limite <= 0) return null;
+    const lim = (params.limite_clopes || 0) + (params.limite_joints || 0) + (params.limite_alcool || 0);
+    if (lim <= 0) return null;
     
-    const coutClope = (params.prix_paquet || 0) / 20;
-    const coutJoint = params.prix_joint || 0;
-    const coutBiere = params.prix_biere || 0;
-    const coutFort = params.prix_fort || 0;
+    const coutClope = (params.prix_paquet || 11) / 20;
+    const coutJoint = params.prix_joint || 5;
+    const coutAlc = params.prix_biere || 2.5;
     
     return (params.limite_clopes || 0) * coutClope +
            (params.limite_joints || 0) * coutJoint +
-           (params.limite_biere || 0) * coutBiere +
-           (params.limite_fort || 0) * coutFort;
+           (params.limite_alcool || 0) * coutAlc;
   } catch (e) {
-    console.error('[REF] Erreur calcul référence :', e);
+    console.error('[REF] Erreur :', e);
     return null;
   }
 }
 
 // ============================================================================
-// SECTION 5 : GRAPHIQUES - UNIFICATION
+// SECTION 5 : GRAPHIQUES
 // ============================================================================
 
 window.StopAddictCharts = window.StopAddictCharts || {};
@@ -506,7 +507,6 @@ function buildSeriesForCurrentView() {
     } else if (view === 'mois') {
       const y = now.getFullYear();
       const m = now.getMonth();
-      const d1 = new Date(y, m, 1);
       const d2 = new Date(y, m + 1, 0);
       for (let day = 1; day <= d2.getDate(); day++) {
         const d = new Date(y, m, day);
@@ -527,7 +527,6 @@ function buildSeriesForCurrentView() {
         const monthNames = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
         labels.push(monthNames[m]);
         let c = 0, j = 0, a = 0, co = 0, ec = 0;
-        const d1 = new Date(y, m, 1);
         const d2 = new Date(y, m + 1, 0);
         for (let day = 1; day <= d2.getDate(); day++) {
           const d = new Date(y, m, day);
@@ -558,16 +557,12 @@ function buildSeriesForCurrentView() {
 
 window.StopAddictCharts.buildSeriesForCurrentView = buildSeriesForCurrentView;
 
-// ============================================================================
-// SECTION 6 : RENDU GRAPHIQUES
-// ============================================================================
-
 function drawLineChart(canvas, cfg) {
   try {
     const dpr = Math.max(1, window.devicePixelRatio || 1);
     const rect = canvas.getBoundingClientRect();
     canvas.width = Math.max(340, Math.round(rect.width * dpr));
-    canvas.height = Math.max(220, Math.round(260 * dpr));
+    canvas.height = 260 * dpr;
     
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -596,7 +591,7 @@ function drawLineChart(canvas, cfg) {
     ctx.strokeStyle = '#e5e7eb';
     ctx.fillStyle = '#6b7280';
     ctx.lineWidth = 1;
-    ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto';
+    ctx.font = '12px system-ui';
     for (let y = 0; y <= yAxisMax; y += yStep) {
       const yy = yAt(y);
       ctx.beginPath();
@@ -611,32 +606,7 @@ function drawLineChart(canvas, cfg) {
     const stepX = Math.max(1, Math.floor(labels.length / maxX));
     ctx.fillStyle = '#374151';
     for (let i = 0; i < labels.length; i += stepX) {
-      const xx = xAt(i);
-      ctx.fillText(labels[i], xx - 8, H - 6);
-    }
-    if ((labels.length - 1) % stepX !== 0) {
-      const xx = xAt(labels.length - 1);
-      ctx.fillText(labels[labels.length - 1], xx - 8, H - 6);
-    }
-    
-    // Lignes limites (NOUVEAU - refonte)
-    if (cfg.drawLimits) {
-      try {
-        const limiteClopes = params.limite_clopes || 0;
-        if (limiteClopes > 0 && yAxisMax >= limiteClopes) {
-          const yLimit = yAt(limiteClopes);
-          ctx.strokeStyle = '#ff6b6b';
-          ctx.lineWidth = 2;
-          ctx.setLineDash([4, 4]);
-          ctx.beginPath();
-          ctx.moveTo(X0, yLimit);
-          ctx.lineTo(X1, yLimit);
-          ctx.stroke();
-          ctx.setLineDash([]);
-        }
-      } catch (e) {
-        console.error('[LIMITS] Erreur dessin limites :', e);
-      }
+      ctx.fillText(labels[i], xAt(i) - 8, H - 6);
     }
     
     // Courbes
@@ -653,7 +623,7 @@ function drawLineChart(canvas, cfg) {
       ctx.stroke();
     }
   } catch (e) {
-    console.error('[DRAW_CHART] Erreur rendu :', e);
+    console.error('[DRAW_CHART] Erreur :', e);
   }
 }
 
@@ -663,31 +633,23 @@ function renderCharts() {
     if (!NS) return;
     
     const data = NS.buildSeriesForCurrentView?.();
-    if (!data) {
-      console.warn('[RENDER] Pas de données');
-      return;
-    }
+    if (!data) return;
     
     const vis = window.StopAddictChartsState.visible;
     const COLORS = { clopes: '#6b7280', joints: '#10b981', alcool: '#f59e0b', cout: '#7c3aed', economies: '#2563eb' };
     
     const c1 = byId('chart-consommations');
     const c2 = byId('chart-cout-eco');
-    const e1 = byId('empty-consos');
-    const e2 = byId('empty-cout');
     
     const hasPos = a => Array.isArray(a) && a.some(v => (+v || 0) > 0);
     
-    // Graphique 1: Consommations
     if (c1) {
       const show1 = hasPos(data.consos?.clopes) || hasPos(data.consos?.joints) || hasPos(data.consos?.alcool);
       c1.hidden = !show1;
-      if (e1) e1.hidden = !!show1;
       if (show1) {
         drawLineChart(c1, {
           labels: data.labels,
           yFmt: v => String(Math.round(v)),
-          drawLimits: true,
           series: [
             { data: data.consos.clopes, color: COLORS.clopes, visible: vis.clopes !== false },
             { data: data.consos.joints, color: COLORS.joints, visible: vis.joints !== false },
@@ -697,11 +659,9 @@ function renderCharts() {
       }
     }
     
-    // Graphique 2: Coût & Économies
     if (c2) {
       const show2 = hasPos(data.cout) || hasPos(data.economies);
       c2.hidden = !show2;
-      if (e2) e2.hidden = !!show2;
       if (show2) {
         const maxCost = data.cout.reduce((m, v) => Math.max(m, +v || 0), 0);
         const fmt = maxCost < 100
@@ -734,7 +694,6 @@ function renderCharts() {
       items.forEach(s => {
         const it = document.createElement('div');
         it.className = 'legend-item' + ((vis[s.k] === false) ? ' is-muted' : '') + (s.p ? '' : ' is-disabled');
-        it.setAttribute('role', 'button');
         
         const sw = document.createElement('span');
         sw.className = 'legend-swatch';
@@ -756,15 +715,13 @@ function renderCharts() {
         box.appendChild(it);
       });
     }
-    
-    console.log('[RENDER] Graphiques rendus');
   } catch (e) {
     console.error('[RENDER] Erreur :', e);
   }
 }
 
 // ============================================================================
-// SECTION 7 : UI UPDATES
+// SECTION 6 : UI UPDATES
 // ============================================================================
 
 function updateAllUI() {
@@ -773,14 +730,12 @@ function updateAllUI() {
     const k = keyLocal(now);
     const j = getJour(k);
     
-    // Compteurs accueil
     const totC = (j.cl_class || 0) + (j.cl_roul || 0) + (j.cl_tube || 0);
     const totA = (j.alc_biere || 0) + (j.alc_fort || 0) + (j.alc_liqueur || 0);
     setText('compteur-clopes', String(totC));
     setText('compteur-joints', String(j.joints || 0));
     setText('compteur-alcool-total', String(totA));
     
-    // Barres de progression
     const maxC = Math.max(1, params.limite_clopes || 20);
     const maxJ = Math.max(1, params.limite_joints || 3);
     const maxA = Math.max(1, params.limite_alcool || 2);
@@ -797,27 +752,21 @@ function updateAllUI() {
     if (barJoints) barJoints.style.width = pJ + '%';
     setText('note-joints', (j.joints || 0) + '/' + maxJ);
     
-    if ((params.enable_joints !== false)) {
-      byId('row-alcool').style.display = 'block';
-      const barAlcool = byId('bar-alcool');
-      if (barAlcool) barAlcool.style.width = pA + '%';
-      setText('note-alcool', totA + '/' + maxA);
-    }
+    byId('row-alcool').style.display = 'block';
+    const barAlcool = byId('bar-alcool');
+    if (barAlcool) barAlcool.style.width = pA + '%';
+    setText('note-alcool', totA + '/' + maxA);
     
-    // Date
     setText('date-actuelle', now.toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
     
-    // Graphiques
     if (vueStats) renderCharts();
-    
-    console.log('[UPDATE] UI mise à jour');
   } catch (e) {
     console.error('[UPDATE] Erreur :', e);
   }
 }
 
 // ============================================================================
-// SECTION 8 : ACTIONS
+// SECTION 7 : ACTIONS
 // ============================================================================
 
 function addConso(group, subtype, delta = 1) {
@@ -834,20 +783,17 @@ function addConso(group, subtype, delta = 1) {
     persist();
     updateAllUI();
     showSnackbar(`+1 ${subtype}`);
-    
-    console.log(`[ADD] ${group}: ${old} → ${newVal}`);
   } catch (e) {
     console.error('[ADD] Erreur :', e);
   }
 }
 
 // ============================================================================
-// SECTION 9 : EXPORT
+// SECTION 8 : EXPORT / IMPORT
 // ============================================================================
 
 function exportCSV() {
   try {
-    console.log('[EXPORT_CSV] Démarrage');
     const rows = [['date', 'cl_class', 'cl_roul', 'cl_tube', 'joints', 'alc_biere', 'alc_fort', 'alc_liqueur', 'cout']];
     
     Object.keys(donnees).sort().forEach(k => {
@@ -868,7 +814,6 @@ function exportCSV() {
     URL.revokeObjectURL(url);
     
     showSnackbar('CSV exporté');
-    console.log('[EXPORT_CSV] OK');
   } catch (e) {
     console.error('[EXPORT_CSV] Erreur :', e);
     alert('Erreur export: ' + e.message);
@@ -889,7 +834,6 @@ function exportJSON() {
     URL.revokeObjectURL(url);
     
     showSnackbar('JSON exporté');
-    console.log('[EXPORT_JSON] OK');
   } catch (e) {
     console.error('[EXPORT_JSON] Erreur :', e);
     alert('Erreur export: ' + e.message);
@@ -911,7 +855,6 @@ function importJSON(file) {
       persist();
       updateAllUI();
       showSnackbar('JSON importé');
-      console.log('[IMPORT_JSON] OK');
     };
     reader.readAsText(file);
   } catch (e) {
@@ -921,17 +864,16 @@ function importJSON(file) {
 }
 
 // ============================================================================
-// SECTION 10 : INIT
+// SECTION 9 : INIT
 // ============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
   try {
     console.log('[INIT] Chargement...');
     
-    // Charger l'état
     loadState();
     
-    // Initialiser params par défaut
+    // Params par défaut
     if (!params.prix_paquet) {
       params = {
         prix_paquet: 11.00,
@@ -941,13 +883,23 @@ document.addEventListener('DOMContentLoaded', () => {
         prix_liqueur: 2.80,
         limite_clopes: 20,
         limite_joints: 3,
-        limite_alcool: 2,
-        enable_joints: true
+        limite_alcool: 2
       };
       persist();
     }
     
-    // Wiring compteurs accueil
+    // Sync UI params
+    byId('prix-paquet').value = params.prix_paquet || 11;
+    byId('prix-joint').value = params.prix_joint || 5;
+    byId('prix-biere').value = params.prix_biere || 2.5;
+    byId('prix-fort').value = params.prix_fort || 3;
+    byId('max-clopes').value = params.limite_clopes || 20;
+    byId('max-joints').value = params.limite_joints || 3;
+    byId('max-alcool').value = params.limite_alcool || 2;
+    
+    // ==================== EVENT LISTENERS ====================
+    
+    // Compteurs
     byId('btn-clopes-plus')?.addEventListener('click', () => addConso('cl_class', 'clope', 1));
     byId('btn-clopes-moins')?.addEventListener('click', () => addConso('cl_class', 'clope', -1));
     byId('btn-joints-plus')?.addEventListener('click', () => addConso('joints', 'pétard', 1));
@@ -955,7 +907,7 @@ document.addEventListener('DOMContentLoaded', () => {
     byId('btn-alc-plus')?.addEventListener('click', () => addConso('alc_biere', 'alcool', 1));
     byId('btn-alc-moins')?.addEventListener('click', () => addConso('alc_biere', 'alcool', -1));
     
-    // Wiring tabs stats
+    // Tabs stats
     document.querySelectorAll('.tab').forEach(tab => {
       tab.addEventListener('click', () => {
         const vue = tab.dataset.vue;
@@ -969,15 +921,36 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
     
-    // Wiring nav
-    document.querySelectorAll('.nav button').forEach(btn => {
+    // Nav buttons
+    document.querySelectorAll('.nav button[data-screen]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const screen = btn.dataset.screen;
+        const screen = btn.getAttribute('data-screen');
         if (screen) goto(screen);
       });
     });
     
-    // Wiring export/import
+    // Save params
+    byId('btn-save-params')?.addEventListener('click', () => {
+      params.prix_paquet = parseFloat(byId('prix-paquet').value) || 11;
+      params.prix_joint = parseFloat(byId('prix-joint').value) || 5;
+      params.prix_biere = parseFloat(byId('prix-biere').value) || 2.5;
+      params.prix_fort = parseFloat(byId('prix-fort').value) || 3;
+      persist();
+      updateAllUI();
+      showSnackbar('Prix enregistrés');
+    });
+    
+    // Save habitudes
+    byId('btn-save-hab')?.addEventListener('click', () => {
+      params.limite_clopes = parseInt(byId('max-clopes').value) || 20;
+      params.limite_joints = parseInt(byId('max-joints').value) || 3;
+      params.limite_alcool = parseInt(byId('max-alcool').value) || 2;
+      persist();
+      updateAllUI();
+      showSnackbar('Limites enregistrées');
+    });
+    
+    // Export / Import
     byId('btn-export-csv')?.addEventListener('click', exportCSV);
     byId('btn-export-json')?.addEventListener('click', exportJSON);
     byId('btn-import-json')?.addEventListener('click', () => byId('input-import-json')?.click());
@@ -986,7 +959,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (file) importJSON(file);
     });
     
-    // Wiring RAZ
+    // RAZ
     byId('btn-raz-jour')?.addEventListener('click', () => {
       if (confirm('Effacer le jour actuel ?')) {
         const k = keyLocal(new Date());
@@ -1006,55 +979,48 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
     
-    // UI init
+    // Boutons export vue dans chart-actions
+    setTimeout(() => {
+      const bar = byId('chart-actions');
+      if (bar && bar.children.length === 0) {
+        const btn1 = document.createElement('button');
+        btn1.className = 'btn';
+        btn1.textContent = 'Export Vue';
+        btn1.addEventListener('click', () => {
+          const s = window.StopAddictCharts.buildSeriesForCurrentView?.();
+          if (!s || !s.labels) {
+            alert('Aucune donnée');
+            return;
+          }
+          const rows = [['label', 'clopes', 'joints', 'alcool', 'cout', 'eco']];
+          for (let i = 0; i < s.labels.length; i++) {
+            rows.push([s.labels[i], s.consos.clopes[i] || 0, s.consos.joints[i] || 0, s.consos.alcool[i] || 0, s.cout[i] || 0, s.economies[i] || 0]);
+          }
+          const csv = '\uFEFF' + rows.map(r => r.join(';')).join('\n');
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'stopaddict_vue.csv';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        });
+        bar.appendChild(btn1);
+      }
+    }, 100);
+    
+    // Init UI
     updateAllUI();
     goto('accueil');
     
-    console.log('[INIT] ✅ Prêt');
+    console.log('[INIT] ✅ Prêt - Tous les buttons wired');
   } catch (e) {
     console.error('[INIT] ❌ Erreur fatale :', e);
-    alert('Erreur initialisation: ' + e.message);
+    alert('Erreur: ' + e.message);
   }
 });
-
-// Créer les boutons export dans chart-actions
-setTimeout(() => {
-  try {
-    const bar = byId('chart-actions');
-    if (bar && bar.children.length === 0) {
-      const btn1 = document.createElement('button');
-      btn1.className = 'btn';
-      btn1.textContent = 'Exporter CSV (vue)';
-      btn1.addEventListener('click', () => {
-        const s = window.StopAddictCharts.buildSeriesForCurrentView?.();
-        if (!s || !s.labels) {
-          alert('Aucune donnée à exporter');
-          return;
-        }
-        const rows = [['label', 'clopes', 'joints', 'alcool', 'cout', 'economies']];
-        for (let i = 0; i < s.labels.length; i++) {
-          rows.push([s.labels[i], s.consos.clopes[i] || 0, s.consos.joints[i] || 0, s.consos.alcool[i] || 0, s.cout[i] || 0, s.economies[i] || 0]);
-        }
-        const csv = '\uFEFF' + rows.map(r => r.join(';')).join('\n');
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'stopaddict_vue.csv';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-      });
-      
-      bar.appendChild(btn1);
-    }
-  } catch (e) {
-    console.error('[CHART_ACTIONS] Erreur création boutons :', e);
-  }
-}, 100);
-
-console.log('[STOPADDICT v3] Chargement complet');
 </script>
 
 </body>
