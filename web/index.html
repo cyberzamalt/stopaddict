@@ -4,10 +4,13 @@
   <meta charset="utf-8" />
   <title>StopAddict</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0ea5e9" />
   <link rel="stylesheet" href="./css/app.css" />
 </head>
 <body>
-  <main>
+  <a href="#main" class="sr-only skip">Aller au contenu</a>
+
+  <main id="main">
     <header class="app-header">
       <h1>StopAddict</h1>
       <div class="header-stats">
@@ -97,7 +100,6 @@
       </div>
     </section>
 
-    <!-- Réglages enrichis -->
     <section class="card">
       <h2>Réglages</h2>
       <div class="grid2">
@@ -133,10 +135,11 @@
     <section class="card">
       <h2>Import / Export</h2>
       <div class="row">
-        <button id="btnImport">Importer JSON</button>
+        <button id="btnImport" class="btn">Importer JSON</button>
         <input id="fileJson" type="file" accept="application/json" hidden />
-        <button id="btnExport">Exporter CSV</button>
-        <button id="btnExportJson">Exporter JSON</button>
+        <button id="btnExport" class="btn">Exporter CSV</button>
+        <button id="btnExportJson" class="btn">Exporter JSON</button>
+        <button id="btnClearAll" class="btn" title="Efface toutes les données locales">Effacer toutes les données</button>
       </div>
       <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
       <pre id="preview" hidden></pre>
