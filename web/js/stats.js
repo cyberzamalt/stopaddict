@@ -1,3 +1,4 @@
+// web/js/stats.js
 import { $, startOfDay, startOfWeek, startOfMonth } from "./utils.js";
 import { totalsHeader, costToday, economiesHint } from "./state.js";
 
