@@ -1,123 +1,91 @@
 // web/js/economy.js
-// Calcule et met à jour le coût du jour (+ expose une petite API globale)
-// Lit: state.entries (array {ts, type, qty}), state.settings (enable + prix)
-// MAJ: #stat-cout-jr (header)
-// Écoute: "sa:changed", "sa:settingsSaved", "sa:imported"
+// -----------------------------------------------------------------------------
+// Économie : calculs + préférence d'affichage persistante pour la série "Économies"
+// -----------------------------------------------------------------------------
+//
+// Ce module expose :
+//   - initEconomy()          : à appeler une seule fois (déjà fait dans app.js)
+//   - isEconomyVisible()     : savoir si l'utilisateur veut voir la série économies
+//   - setEconomyVisible(v)   : persister l'état
+//   - computeEconomies(...)  : agréger les économies par jour à partir de l'historique
+//
+// Hypothèses légères sur les données :
+//   history = [{ ts:Number(ms), type:"cigs"|"weed"|"alcohol", qty:Number, cost?:Number }]
+//   settings = {
+//     baseline: { cigsPerDay?, weedPerDay?, alcoholPerDay? },
+//     prices:   { cigUnit?, weedUnit?, alcUnit? }
+//   }
+//
+// Rien n'est imposé : tout est optionnel et géré en "best effort".
+// -----------------------------------------------------------------------------
 
-import { state } from "./state.js";
-import { startOfDay } from "./utils.js";
+const ECON_VIS_KEY = "charts_show_economy_v1";
 
-function getEnable() {
-  const en = (state.settings && state.settings.enable) || {};
-  return {
-    cigs:   (en.cigs   !== false),
-    weed:   (en.weed   !== false),
-    alcohol:(en.alcohol!== false),
-  };
+// --- Visibilité persistée de la série "Économies" ---
+export function isEconomyVisible() {
+  try { return localStorage.getItem(ECON_VIS_KEY) === "1"; }
+  catch { return false; }
+}
+export function setEconomyVisible(v) {
+  try { localStorage.setItem(ECON_VIS_KEY, v ? "1" : "0"); } catch {}
 }
 
-function getPrices() {
-  // On récupère les prix quelle que soit la forme choisie dans settings
-  const s = state.settings || {};
-  const p = s.prices || s.price || {};
-  return {
-    cl_class:  +((p.cl_class  ?? s.prix_cl_class)  ?? 0),
-    cl_roul:   +((p.cl_roul   ?? s.prix_cl_roul)   ?? 0),
-    cl_tube:   +((p.cl_tube   ?? s.prix_cl_tube)   ?? 0),
-    joint:     +((p.joint     ?? s.prix_joint)     ?? 0),
-    biere:     +((p.biere     ?? s.prix_biere)     ?? 0),
-    fort:      +((p.fort      ?? s.prix_fort)      ?? 0),
-    liqueur:   +((p.liqueur   ?? s.prix_liqueur)   ?? 0),
-  };
+// --- Normalisation d'une date à minuit local ---
+function startOfLocalDayTS(t) {
+  const d = new Date(typeof t === "number" ? t : Date.now());
+  d.setHours(0,0,0,0);
+  return d.getTime();
 }
 
-function priceForType(type) {
-  const pr = getPrices();
-  if (type==="cig" || type==="cig_class") return pr.cl_class;
-  if (type==="cig_roul")                  return pr.cl_roul;
-  if (type==="cig_tube")                  return pr.cl_tube;
-  if (type==="weed" || type==="joint" || type==="joints") return pr.joint;
-  if (type==="beer" || type==="alc_biere")                 return pr.biere;
-  if (type==="strong" || type==="alc_fort")                return pr.fort;
-  if (type==="liquor" || type==="alc_liqueur" || type==="alcohol") return pr.liqueur;
-  return 0;
-}
+// --- Calcul des économies par JOUR ---
+// Règle simple : économie = max(0, baseline - réel) * prix_unitaire
+export function computeEconomies(history, settings) {
+  const baseC = Number(settings?.baseline?.cigsPerDay    ?? 0);
+  const baseW = Number(settings?.baseline?.weedPerDay    ?? 0);
+  const baseA = Number(settings?.baseline?.alcoholPerDay ?? 0);
+  const pc    = Number(settings?.prices?.cigUnit  ?? 0);
+  const pw    = Number(settings?.prices?.weedUnit ?? 0);
+  const pa    = Number(settings?.prices?.alcUnit  ?? 0);
 
-function moduleGuards(type) {
-  const en = getEnable();
-  if (type==="cig" || type==="cig_class" || type==="cig_roul" || type==="cig_tube") return en.cigs;
-  if (type==="weed" || type==="joint" || type==="joints")                            return en.weed;
-  if (type==="beer" || type==="strong" || type==="liquor" || type.startsWith("alc") || type==="alcohol") return en.alcohol;
-  return true;
-}
-
-function costToday() {
-  const a0 = startOfDay(new Date());
-  const a1 = new Date(+a0 + 86400000);
-  let total = 0;
-  for (const e of (state.entries || [])) {
-    const t = new Date(e.ts);
-    if (t < a0 || t >= a1) continue;
-    if (!moduleGuards(e.type)) continue;
-    const qty = +e.qty || 1;
-    total += qty * priceForType(e.type);
-  }
-  return Math.max(0, +total.toFixed(2));
-}
-
-// Simple “hint” d’économies : si des limites sont définies, on estime
-// économies = max(0, (limiteTotale - consoTotale) * prix_moyen)
-function economiesHint() {
-  const en  = getEnable();
-  const lim = (state.settings && state.settings.limits && state.settings.limits.day) || {};
-  const a0 = startOfDay(new Date());
-  const a1 = new Date(+a0 + 86400000);
-
-  let cig=0, we=0, alc=0, sumCost=0, sumQty=0;
-  for (const e of (state.entries || [])) {
-    const t = new Date(e.ts);
-    if (t < a0 || t >= a1) continue;
-    if (!moduleGuards(e.type)) continue;
-    const q = +e.qty || 1;
-    sumQty  += q;
-    sumCost += q * priceForType(e.type);
-    if (e.type.startsWith("cig")) cig += q;
-    else if (e.type==="weed" || e.type==="joint" || e.type==="joints") we += q;
-    else alc += q;
+  if ((!baseC && !baseW && !baseA) || (!pc && !pw && !pa)) {
+    return []; // rien à calculer proprement
   }
 
-  const limTot =
-    (en.cigs    ? (+lim.cigs    || 0) : 0) +
-    (en.weed    ? (+lim.weed    || 0) : 0) +
-    (en.alcohol ? (+lim.alcohol || 0) : 0);
+  const byDay = new Map(); // tsMinuit -> {c,w,a}
+  for (const e of (history || [])) {
+    const ts = Number(e?.ts ?? 0);
+    if (!ts || !e?.type) continue;
+    const key = startOfLocalDayTS(ts);
+    if (!byDay.has(key)) byDay.set(key, { c:0, w:0, a:0 });
+    const b = byDay.get(key);
+    const q = Number(e.qty ?? 1);
+    if (e.type === "cigs")    b.c += q;
+    else if (e.type === "weed")    b.w += q;
+    else if (e.type === "alcohol") b.a += q;
+  }
 
-  if (!limTot) return 0;
-  const consoTot = cig + we + alc;
-  const avg = sumQty ? (sumCost / sumQty) : 0;
-  const eco = Math.max(0, (limTot - consoTot) * avg);
-  return +eco.toFixed(2);
+  const out = [];
+  for (const [day, real] of byDay) {
+    const ecoC = Math.max(0, baseC - real.c) * pc;
+    const ecoW = Math.max(0, baseW - real.w) * pw;
+    const ecoA = Math.max(0, baseA - real.a) * pa;
+    const saving = Number((ecoC + ecoW + ecoA).toFixed(2));
+    if (saving > 0) out.push({ ts: day, saving });
+  }
+  // tri par date croissante
+  out.sort((a,b)=>a.ts-b.ts);
+  return out;
 }
 
-function updateHeaderCost() {
-  const el = document.getElementById("stat-cout-jr");
-  if (!el) return;
-  el.textContent = costToday().toFixed(2) + "€";
-}
-
-function render() {
-  updateHeaderCost();
-}
-
+// --- Optionnel : petit utilitaire global pour d'autres modules ---
 export function initEconomy() {
-  // premier rendu
-  render();
-  // expose petite API (facultatif, utile à d'autres modules)
-  window.saEconomy = {
-    costToday,
-    economiesHint
-  };
-  // écoute
-  document.addEventListener("sa:changed", render);
-  document.addEventListener("sa:settingsSaved", render);
-  document.addEventListener("sa:imported", render);
+  // Rien d'obligatoire ici, mais on expose une API minimale côté window si besoin.
+  try {
+    window.SA = window.SA || {};
+    window.SA.economy = {
+      isVisible: isEconomyVisible,
+      setVisible: setEconomyVisible,
+      compute: computeEconomies
+    };
+  } catch {}
 }
