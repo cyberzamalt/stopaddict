@@ -1,91 +1,134 @@
 // web/js/economy.js
 // -----------------------------------------------------------------------------
-// Économie : calculs + préférence d'affichage persistante pour la série "Économies"
-// -----------------------------------------------------------------------------
-//
-// Ce module expose :
-//   - initEconomy()          : à appeler une seule fois (déjà fait dans app.js)
-//   - isEconomyVisible()     : savoir si l'utilisateur veut voir la série économies
-//   - setEconomyVisible(v)   : persister l'état
-//   - computeEconomies(...)  : agréger les économies par jour à partir de l'historique
-//
-// Hypothèses légères sur les données :
-//   history = [{ ts:Number(ms), type:"cigs"|"weed"|"alcohol", qty:Number, cost?:Number }]
-//   settings = {
-//     baseline: { cigsPerDay?, weedPerDay?, alcoholPerDay? },
-//     prices:   { cigUnit?, weedUnit?, alcUnit? }
-//   }
-//
-// Rien n'est imposé : tout est optionnel et géré en "best effort".
+// Coût & économies :
+// - Injecte un petit panneau "💶 Prix & Économies" dans l’écran Habitudes (dynamiquement)
+//   sans toucher à ton HTML.
+// - Stocke les prix unitaires, + un toggle "Inclure coût/économies dans les stats".
+// - Fournit window.SA.economy pour que charts.js calcule la série "Coût".
+// - Déclenche "sa:economy:changed" quand on modifie les prix/toggle.
+// - Export/Import compatibles via la clé localStorage "app_prices_v23" (déjà gérée dans export.js).
 // -----------------------------------------------------------------------------
 
-const ECON_VIS_KEY = "charts_show_economy_v1";
+const LS_PRICES = "app_prices_v23";
 
-// --- Visibilité persistée de la série "Économies" ---
-export function isEconomyVisible() {
-  try { return localStorage.getItem(ECON_VIS_KEY) === "1"; }
-  catch { return false; }
-}
-export function setEconomyVisible(v) {
-  try { localStorage.setItem(ECON_VIS_KEY, v ? "1" : "0"); } catch {}
-}
-
-// --- Normalisation d'une date à minuit local ---
-function startOfLocalDayTS(t) {
-  const d = new Date(typeof t === "number" ? t : Date.now());
-  d.setHours(0,0,0,0);
-  return d.getTime();
-}
-
-// --- Calcul des économies par JOUR ---
-// Règle simple : économie = max(0, baseline - réel) * prix_unitaire
-export function computeEconomies(history, settings) {
-  const baseC = Number(settings?.baseline?.cigsPerDay    ?? 0);
-  const baseW = Number(settings?.baseline?.weedPerDay    ?? 0);
-  const baseA = Number(settings?.baseline?.alcoholPerDay ?? 0);
-  const pc    = Number(settings?.prices?.cigUnit  ?? 0);
-  const pw    = Number(settings?.prices?.weedUnit ?? 0);
-  const pa    = Number(settings?.prices?.alcUnit  ?? 0);
-
-  if ((!baseC && !baseW && !baseA) || (!pc && !pw && !pa)) {
-    return []; // rien à calculer proprement
-  }
-
-  const byDay = new Map(); // tsMinuit -> {c,w,a}
-  for (const e of (history || [])) {
-    const ts = Number(e?.ts ?? 0);
-    if (!ts || !e?.type) continue;
-    const key = startOfLocalDayTS(ts);
-    if (!byDay.has(key)) byDay.set(key, { c:0, w:0, a:0 });
-    const b = byDay.get(key);
-    const q = Number(e.qty ?? 1);
-    if (e.type === "cigs")    b.c += q;
-    else if (e.type === "weed")    b.w += q;
-    else if (e.type === "alcohol") b.a += q;
-  }
-
-  const out = [];
-  for (const [day, real] of byDay) {
-    const ecoC = Math.max(0, baseC - real.c) * pc;
-    const ecoW = Math.max(0, baseW - real.w) * pw;
-    const ecoA = Math.max(0, baseA - real.a) * pa;
-    const saving = Number((ecoC + ecoW + ecoA).toFixed(2));
-    if (saving > 0) out.push({ ts: day, saving });
-  }
-  // tri par date croissante
-  out.sort((a,b)=>a.ts-b.ts);
-  return out;
-}
-
-// --- Optionnel : petit utilitaire global pour d'autres modules ---
-export function initEconomy() {
-  // Rien d'obligatoire ici, mais on expose une API minimale côté window si besoin.
+function loadPrices() {
   try {
-    window.SA = window.SA || {};
-    window.SA.economy = {
-      isVisible: isEconomyVisible,
-      setVisible: setEconomyVisible,
-      compute: computeEconomies
-    };
+    const v = JSON.parse(localStorage.getItem(LS_PRICES) || "null");
+    if (v && typeof v === "object") return v;
   } catch {}
+  // valeurs par défaut = 0 (pas de coût tant que non saisi)
+  return {
+    enabled: true,                  // inclure le coût dans les stats/graphiques
+    cigs: 0,                        // € par cigarette
+    weed: 0,                        // € par joint (ou unité que tu enregistres)
+    // alcool : trois sous-types possibles, mais on additionne au même compteur "alcohol"
+    alcohol_biere: 0,               // € par bière
+    alcohol_fort: 0,                // € par alcool fort / shot
+    alcohol_liqueur: 0,             // € par liqueur / verre
+  };
+}
+function savePrices(p) {
+  try { localStorage.setItem(LS_PRICES, JSON.stringify(p)); } catch {}
+  window.dispatchEvent(new Event("sa:economy:changed"));
+}
+
+// Calcule le coût d'une liste d'entrées brutes [{ts,type,qty}]
+function costFor(entries) {
+  const P = loadPrices();
+  if (!P.enabled) return 0;
+
+  let total = 0;
+  for (const e of entries) {
+    const qty = Number(e.qty||1);
+    if (e.type === "cigs") total += qty * (Number(P.cigs)||0);
+    else if (e.type === "weed") total += qty * (Number(P.weed)||0);
+    else if (e.type === "alcohol") {
+      // l'historique ne précise pas le sous-type (bière/fort/liqueur),
+      // donc on prend un tarif moyen s'il existe (moyenne des sous-prix > 0).
+      const prices = [Number(P.alcohol_biere)||0, Number(P.alcohol_fort)||0, Number(P.alcohol_liqueur)||0]
+        .filter(x=>x>0);
+      const unit = prices.length ? (prices.reduce((a,b)=>a+b,0)/prices.length) : 0;
+      total += qty * unit;
+    }
+  }
+  return Math.round(total * 100) / 100;
+}
+
+// UI injection (dans #ecran-habitudes)
+function injectPanel() {
+  const host = document.getElementById("ecran-habitudes");
+  if (!host) return;
+
+  if (document.getElementById("eco-card")) return; // déjà injecté
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.id = "eco-card";
+  card.innerHTML = `
+    <div class="section-title">💶 Prix & Économies</div>
+    <div class="grid-2">
+      <div class="param"><label>Inclure coût/économies</label><input type="checkbox" id="eco-enabled"></div>
+      <div class="param hint">Si coché, la série "Coût" apparaît dans les stats et le total coût jour/sem./mois est calculé.</div>
+
+      <div class="param"><label>Prix par cigarette (€)</label><input type="number" step="0.01" min="0" id="eco-cigs"></div>
+      <div class="param"><label>Prix par joint (€)</label><input type="number" step="0.01" min="0" id="eco-weed"></div>
+
+      <div class="param"><label>Prix bière (€)</label><input type="number" step="0.01" min="0" id="eco-biere"></div>
+      <div class="param"><label>Prix alcool fort (€)</label><input type="number" step="0.01" min="0" id="eco-fort"></div>
+      <div class="param"><label>Prix liqueur (€)</label><input type="number" step="0.01" min="0" id="eco-liqueur"></div>
+      <div class="param hint">Ces valeurs servent à estimer le coût de vos consommations et vos économies.</div>
+    </div>
+    <button class="btn small" id="eco-save" type="button" style="margin-top:10px">Enregistrer</button>
+  `;
+  host.appendChild(card);
+
+  const P = loadPrices();
+  // set values
+  const $ = (id)=>document.getElementById(id);
+  $("eco-enabled").checked = !!P.enabled;
+  $("eco-cigs").value = P.cigs ?? 0;
+  $("eco-weed").value = P.weed ?? 0;
+  $("eco-biere").value = P.alcohol_biere ?? 0;
+  $("eco-fort").value = P.alcohol_fort ?? 0;
+  $("eco-liqueur").value = P.alcohol_liqueur ?? 0;
+
+  $("eco-save").addEventListener("click", ()=>{
+    const n = (id)=> Number($(id).value || 0);
+    const enabled = !!$("eco-enabled").checked;
+    const np = {
+      enabled,
+      cigs: n("eco-cigs"),
+      weed: n("eco-weed"),
+      alcohol_biere: n("eco-biere"),
+      alcohol_fort: n("eco-fort"),
+      alcohol_liqueur: n("eco-liqueur"),
+    };
+    savePrices(np);
+    showSnack("Paramètres économies enregistrés.");
+  });
+}
+
+function showSnack(msg) {
+  const bar = document.getElementById("snackbar");
+  if (!bar) { alert(msg); return; }
+  bar.firstChild && (bar.firstChild.textContent = msg + " — ");
+  bar.classList.add("show");
+  setTimeout(()=> bar.classList.remove("show"), 2000);
+}
+
+// Expose API publique
+function exposeAPI() {
+  window.SA = window.SA || {};
+  window.SA.economy = {
+    get prices(){ return loadPrices(); },
+    set prices(p){ savePrices({...loadPrices(), ...(p||{})}); },
+    setEnabled(v){ const p = loadPrices(); p.enabled = !!v; savePrices(p); },
+    costFor, // costFor(entries[])
+  };
+}
+
+// Entrée publique
+export function initEconomy() {
+  injectPanel();
+  exposeAPI();
 }
