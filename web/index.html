@@ -8,6 +8,7 @@
 <meta name="application-name" content="StopAddict">
 <meta name="apple-mobile-web-app-title" content="StopAddict">
 
+<!-- CSP -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:;
                img-src 'self' data: blob:;
                style-src 'self' 'unsafe-inline';
@@ -45,11 +46,17 @@
   .debug-console{position:fixed; top:0; left:0; right:0; background:rgba(0,0,0,.95); color:#b5f7b7; font:12px/1.35 ui-monospace, Menlo, monospace; padding:6px 8px; max-height:40vh; overflow:auto; z-index:9999; border-bottom:2px solid #34d399; display:none}
   .debug-console.show{display:block}
 
-  /* Stats rapides */
+  /* Stats rapides (jour courant) */
   .stats-rapides{background:#fff; display:grid; grid-template-columns:repeat(4,1fr); gap:8px; padding:10px; border-bottom:1px solid var(--divider)}
   .stat-item{text-align:center; padding:6px}
   .stat-val{font-weight:900; font-size:20px; color:var(--ink)}
-  .stat-lbl{font-size:11px; color:var(--muted); margin-top:2px}
+  .stat-lbl{font-size:11px; color:#6b7280; margin-top:2px}
+
+  /* Bandeau KPIs (totaux & économies) utilisé par stats.js */
+  .stats-header{background:#fff; display:grid; grid-template-columns:repeat(5,1fr); gap:8px; padding:8px 10px; border-bottom:1px solid var(--divider)}
+  .kpi{background:#f9fafb; border:1px solid var(--divider); border-radius:10px; padding:6px; text-align:center}
+  .kpi .kpi-val{font-weight:900; font-size:16px; color:#111827}
+  .kpi .kpi-lbl{font-size:11px; color:#6b7280}
 
   .content{flex:1; padding:0 0 80px; overflow-y:auto}
   .ecran{display:none}
@@ -84,7 +91,6 @@
   .btn-round.btn-minus:hover{background:#e5e7eb; color:#374151}
 
   .conseil{background:#fef3c7; border-left:4px solid var(--warn); padding:12px; border-radius:8px; margin:10px; font-size:14px; line-height:1.5}
-  .conseil strong{color:#92400e}
   .adv-ctl{display:flex; align-items:center; gap:6px; justify-content:flex-end}
   .ctl{background:#fff; color:#111827; border-radius:8px; padding:4px 8px; text-decoration:none; font-weight:900; font-size:12px; cursor:pointer; border:0}
   .dots{font-size:12px; letter-spacing:3px; opacity:.85}
@@ -166,10 +172,10 @@
     <div class="heure" id="heure-actuelle">—</div>
   </div>
 
-  <!-- Console debug (cachée par défaut, 5 taps rapides sur date pour toggle) -->
+  <!-- Console debug -->
   <div class="debug-console" id="debug-console"></div>
 
-  <!-- Stats rapides header -->
+  <!-- Stats rapides (jour) -->
   <div class="stats-rapides">
     <div class="stat-item">
       <div class="stat-val" id="stat-clopes-jr">0</div>
@@ -189,13 +195,23 @@
     </div>
   </div>
 
+  <!-- KPIs header (utilisé par web/js/stats.js) -->
+  <div class="stats-header" id="stats-header">
+    <div class="kpi"><div class="kpi-val" id="todayTotal">0</div><div class="kpi-lbl">Total jour</div></div>
+    <div class="kpi"><div class="kpi-val" id="weekTotal">0</div><div class="kpi-lbl">Total semaine</div></div>
+    <div class="kpi"><div class="kpi-val" id="monthTotal">0</div><div class="kpi-lbl">Total mois</div></div>
+    <div class="kpi"><div class="kpi-val" id="todayCost">0 €</div><div class="kpi-lbl">Coût jour</div></div>
+    <div class="kpi"><div class="kpi-val" id="economies-amount">0 €</div><div class="kpi-lbl">Économies</div></div>
+  </div>
+
   <div class="content">
     <!-- ======================= ÉCRAN PRINCIPAL ======================= -->
     <div class="ecran show" id="ecran-principal" aria-label="SA:ECRAN:ACCUEIL" data-sa="screen-home">
       <!-- Clopes -->
       <div class="card bar-left">
         <div class="line">
-          <span class="lbl">🚬 Cigarettes</span><label class="mini-toggle"><input type="checkbox" id="toggle-cigs" checked aria-label="Activer module"></label> 
+          <span class="lbl">🚬 Cigarettes</span>
+          <label class="mini-toggle"><input type="checkbox" id="toggle-cigs" checked aria-label="Activer module"></label>
           <span class="val" id="val-clopes">0</span>
         </div>
         <div class="segment" id="seg-clopes"></div>
@@ -208,7 +224,8 @@
       <!-- Joints -->
       <div class="card bar-left green">
         <div class="line">
-          <span class="lbl">🌿 Joints</span><label class="mini-toggle"><input type="checkbox" id="toggle-weed" checked aria-label="Activer module"></label> 
+          <span class="lbl">🌿 Joints</span>
+          <label class="mini-toggle"><input type="checkbox" id="toggle-weed" checked aria-label="Activer module"></label>
           <span class="val" id="val-joints">0</span>
         </div>
         <div class="pm" aria-label="Actions joints">
@@ -220,7 +237,8 @@
       <!-- Alcool -->
       <div class="card bar-left orange">
         <div class="line">
-          <span class="lbl">🍺 Alcool</span><label class="mini-toggle"><input type="checkbox" id="toggle-alcool" checked aria-label="Activer module"></label> 
+          <span class="lbl">🍺 Alcool</span>
+          <label class="mini-toggle"><input type="checkbox" id="toggle-alcool" checked aria-label="Activer module"></label>
           <span class="val" id="val-alcool">0</span>
         </div>
         <div class="segment" id="seg-alcool"></div>
@@ -233,17 +251,10 @@
       <!-- Bandeau résumé -->
       <div class="banner green" id="bandeau-resume">
         <div class="banner-title" id="bandeau-titre">—</div>
-        <div class="line">
-          <span class="lbl">Cigarettes</span>
-          <span class="val" id="bandeau-clopes">0</span>
-        </div>
-        <div class="line">
-          <span class="lbl">Joints</span>
-          <span class="val" id="bandeau-joints">0</span>
-        </div>
+        <div class="line"><span class="lbl">Cigarettes</span><span class="val" id="bandeau-clopes">0</span></div>
+        <div class="line"><span class="lbl">Joints</span><span class="val" id="bandeau-joints">0</span></div>
         <div class="line" id="bandeau-alcool-line" style="display:none">
-          <span class="lbl">Alcool</span>
-          <span class="val" id="bandeau-alcool">0</span>
+          <span class="lbl">Alcool</span><span class="val" id="bandeau-alcool">0</span>
         </div>
       </div>
 
@@ -270,17 +281,10 @@
 
         <div class="banner green">
           <div class="banner-title" id="stats-titre">—</div>
-          <div class="line">
-            <span class="lbl">Cigarettes</span>
-            <span class="val" id="stats-clopes">0</span>
-          </div>
-          <div class="line">
-            <span class="lbl">Joints</span>
-            <span class="val" id="stats-joints">0</span>
-          </div>
+          <div class="line"><span class="lbl">Cigarettes</span><span class="val" id="stats-clopes">0</span></div>
+          <div class="line"><span class="lbl">Joints</span><span class="val" id="stats-joints">0</span></div>
           <div class="line" id="stats-alcool-line" style="display:none">
-            <span class="lbl">Alcool</span>
-            <span class="val" id="stats-alcool">0</span>
+            <span class="lbl">Alcool</span><span class="val" id="stats-alcool">0</span>
           </div>
         </div>
 
@@ -377,7 +381,7 @@
 <div class="modal" id="cal-jour" aria-hidden="true">
   <div class="sheet" role="dialog" aria-modal="true">
     <h3 id="cal-jour-titre">—</h3>
-    
+
     <div class="line"><span class="lbl">Cigarettes</span> <span id="cal-jour-cl"></span></div>
     <div class="segment" id="cal-jour-seg-cl"></div>
     <div class="pm" aria-label="Actions cigarettes (jour)">
@@ -412,7 +416,7 @@
 <!-- Snackbar -->
 <div class="snackbar" id="snackbar">Action enregistrée — <a href="#" id="undo-link">Annuler</a></div>
 
-<!-- ======================= MODALE AVERTISSEMENT (1ère ouverture) ======================= -->
+<!-- ======================= MODALE AVERTISSEMENT (18+) ======================= -->
 <div class="modal" id="modal-warn" aria-hidden="true">
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="warn-title">
     <h3 class="warn-title" id="warn-title">Avertissement – Public majeur (18+)</h3>
@@ -440,12 +444,12 @@
   </div>
 </div>
 
-<!-- ======================= MODALE PAGES (Manuel / CGV / Mentions / Avertissement) ======================= -->
+<!-- ======================= MODALE PAGES (Manuel / CGV / Mentions / Ressources) ======================= -->
 <div class="modal" id="modal-page" aria-hidden="true">
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="page-title">
     <h3 class="pages-title" id="page-title">—</h3>
     <div class="page-content" id="page-content">
-      <!-- Contenu injecté par JS (manuel, cgv, mentions, ressources) -->
+      <!-- Contenu injecté par JS -->
     </div>
     <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px">
       <button class="btn alt" id="btn-page-close" type="button">Fermer</button>
@@ -453,7 +457,7 @@
   </div>
 </div>
 
-<!-- Pas de gros script inline : tout le code vient du repo web/js/*.js -->
+<!-- Un seul script : app.js importe le reste (web/js/...) -->
 <script type="module" src="js/app.js"></script>
 </body>
 </html>
