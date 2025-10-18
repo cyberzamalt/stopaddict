@@ -1,13 +1,18 @@
 // web/js/charts.js
+// Graphiques canvas natifs — Jour (4 tranches), Semaine (L→D), Mois (jours)
+// Dépend de: state.entries (array: {ts:number|date, type:string, qty:number})
+//            state.settings.enable { cigs, weed, alcohol }
+//            state.settings.limits.day { cigs, weed, alcohol }
+// Émet/écoute: redraw sur "sa:changed" | "sa:settingsSaved" | "sa:imported"
+
 import { state } from "./state.js";
 import { startOfDay } from "./utils.js";
-
-const DAY_MS = 86400000;
 
 let range = "day"; // "day" | "week" | "month"
 let canvas, ctx;
 
-// --- helpers d’affichage ---
+const DAY_MS = 86400000;
+
 function dprResize(cnv, wCSS) {
   const dpr = window.devicePixelRatio || 1;
   const w = Math.max(600, wCSS);
@@ -20,138 +25,118 @@ function dprResize(cnv, wCSS) {
   return c;
 }
 
-function isStatsVisible() {
-  const scr = document.getElementById("screen-stats");
-  // visible si présent dans le flux (pas display:none)
-  return !!(scr && scr.offsetParent !== null);
-}
-
 function getEnabledTypes() {
-  const en = state.settings?.enable || {};
+  const en = (state.settings && state.settings.enable) || {};
   const t = [];
-  if (en.cigs)   t.push("cig");
-  if (en.weed)   t.push("weed");
-  if (en.alcohol) t.push("beer","strong","liquor");
-  // si rien n’est coché, on affiche tout (comportement existant)
+  if (en.cigs !== false)   t.push("cig","cig_class","cig_roul","cig_tube");
+  if (en.weed !== false)   t.push("weed","joint","joints");
+  if (en.alcohol !== false)t.push("beer","strong","liquor","alc_biere","alc_fort","alc_liqueur","alcohol");
+  // fallback si rien
   return t.length ? t : ["cig","weed","beer","strong","liquor"];
 }
 
-// --- DATASETS ---
-function binsDay() {
-  // 24 heures, labels toutes les 3h
+/* ==========================
+   BINS (agrégation) 
+   ========================== */
+
+function binsDay4() {
+  // 4 tranches de 6h: 00–06, 06–12, 12–18, 18–24
   const a0 = startOfDay(new Date());
   const a1 = new Date(+a0 + DAY_MS);
-  const bins = Array.from({length:24}, ()=>0);
+  const bins = [0,0,0,0];
   const types = getEnabledTypes();
-
-  for (const e of state.entries) {
+  for (const e of state.entries || []) {
     const t = new Date(e.ts);
-    if (t >= a0 && t < a1) {
-      if (!types.includes(e.type)) continue;
-      const h = t.getHours();
-      bins[h] += (e.qty || 1);
-    }
+    if (t < a0 || t >= a1) continue;
+    if (!types.includes(e.type)) continue;
+    const h = t.getHours();
+    const idx = (h < 6) ? 0 : (h < 12) ? 1 : (h < 18) ? 2 : 3;
+    bins[idx] += (e.qty || 1);
   }
-  const labels = Array.from({length:24}, (_,h)=> h%3===0 ? String(h).padStart(2,"0")+"h" : "");
+  const labels = ["00–06","06–12","12–18","18–24"];
   return { labels, bins };
 }
 
 function binsWeek() {
-  // Lundi -> Dimanche (lundi=0)
-  const a0 = startOfDay(new Date());
-  const day = (a0.getDay() || 7) - 1; // 0..6
-  const wA  = new Date(+a0 - day*DAY_MS);
-  const wB  = new Date(+wA + 7*DAY_MS);
-
-  const bins = Array.from({length:7}, ()=>0);
+  // Lundi -> Dimanche (semaine locale)
+  const today0 = startOfDay(new Date());
+  const dow = (today0.getDay() || 7) - 1; // 0..6 (lundi=0)
+  const wA = new Date(+today0 - dow*DAY_MS);
+  const wB = new Date(+wA + 7*DAY_MS);
+  const labels = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
+  const bins = [0,0,0,0,0,0,0];
   const types = getEnabledTypes();
-
-  for (const e of state.entries) {
+  for (const e of (state.entries || [])) {
     const t = new Date(e.ts);
     if (t < wA || t >= wB) continue;
     if (!types.includes(e.type)) continue;
     const idx = Math.floor((+t - +wA)/DAY_MS);
     bins[idx] += (e.qty || 1);
   }
-  const labels = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
   return { labels, bins };
 }
 
 function binsMonth() {
-  // Jours du mois en cours (1..N)
-  const now   = new Date();
+  const now = new Date();
   const first = new Date(now.getFullYear(), now.getMonth(), 1);
-  const last  = new Date(now.getFullYear(), now.getMonth()+1, 0); // fin du mois
+  const last  = new Date(now.getFullYear(), now.getMonth()+1, 0);
   const len   = last.getDate();
-
+  const labels = Array.from({length:len}, (_,i)=> String(i+1));
   const bins = Array.from({length:len}, ()=>0);
   const types = getEnabledTypes();
-
-  for (const e of state.entries) {
+  for (const e of (state.entries || [])) {
     const t = new Date(e.ts);
     if (t < first || t > last) continue;
     if (!types.includes(e.type)) continue;
     bins[t.getDate()-1] += (e.qty || 1);
   }
-  // Étiquette 1 jour sur 2 pour rester lisible
-  const labels = Array.from({length:len}, (_,i)=> (i+1)%2===1 ? String(i+1) : "");
   return { labels, bins };
 }
 
+/* ==========================
+   DRAW
+   ========================== */
+
 function totalDayLimit() {
-  // somme des limites jour des catégories activées
-  const en = state.settings?.enable || {};
-  const L  = (state.settings?.limits && state.settings.limits.day) || {};
+  // somme des limites jour (si présentes)
+  const L = (state.settings && state.settings.limits && state.settings.limits.day) || {};
+  const en = (state.settings && state.settings.enable) || {};
   let s = 0;
-  if (en.cigs)    s += +L.cigs    || 0;
-  if (en.weed)    s += +L.weed    || 0;
-  if (en.alcohol) s += +L.alcohol || 0; // total verres
+  if (en.cigs   !== false) s += (+L.cigs   || 0);
+  if (en.weed   !== false) s += (+L.weed   || 0);
+  if (en.alcohol!== false) s += (+L.alcohol|| 0);
   return s;
 }
 
-// --- RENDER ---
-let pendingRAF = 0;
 function draw() {
-  // si stats hors écran, on ignore (économies)
-  if (!isStatsVisible()) return;
   if (!canvas) return;
+  ctx = dprResize(canvas, canvas.clientWidth || canvas.parentElement.clientWidth || 900);
 
-  if (pendingRAF) cancelAnimationFrame(pendingRAF);
-  pendingRAF = requestAnimationFrame(_draw);
-}
+  const data =
+    range === "day"  ? binsDay4() :
+    range === "week" ? binsWeek() :
+                       binsMonth();
 
-function _draw() {
-  pendingRAF = 0;
-  ctx = dprResize(canvas, canvas.clientWidth || canvas.parentElement?.clientWidth || 900);
+  const labels = data.labels || [];
+  const bins   = data.bins   || [];
 
-  // data
-  const { labels, bins } =
-    range === "day"   ? binsDay()  :
-    range === "week"  ? binsWeek() :
-                        binsMonth();
-
-  // dimensions
   const W = (canvas.width  / (window.devicePixelRatio||1));
   const H = (canvas.height / (window.devicePixelRatio||1));
   const P = { top:20, right:20, bottom:36, left:36 };
 
-  // scale
   const maxVal = Math.max(4, ...bins);
-  const yMax = Math.ceil(maxVal * 1.2);
+  const yMax   = Math.ceil(maxVal * 1.2);
   const innerW = W - P.left - P.right;
   const innerH = H - P.top - P.bottom;
 
-  // clear
   ctx.clearRect(0,0,W,H);
 
-  // axes + grilles
+  // axes + grid
   ctx.strokeStyle = "#e5e7eb";
   ctx.lineWidth = 1;
   ctx.beginPath();
-  // X axis
   ctx.moveTo(P.left, H-P.bottom+.5);
   ctx.lineTo(W-P.right, H-P.bottom+.5);
-  // Y ticks (0, 25%, 50%, 75%, 100%)
   for (let i=0;i<=4;i++){
     const y = P.top + innerH*(1 - i/4) + .5;
     ctx.moveTo(P.left, y);
@@ -160,10 +145,9 @@ function _draw() {
   ctx.stroke();
 
   // bars
-  const n = bins.length;
-  const gap = 6;
+  const n    = bins.length;
+  const gap  = 6;
   const barW = Math.max(6, (innerW - (n-1)*gap)/n);
-
   ctx.fillStyle = "#0ea5e9";
   bins.forEach((v,i)=>{
     const x = P.left + i*(barW+gap);
@@ -193,25 +177,27 @@ function _draw() {
   ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
   ctx.textAlign = "center";
   labels.forEach((t,i)=>{
-    if (!t) return;
-    if (range==="day"   && i%3!==0) return; // toutes les 3h
-    if (range==="month" && i%2!==0) return; // 1/2 jours
     const x = P.left + i*(barW+gap) + barW/2;
+    // Pour le mois, alléger: afficher 1 label sur 2 si > 20 jours
+    if (range==="month" && labels.length>20 && i%2===1) return;
     ctx.fillText(t, x, H - 12);
   });
 
-  // labels Y (0, yMax)
+  // labels Y
   ctx.textAlign = "right";
   ctx.fillText("0", P.left-6, H-P.bottom);
   ctx.fillText(String(yMax), P.left-6, P.top+12);
 }
 
-function setActive(rangeBtn) {
+/* ==========================
+   INIT
+   ========================== */
+
+function setActive(btn) {
   document.querySelectorAll("#chartRange .btn.pill").forEach(b=> b.classList.remove("active"));
-  rangeBtn.classList.add("active");
+  btn.classList.add("active");
 }
 
-// --- API ---
 export function initCharts() {
   canvas = document.getElementById("chartCanvas");
   if (!canvas) return;
@@ -220,29 +206,30 @@ export function initCharts() {
   const container = document.getElementById("chartRange");
   if (container) {
     container.addEventListener("click", (e)=>{
-      const btn = e.target.closest("button[data-range]");
+      const btn = e.target.closest("button[data-range], .btn.pill");
       if (!btn) return;
-      range = btn.dataset.range;
+      const r = btn.dataset.range || btn.textContent.trim().toLowerCase();
+      if (r.startsWith("jour"))  range = "day";
+      else if (r.startsWith("sem")) range = "week";
+      else                          range = "month";
       setActive(btn);
       draw();
     });
+    // activer "Jour" par défaut si présent
+    const first = container.querySelector('[data-range="day"]') || container.querySelector('.btn.pill');
+    if (first) setActive(first);
   }
 
-  // écouter les changements de données / réglages
+  // événements data/réglages
   document.addEventListener("sa:changed", draw);
   document.addEventListener("sa:settingsSaved", draw);
   document.addEventListener("sa:imported", draw);
 
-  // resize (debounce par RAF)
-  let rqf = 0;
-  const onResize = ()=>{
-    if (rqf) cancelAnimationFrame(rqf);
-    rqf = requestAnimationFrame(draw);
-  };
+  // resize (throttle via RAF)
+  let raf;
+  const onResize = ()=>{ cancelAnimationFrame(raf); raf = requestAnimationFrame(draw); };
   window.addEventListener("resize", onResize, { passive:true });
 
-  // init : activer le bon bouton par défaut
-  const first = document.querySelector('#chartRange [data-range="day"]');
-  if (first) setActive(first);
+  // premier rendu
   draw();
 }
