@@ -4,9 +4,10 @@ import { startOfDay } from "./utils.js";
 
 const DAY_MS = 86400000;
 
-let range = "day"; // 'day' | 'week' | 'month'
+let range = "day"; // "day" | "week" | "month"
 let canvas, ctx;
 
+// --- helpers d’affichage ---
 function dprResize(cnv, wCSS) {
   const dpr = window.devicePixelRatio || 1;
   const w = Math.max(600, wCSS);
@@ -19,25 +20,36 @@ function dprResize(cnv, wCSS) {
   return c;
 }
 
+function isStatsVisible() {
+  const scr = document.getElementById("screen-stats");
+  // visible si présent dans le flux (pas display:none)
+  return !!(scr && scr.offsetParent !== null);
+}
+
 function getEnabledTypes() {
-  const en = state.settings.enable || {};
+  const en = state.settings?.enable || {};
   const t = [];
-  if (en.cigs) t.push("cig");
-  if (en.weed) t.push("weed");
+  if (en.cigs)   t.push("cig");
+  if (en.weed)   t.push("weed");
   if (en.alcohol) t.push("beer","strong","liquor");
+  // si rien n’est coché, on affiche tout (comportement existant)
   return t.length ? t : ["cig","weed","beer","strong","liquor"];
 }
 
+// --- DATASETS ---
 function binsDay() {
   // 24 heures, labels toutes les 3h
   const a0 = startOfDay(new Date());
+  const a1 = new Date(+a0 + DAY_MS);
   const bins = Array.from({length:24}, ()=>0);
   const types = getEnabledTypes();
+
   for (const e of state.entries) {
     const t = new Date(e.ts);
-    if (t >= a0 && t < new Date(+a0 + DAY_MS)) {
+    if (t >= a0 && t < a1) {
       if (!types.includes(e.type)) continue;
-      bins[t.getHours()] += (e.qty||1);
+      const h = t.getHours();
+      bins[h] += (e.qty || 1);
     }
   }
   const labels = Array.from({length:24}, (_,h)=> h%3===0 ? String(h).padStart(2,"0")+"h" : "");
@@ -45,58 +57,76 @@ function binsDay() {
 }
 
 function binsWeek() {
-  // Lundi -> Dimanche
+  // Lundi -> Dimanche (lundi=0)
   const a0 = startOfDay(new Date());
-  const day = (a0.getDay()||7)-1; // 0..6 (lundi=0)
-  const wA = new Date(+a0 - day*DAY_MS);
+  const day = (a0.getDay() || 7) - 1; // 0..6
+  const wA  = new Date(+a0 - day*DAY_MS);
+  const wB  = new Date(+wA + 7*DAY_MS);
+
   const bins = Array.from({length:7}, ()=>0);
   const types = getEnabledTypes();
+
   for (const e of state.entries) {
     const t = new Date(e.ts);
-    if (t < wA || t >= new Date(+wA + 7*DAY_MS)) continue;
+    if (t < wA || t >= wB) continue;
     if (!types.includes(e.type)) continue;
     const idx = Math.floor((+t - +wA)/DAY_MS);
-    bins[idx] += (e.qty||1);
+    bins[idx] += (e.qty || 1);
   }
   const labels = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
   return { labels, bins };
 }
 
 function binsMonth() {
-  const now = new Date();
+  // Jours du mois en cours (1..N)
+  const now   = new Date();
   const first = new Date(now.getFullYear(), now.getMonth(), 1);
-  const last  = new Date(now.getFullYear(), now.getMonth()+1, 0);
-  const len = last.getDate();
+  const last  = new Date(now.getFullYear(), now.getMonth()+1, 0); // fin du mois
+  const len   = last.getDate();
+
   const bins = Array.from({length:len}, ()=>0);
   const types = getEnabledTypes();
+
   for (const e of state.entries) {
     const t = new Date(e.ts);
     if (t < first || t > last) continue;
     if (!types.includes(e.type)) continue;
-    bins[t.getDate()-1] += (e.qty||1);
+    bins[t.getDate()-1] += (e.qty || 1);
   }
-  const labels = Array.from({length:len}, (_,i)=> (i+1)%2===1 ? String(i+1) : ""); // 1 sur 2
+  // Étiquette 1 jour sur 2 pour rester lisible
+  const labels = Array.from({length:len}, (_,i)=> (i+1)%2===1 ? String(i+1) : "");
   return { labels, bins };
 }
 
 function totalDayLimit() {
   // somme des limites jour des catégories activées
-  const en = state.settings.enable || {};
-  const L = (state.settings.limits && state.settings.limits.day) || {};
+  const en = state.settings?.enable || {};
+  const L  = (state.settings?.limits && state.settings.limits.day) || {};
   let s = 0;
-  if (en.cigs) s += +L.cigs || 0;
-  if (en.weed) s += +L.weed || 0;
+  if (en.cigs)    s += +L.cigs    || 0;
+  if (en.weed)    s += +L.weed    || 0;
   if (en.alcohol) s += +L.alcohol || 0; // total verres
   return s;
 }
 
+// --- RENDER ---
+let pendingRAF = 0;
 function draw() {
+  // si stats hors écran, on ignore (économies)
+  if (!isStatsVisible()) return;
   if (!canvas) return;
-  ctx = dprResize(canvas, canvas.clientWidth || canvas.parentElement.clientWidth || 900);
+
+  if (pendingRAF) cancelAnimationFrame(pendingRAF);
+  pendingRAF = requestAnimationFrame(_draw);
+}
+
+function _draw() {
+  pendingRAF = 0;
+  ctx = dprResize(canvas, canvas.clientWidth || canvas.parentElement?.clientWidth || 900);
 
   // data
   const { labels, bins } =
-    range === "day"   ? binsDay() :
+    range === "day"   ? binsDay()  :
     range === "week"  ? binsWeek() :
                         binsMonth();
 
@@ -107,14 +137,14 @@ function draw() {
 
   // scale
   const maxVal = Math.max(4, ...bins);
-  const yMax = Math.ceil(maxVal*1.2);
+  const yMax = Math.ceil(maxVal * 1.2);
   const innerW = W - P.left - P.right;
   const innerH = H - P.top - P.bottom;
 
   // clear
   ctx.clearRect(0,0,W,H);
 
-  // axes
+  // axes + grilles
   ctx.strokeStyle = "#e5e7eb";
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -162,11 +192,10 @@ function draw() {
   ctx.fillStyle = "#475569";
   ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
   ctx.textAlign = "center";
-  const lblEvery = (range==="day") ? 1 : (range==="week" ? 1 : 2);
   labels.forEach((t,i)=>{
     if (!t) return;
-    if (range==="day" && i%3!==0) return; // toutes les 3h
-    if (range==="month" && i%2!==0) return;
+    if (range==="day"   && i%3!==0) return; // toutes les 3h
+    if (range==="month" && i%2!==0) return; // 1/2 jours
     const x = P.left + i*(barW+gap) + barW/2;
     ctx.fillText(t, x, H - 12);
   });
@@ -182,6 +211,7 @@ function setActive(rangeBtn) {
   rangeBtn.classList.add("active");
 }
 
+// --- API ---
 export function initCharts() {
   canvas = document.getElementById("chartCanvas");
   if (!canvas) return;
@@ -203,13 +233,15 @@ export function initCharts() {
   document.addEventListener("sa:settingsSaved", draw);
   document.addEventListener("sa:imported", draw);
 
-  // resize
-  let raf;
-  const onResize = ()=>{ cancelAnimationFrame(raf); raf = requestAnimationFrame(draw); };
+  // resize (debounce par RAF)
+  let rqf = 0;
+  const onResize = ()=>{
+    if (rqf) cancelAnimationFrame(rqf);
+    rqf = requestAnimationFrame(draw);
+  };
   window.addEventListener("resize", onResize, { passive:true });
 
-  // init
-  // activer le bon bouton par défaut
+  // init : activer le bon bouton par défaut
   const first = document.querySelector('#chartRange [data-range="day"]');
   if (first) setActive(first);
   draw();
