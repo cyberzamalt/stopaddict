@@ -3,15 +3,15 @@
 // Graphiques Jour / Semaine / Mois sur <canvas id="chartCanvas">,
 // + maj du bandeau Stats (#stats-titre, #stats-*) et boutons d'échelle (#chartRange).
 // + options cocher/décocher des séries (Cigarettes / Joints / Alcool / Coût).
+// + OVERLAY limites (lignes horizontales) via window.SA.limits.perBucket(range).
 // - Corrige l'échelle "Jour" : abscisses = heures locales 0..23 (pas d'UTC).
-// - S'appuie sur window.SA.economy (si présent) pour le coût/économies.
+// - Utilise window.SA.economy (si présent) pour la série "Coût".
 // -----------------------------------------------------------------------------
 
 const LS_KEYS = {
   HISTORY: "app_history_v23",
   CHART_SERIES: "app_chart_series_v23", // persiste (cigs/weed/alcohol/cost) activés
 };
-
 const DEFAULT_SERIES = { cigs: true, weed: true, alcohol: true, cost: true };
 
 function getHistory() {
@@ -180,7 +180,6 @@ function ensureSeriesToggles() {
   if (!host) host = document.getElementById("ecran-stats");
   if (!host) return;
 
-  // Ajoute une rangée de toggles si absente
   if (!document.getElementById("series-toggles")) {
     const wrap = document.createElement("div");
     wrap.id = "series-toggles";
@@ -225,7 +224,7 @@ function ensureSeriesToggles() {
   }
 }
 
-// ----- Canvas chart (barres empilées + courbe coût) -----
+// ----- Canvas chart (barres empilées + courbe coût + overlays limites) -----
 function drawChart(range, agg, prefs) {
   const canvas = document.getElementById("chartCanvas");
   if (!canvas) return;
@@ -236,7 +235,7 @@ function drawChart(range, agg, prefs) {
   ctx.clearRect(0,0,W,H);
 
   // Padding
-  const padL = 42, padR = 18, padT = 10, padB = 42;
+  const padL = 42, padR = 28, padT = 10, padB = 42; // + marge droite pour légendes
 
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
@@ -253,7 +252,7 @@ function drawChart(range, agg, prefs) {
   }
   const maxBars = Math.max(1, ...maxStack);
 
-  // cost axis scale separated to avoid dwarfing bars
+  // cost axis scale separated
   const maxCost = prefs.cost ? Math.max(1, ...agg.cost.map(v=>+v||0)) : 1;
 
   // Axes Y (bar)
@@ -267,7 +266,7 @@ function drawChart(range, agg, prefs) {
     ctx.stroke();
   }
 
-  // Helper to map value -> y pixel
+  // map value -> y pixel
   const yBar = (v)=> padT + innerH * (1 - (v / maxBars));
   const yCost = (v)=> padT + innerH * (1 - (v / maxCost));
 
@@ -323,6 +322,37 @@ function drawChart(range, agg, prefs) {
       ctx.arc(x,y,2.5,0,Math.PI*2);
       ctx.fill();
     }
+  }
+
+  // ----- Overlays limites -----
+  const LIM = window?.SA?.limits?.perBucket?.(range);
+  if (LIM) {
+    const overlays = [];
+    if (prefs.cigs && LIM.cigs > 0) overlays.push({val:LIM.cigs, color:"#3b82f6", label:"Lim. cigs"});
+    if (prefs.weed && LIM.weed > 0) overlays.push({val:LIM.weed, color:"#22c55e", label:"Lim. joints"});
+    if (prefs.alcohol && LIM.alcohol > 0) overlays.push({val:LIM.alcohol, color:"#f59e0b", label:"Lim. alcool"});
+
+    ctx.setLineDash([6,4]);
+    ctx.lineWidth = 1.5;
+    overlays.forEach((o, idx)=>{
+      const y = yBar(o.val);
+      if (y >= padT && y <= padT+innerH) {
+        ctx.strokeStyle = o.color + "CC"; // un peu transparent
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(W - padR, y);
+        ctx.stroke();
+
+        // petite légende à droite
+        ctx.fillStyle = o.color;
+        ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        const txt = `${o.label} ${Math.round(o.val*100)/100}`;
+        ctx.fillText(txt, W - padR + 2, Math.min(padT+innerH-10, Math.max(padT+10, y - 10 + idx*14)));
+      }
+    });
+    ctx.setLineDash([]);
   }
 
   // X labels
@@ -381,10 +411,10 @@ export function initCharts() {
   ensureSeriesToggles();
   render();
 
-  // redraw when data or settings change
+  // redraw when underlying data/settings change
   window.addEventListener("sa:history:changed", render);
   window.addEventListener("sa:data:changed", render);
   window.addEventListener("sa:settings:changed", render);
-  // redraw if economy toggled or prices change
   window.addEventListener("sa:economy:changed", render);
+  window.addEventListener("sa:limits:changed", render);
 }
