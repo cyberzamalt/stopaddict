@@ -33,6 +33,7 @@
   }
   .container{max-width:460px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; background:#f8fafc; position:relative;}
 
+  /* Header */
   .header{position:sticky; top:0; z-index:3; background:linear-gradient(135deg,#2c3e50,#34495e); color:#fff; padding:10px 14px; text-align:center}
   .brand{display:flex; align-items:center; gap:8px; justify-content:center; margin-bottom:2px}
   .brand img{width:24px; height:24px; border-radius:6px; object-fit:cover}
@@ -44,6 +45,7 @@
   .debug-console{position:fixed; top:0; left:0; right:0; background:rgba(0,0,0,.95); color:#b5f7b7; font:12px/1.35 ui-monospace, Menlo, monospace; padding:6px 8px; max-height:40vh; overflow:auto; z-index:9999; border-bottom:2px solid #34d399; display:none}
   .debug-console.show{display:block}
 
+  /* Stats rapides */
   .stats-rapides{background:#fff; display:grid; grid-template-columns:repeat(4,1fr); gap:8px; padding:10px; border-bottom:1px solid var(--divider)}
   .stat-item{text-align:center; padding:6px}
   .stat-val{font-weight:900; font-size:20px; color:var(--ink)}
@@ -138,8 +140,7 @@
   .dot.j{background:var(--ok)}
   .dot.a{background:var(--warn)}
 
-  /* Zone charts simplifiée (compatible charts.js du repo) */
-  #screen-stats { display:block; }
+  /* Zone charts (compatible web/js/charts.js) */
   #chartRange { display:flex; gap:8px; margin:10px 0; }
   #chartRange .btn.pill { flex:1; background:#e6fffa; border:2px solid #b2f5ea; color:#0f766e; border-radius:999px; padding:8px; font-weight:800; font-size:13px; text-align:center; cursor:pointer; }
   #chartRange .btn.pill.active { background:#3b82f6; border-color:#3b82f6; color:#fff; }
@@ -259,41 +260,39 @@
 
     <!-- ======================= ÉCRAN STATS ======================= -->
     <div class="ecran" id="ecran-stats" aria-label="SA:ECRAN:STATS" data-sa="screen-stats">
-      <!-- Wrapper invisible utilisé par charts.js pour détecter la visibilité -->
-      <div id="screen-stats">
-        <div class="card">
-          <div class="tabs" role="tablist" id="chartRange">
-            <button class="btn pill active" data-range="day" type="button">Jour</button>
-            <button class="btn pill" data-range="week" type="button">Semaine</button>
-            <button class="btn pill" data-range="month" type="button">Mois</button>
-          </div>
+      <div class="card">
+        <!-- Boutons d’échelle attendus par web/js/charts.js -->
+        <div class="tabs" role="tablist" id="chartRange">
+          <button class="btn pill active" data-range="day" type="button">Jour</button>
+          <button class="btn pill" data-range="week" type="button">Semaine</button>
+          <button class="btn pill" data-range="month" type="button">Mois</button>
+        </div>
 
-          <div class="banner green">
-            <div class="banner-title" id="stats-titre">—</div>
-            <div class="line">
-              <span class="lbl">Cigarettes</span>
-              <span class="val" id="stats-clopes">0</span>
-            </div>
-            <div class="line">
-              <span class="lbl">Joints</span>
-              <span class="val" id="stats-joints">0</span>
-            </div>
-            <div class="line" id="stats-alcool-line" style="display:none">
-              <span class="lbl">Alcool</span>
-              <span class="val" id="stats-alcool">0</span>
-            </div>
+        <div class="banner green">
+          <div class="banner-title" id="stats-titre">—</div>
+          <div class="line">
+            <span class="lbl">Cigarettes</span>
+            <span class="val" id="stats-clopes">0</span>
           </div>
+          <div class="line">
+            <span class="lbl">Joints</span>
+            <span class="val" id="stats-joints">0</span>
+          </div>
+          <div class="line" id="stats-alcool-line" style="display:none">
+            <span class="lbl">Alcool</span>
+            <span class="val" id="stats-alcool">0</span>
+          </div>
+        </div>
 
-          <!-- Canvas unique attendu par web/js/charts.js -->
-          <div class="chart-block">
-            <div class="chart-caption">Consommations (unités) / Coût</div>
-            <canvas id="chartCanvas" width="960" height="260"></canvas>
-          </div>
+        <!-- Canvas unique attendu par web/js/charts.js -->
+        <div class="chart-block">
+          <div class="chart-caption">Consommations (unités) / Coût</div>
+          <canvas id="chartCanvas" width="960" height="260"></canvas>
+        </div>
 
-          <div class="chart-actions" id="chart-actions">
-            <button class="btn" id="btn-export-csv" type="button">Exporter historique complet (Excel)</button>
-            <button class="btn" id="btn-export-stats" type="button">Exporter la vue actuelle</button>
-          </div>
+        <div class="chart-actions" id="chart-actions">
+          <button class="btn" id="btn-export-csv" type="button">Exporter historique complet (Excel)</button>
+          <button class="btn" id="btn-export-stats" type="button">Exporter la vue actuelle</button>
         </div>
       </div>
     </div>
@@ -454,7 +453,7 @@
   </div>
 </div>
 
-<!-- ⚠️ IMPORTANT : aucun gros script inline ici. On laisse les modules du repo agir. -->
+<!-- Pas de gros script inline : tout le code vient du repo web/js/*.js -->
 <script type="module" src="js/app.js"></script>
 </body>
 </html>
