@@ -1,148 +1,122 @@
 // web/js/economy.js
+// Calcule et met à jour le coût du jour (+ expose une petite API globale)
+// Lit: state.entries (array {ts, type, qty}), state.settings (enable + prix)
+// MAJ: #stat-cout-jr (header)
+// Écoute: "sa:changed", "sa:settingsSaved", "sa:imported"
+
 import { state } from "./state.js";
 import { startOfDay } from "./utils.js";
 
-const DAY_MS = 86400000;
-const TYPES_ALCO = ["beer","strong","liquor"];
+function getEnable() {
+  const en = (state.settings && state.settings.enable) || {};
+  return {
+    cigs:   (en.cigs   !== false),
+    weed:   (en.weed   !== false),
+    alcohol:(en.alcohol!== false),
+  };
+}
 
-function unitCost(type, p) {
-  if (type === "cig")   return (p.pricePerPack && p.cigsPerPack) ? (p.pricePerPack / p.cigsPerPack) : 0;
-  if (type === "weed")  return p.joint || 0;
-  if (type === "beer")  return p.beer  || 0;
-  if (type === "strong")return p.strong|| 0;
-  if (type === "liquor")return p.liquor|| 0;
+function getPrices() {
+  // On récupère les prix quelle que soit la forme choisie dans settings
+  const s = state.settings || {};
+  const p = s.prices || s.price || {};
+  return {
+    cl_class:  +((p.cl_class  ?? s.prix_cl_class)  ?? 0),
+    cl_roul:   +((p.cl_roul   ?? s.prix_cl_roul)   ?? 0),
+    cl_tube:   +((p.cl_tube   ?? s.prix_cl_tube)   ?? 0),
+    joint:     +((p.joint     ?? s.prix_joint)     ?? 0),
+    biere:     +((p.biere     ?? s.prix_biere)     ?? 0),
+    fort:      +((p.fort      ?? s.prix_fort)      ?? 0),
+    liqueur:   +((p.liqueur   ?? s.prix_liqueur)   ?? 0),
+  };
+}
+
+function priceForType(type) {
+  const pr = getPrices();
+  if (type==="cig" || type==="cig_class") return pr.cl_class;
+  if (type==="cig_roul")                  return pr.cl_roul;
+  if (type==="cig_tube")                  return pr.cl_tube;
+  if (type==="weed" || type==="joint" || type==="joints") return pr.joint;
+  if (type==="beer" || type==="alc_biere")                 return pr.biere;
+  if (type==="strong" || type==="alc_fort")                return pr.fort;
+  if (type==="liquor" || type==="alc_liqueur" || type==="alcohol") return pr.liqueur;
   return 0;
 }
 
-function countInRange(types, a, b) {
-  let s = 0;
-  for (const e of state.entries) {
-    if (!types.includes(e.type)) continue;
-    const t = new Date(e.ts);
-    if (t >= a && t <= b) s += (e.qty || 1);
-  }
-  return s;
+function moduleGuards(type) {
+  const en = getEnable();
+  if (type==="cig" || type==="cig_class" || type==="cig_roul" || type==="cig_tube") return en.cigs;
+  if (type==="weed" || type==="joint" || type==="joints")                            return en.weed;
+  if (type==="beer" || type==="strong" || type==="liquor" || type.startsWith("alc") || type==="alcohol") return en.alcohol;
+  return true;
 }
 
-function avgLastNDays(type, n=30) {
-  const today0 = startOfDay(new Date());
+function costToday() {
+  const a0 = startOfDay(new Date());
+  const a1 = new Date(+a0 + 86400000);
   let total = 0;
-  for (let i=0;i<n;i++){
-    const a = new Date(+today0 - i*DAY_MS);
-    const b = new Date(+a + DAY_MS - 1);
-    total += countInRange([type], a, b);
-  }
-  return total / n;
-}
-
-function manualGoal(type) {
-  const g = state.settings.goals || {};
-  if (type === "cig")   return +g.cigs || 0;
-  if (type === "weed")  return +g.weed || 0;
-  if (type === "alco")  return +g.alcohol || 0;
-  return 0;
-}
-
-function baselinePerDay(type) {
-  const en = state.settings.enable || {};
-  // Catégorie désactivée => baseline = 0
-  if ((type==="cig" && !en.cigs) || (type==="weed" && !en.weed) || (type==="alco" && !en.alcohol)) return 0;
-
-  const mode = (state.settings.baseline && state.settings.baseline.mode) || "auto";
-  if (mode === "manual") {
-    // groupé alcool = objectif global
-    return manualGoal(type === "beer" || type==="strong" || type==="liquor" ? "alco" : type);
-  }
-  // auto = moyenne des 30 derniers jours
-  if (type === "alco") {
-    // additionne les 3 sous-types
-    return avgLastNDays("beer") + avgLastNDays("strong") + avgLastNDays("liquor");
-  }
-  return avgLastNDays(type);
-}
-
-function todayRealCount() {
-  const a = startOfDay(new Date());
-  const b = new Date(+a + DAY_MS - 1);
-  const en = state.settings.enable || {};
-  let types = [];
-  if (en.cigs)    types.push("cig");
-  if (en.weed)    types.push("weed");
-  if (en.alcohol) types.push(...TYPES_ALCO);
-  if (!types.length) types = ["cig","weed",...TYPES_ALCO];
-  return countInRange(types, a, b);
-}
-
-function todayBaselineSum() {
-  const en = state.settings.enable || {};
-  let sum = 0;
-  if (en.cigs)    sum += baselinePerDay("cig");
-  if (en.weed)    sum += baselinePerDay("weed");
-  if (en.alcohol) sum += baselinePerDay("alco");
-  return sum;
-}
-
-function costOfCountSplit(counts) {
-  const p = state.settings.price;
-  let euros = 0;
-  for (const [type, qty] of Object.entries(counts)) {
-    euros += unitCost(type, p) * qty;
-  }
-  return euros;
-}
-
-function splitTodayCounts() {
-  const a = startOfDay(new Date());
-  const b = new Date(+a + DAY_MS - 1);
-  const types = ["cig","weed",...TYPES_ALCO];
-  const map = { cig:0, weed:0, beer:0, strong:0, liquor:0 };
-  for (const e of state.entries) {
-    if (!types.includes(e.type)) continue;
+  for (const e of (state.entries || [])) {
     const t = new Date(e.ts);
-    if (t >= a && t <= b) map[e.type] += (e.qty||1);
+    if (t < a0 || t >= a1) continue;
+    if (!moduleGuards(e.type)) continue;
+    const qty = +e.qty || 1;
+    total += qty * priceForType(e.type);
   }
-  return map;
+  return Math.max(0, +total.toFixed(2));
 }
 
-function splitBaselineToday() {
-  // Répartition simple : cigarettes et weed = baseline directe
-  // alcool = baseline globale distribuée à parts égales (approx simple)
-  const en = state.settings.enable || {};
-  const base = { cig:0, weed:0, beer:0, strong:0, liquor:0 };
-  if (en.cigs)  base.cig   = baselinePerDay("cig");
-  if (en.weed)  base.weed  = baselinePerDay("weed");
-  if (en.alcohol) {
-    const b = baselinePerDay("alco");
-    base.beer = base.strong = base.liquor = b/3;
+// Simple “hint” d’économies : si des limites sont définies, on estime
+// économies = max(0, (limiteTotale - consoTotale) * prix_moyen)
+function economiesHint() {
+  const en  = getEnable();
+  const lim = (state.settings && state.settings.limits && state.settings.limits.day) || {};
+  const a0 = startOfDay(new Date());
+  const a1 = new Date(+a0 + 86400000);
+
+  let cig=0, we=0, alc=0, sumCost=0, sumQty=0;
+  for (const e of (state.entries || [])) {
+    const t = new Date(e.ts);
+    if (t < a0 || t >= a1) continue;
+    if (!moduleGuards(e.type)) continue;
+    const q = +e.qty || 1;
+    sumQty  += q;
+    sumCost += q * priceForType(e.type);
+    if (e.type.startsWith("cig")) cig += q;
+    else if (e.type==="weed" || e.type==="joint" || e.type==="joints") we += q;
+    else alc += q;
   }
-  return base;
+
+  const limTot =
+    (en.cigs    ? (+lim.cigs    || 0) : 0) +
+    (en.weed    ? (+lim.weed    || 0) : 0) +
+    (en.alcohol ? (+lim.alcohol || 0) : 0);
+
+  if (!limTot) return 0;
+  const consoTot = cig + we + alc;
+  const avg = sumQty ? (sumCost / sumQty) : 0;
+  const eco = Math.max(0, (limTot - consoTot) * avg);
+  return +eco.toFixed(2);
+}
+
+function updateHeaderCost() {
+  const el = document.getElementById("stat-cout-jr");
+  if (!el) return;
+  el.textContent = costToday().toFixed(2) + "€";
+}
+
+function render() {
+  updateHeaderCost();
 }
 
 export function initEconomy() {
-  const elAmount = document.getElementById("economies-amount");
-  const elCostToday = document.getElementById("todayCost");
-
-  function render() {
-    // Réel du jour (coûts)
-    const counts = splitTodayCounts();
-    const cost = costOfCountSplit(counts);
-
-    // Baseline du jour (objectif) — jamais d’économie négative
-    const b = splitBaselineToday();
-    const diff = {
-      cig:   Math.max(0, (b.cig   || 0) - (counts.cig   || 0)),
-      weed:  Math.max(0, (b.weed  || 0) - (counts.weed  || 0)),
-      beer:  Math.max(0, (b.beer  || 0) - (counts.beer  || 0)),
-      strong:Math.max(0, (b.strong|| 0) - (counts.strong|| 0)),
-      liquor:Math.max(0, (b.liquor|| 0) - (counts.liquor|| 0)),
-    };
-    const euros = costOfCountSplit(diff);
-
-    if (elCostToday)   elCostToday.textContent = cost.toFixed(2) + " €";
-    if (elAmount)      elAmount.textContent = euros.toFixed(2) + " €";
-  }
-
+  // premier rendu
   render();
+  // expose petite API (facultatif, utile à d'autres modules)
+  window.saEconomy = {
+    costToday,
+    economiesHint
+  };
+  // écoute
   document.addEventListener("sa:changed", render);
   document.addEventListener("sa:settingsSaved", render);
   document.addEventListener("sa:imported", render);
