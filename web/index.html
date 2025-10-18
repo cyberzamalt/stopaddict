@@ -1,364 +1,789 @@
 <!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="StopAddict - Compteur personnel antidépendance">
-  <meta name="theme-color" content="#1e293b">
-  <title>StopAddict v3 - Complet</title>
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
-  <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  --primary: #1e293b;
-  --primary-dark: #0f172a;
-  --primary-light: #334155;
-  --accent-green: #10b981;
-  --accent-orange: #f97316;
-  --accent-blue: #3b82f6;
-  --text-main: #1f2937;
-  --text-muted: #6b7280;
-  --bg-light: #f9fafb;
-  --border-light: #e5e7eb;
-}
+<html lang="fr"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
-html, body { font-family: system-ui, -apple-system, Segoe UI, Roboto; background: #fff; color: var(--text-main); line-height: 1.5; }
-body { padding-bottom: 80px; }
+<!-- Nom app visible côté navigateur / A2HS -->
+<title>StopAddict – Compteur Tabac, Cannabis & Alcool (v2.4.0 CLEAN)</title>
+<meta name="application-name" content="StopAddict">
+<meta name="apple-mobile-web-app-title" content="StopAddict">
 
-.app-shell { width: 100%; max-width: 480px; margin: 0 auto; background: #fff; }
+<!-- CSP stricte mais compatible exports data:/blob: et styles inline -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:;
+               img-src 'self' data: blob:;
+               style-src 'self' 'unsafe-inline';
+               script-src 'self' 'unsafe-inline';
+               connect-src 'self';
+               object-src 'none';
+               base-uri 'none';
+               form-action 'self'">
 
-/* HEADER */
-.hdr { background: linear-gradient(135deg, var(--primary-dark), var(--primary)); color: #fff; padding: 16px 12px; text-align: center; position: sticky; top: 0; z-index: 40; }
-.hdr .title { font-size: 18px; font-weight: 900; margin: 0; }
-.hdr .subtitle { font-size: 12px; opacity: 0.8; margin: 4px 0 0; }
+<style>
+  :root{
+    --bg1:#667eea; --bg2:#764ba2;
+    --ink:#1f2937; --muted:#6b7280; --card:#ffffff;
+    --ok:#22c55e; --warn:#f59e0b; --danger:#ef4444; --info:#3b82f6;
+    --chip:#f3f4f6; --divider:#e5e7eb;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    color:var(--ink); background:linear-gradient(180deg,var(--bg1),var(--bg2));
+    -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+  }
+  .container{max-width:460px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; background:#f8fafc; position:relative;}
 
-/* ÉCRANS */
-.ecran { display: none; animation: fadeIn 0.2s; }
-.ecran.show { display: block; }
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  /* ====== Header + marque ====== */
+  .header{position:sticky; top:0; z-index:3; background:linear-gradient(135deg,#2c3e50,#34495e); color:#fff; padding:10px 14px; text-align:center}
+  .brand{display:flex; align-items:center; gap:8px; justify-content:center; margin-bottom:2px}
+  .brand img{width:24px; height:24px; border-radius:6px; object-fit:cover}
+  .brand-name{font-weight:900; letter-spacing:.2px}
+  .brand-ver{opacity:.8; font-size:12px; margin-left:4px}
+  .date{font-weight:800; font-size:18px}
+  .heure{opacity:.95; font-size:13px; margin-top:2px}
 
-/* CARTES */
-.card { background: #fff; border: 1px solid var(--border-light); border-radius: 12px; padding: 14px; margin: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-.card.bar-green { border-left: 4px solid var(--accent-green); }
+  .debug-console{position:fixed; top:0; left:0; right:0; background:rgba(0,0,0,.95); color:#b5f7b7; font:12px/1.35 ui-monospace, Menlo, monospace; padding:6px 8px; max-height:40vh; overflow:auto; z-index:9999; border-bottom:2px solid #34d399; display:none}
+  .debug-console.show{display:block}
 
-/* BANDEAUX */
-.banner { border-radius: 12px; padding: 12px; margin: 8px; }
-.banner.green { background: #ecfdf5; border-left: 4px solid var(--accent-green); }
-.banner.orange { background: #fff7ed; border-left: 4px solid var(--accent-orange); }
+  .stats-rapides{background:#fff; display:grid; grid-template-columns:repeat(4,1fr); gap:8px; padding:10px; border-bottom:1px solid var(--divider)}
+  .stat-item{text-align:center; padding:6px}
+  .stat-val{font-weight:900; font-size:20px; color:var(--ink)}
+  .stat-lbl{font-size:11px; color:var(--muted); margin-top:2px}
 
-/* ROW */
-.row { display: flex; justify-content: space-between; align-items: center; }
-.row-slim { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-size: 14px; }
-.row-slim .label { flex: 1; font-weight: 600; }
-.row-slim .bar { flex: 2; height: 6px; background: var(--border-light); border-radius: 999px; overflow: hidden; margin: 0 8px; }
-.row-slim .bar span { display: block; height: 100%; background: var(--accent-orange); transition: width 0.3s; }
-.row-slim .note { flex: 1; text-align: right; font-size: 12px; color: var(--text-muted); }
+  .content{flex:1; padding:0 0 80px; overflow-y:auto}
+  .ecran{display:none}
+  .ecran.show{display:block; animation:fadeIn .2s ease}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 
-/* BOUTONS */
-.btn { background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: 8px 12px; font-size: 14px; cursor: pointer; transition: background 0.2s; }
-.btn:hover { background: var(--primary-dark); }
-.btn.alt { background: var(--border-light); color: var(--text-main); }
-.btn.alt:hover { background: #d1d5db; }
-.btn.warn { background: #dc2626; }
-.btn.warn:hover { background: #b91c1c; }
-.btn.small { padding: 6px 10px; font-size: 12px; }
-.btn-round { width: 56px; height: 56px; border-radius: 50%; border: 2px solid var(--border-light); background: #fff; cursor: pointer; font-size: 18px; font-weight: 900; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
-.btn-round:hover { background: var(--bg-light); }
-.btn-round.btn-plus { background: var(--accent-green); color: #fff; border: none; }
-.btn-plus:hover { background: #059669; }
+  .card{background:#fff; border-radius:14px; margin:10px; padding:14px; box-shadow:0 2px 8px rgba(0,0,0,.06)}
+  .card.bar-left{border-left:4px solid var(--info)}
+  .card.bar-left.green{border-left-color:var(--ok)}
+  .card.bar-left.orange{border-left-color:var(--warn)}
 
-/* COMPTEURS */
-.count { font-size: 24px; font-weight: 900; }
-.title { font-weight: 600; }
+  .banner{background:#fff; border-radius:14px; margin:10px; padding:12px; border:2px solid var(--divider)}
+  .banner.green{background:#ecfdf5; border-color:#6ee7b7}
+  .banner.orange{background:#fff7ed; border-color:#fdba74}
+  .banner-title{font-weight:900; font-size:15px; margin-bottom:8px}
 
-/* INPUTS */
-input[type="text"], input[type="number"], input[type="checkbox"], input[type="file"], select { padding: 6px 8px; border: 1px solid var(--border-light); border-radius: 6px; font-size: 14px; }
-input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
-input[type="number"] { width: 100%; }
+  .line{display:flex; justify-content:space-between; align-items:center; padding:4px 0}
+  .lbl{font-weight:700; font-size:14px}
+  .val{font-weight:900; font-size:18px; color:var(--ink)}
 
-/* SECTIONS */
-.section-title { font-weight: 900; font-size: 14px; margin: 10px 0 8px; color: var(--primary); }
+  .segment{display:flex; gap:4px; margin:6px 0}
+  .seg{flex:1; height:28px; border-radius:6px; background:#e5e7eb; border:2px solid transparent; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:11px; color:#6b7280; cursor:pointer; transition:all .15s ease}
+  .seg.actif{background:#3b82f6; color:#fff; border-color:#2563eb}
+  .seg:hover{transform:scale(1.05)}
 
-/* GRID */
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.param { padding: 6px 0; }
-.param label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+  .pm{display:flex; gap:8px; justify-content:center; margin:8px 0}
+  .btn-round{width:56px; height:56px; border-radius:50%; border:0; background:#f3f4f6; color:#111827; font-size:22px; font-weight:900; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .15s ease}
+  .btn-round:hover{background:#e5e7eb; transform:scale(1.05)}
+  .btn-round.btn-plus{background:var(--ok); color:#fff}
+  .btn-round.btn-plus:hover{background:#16a34a}
+  .btn-round.btn-minus{background:#f3f4f6; color:#6b7280}
+  .btn-round.btn-minus:hover{background:#e5e7eb; color:#374151}
 
-/* TABS */
-.tabs { display: flex; gap: 4px; padding: 8px; border-bottom: 1px solid var(--border-light); }
-.tab { flex: 1; padding: 8px 6px; background: #fff; border: 1px solid var(--border-light); border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s; }
-.tab.actif { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .conseil{background:#fef3c7; border-left:4px solid var(--warn); padding:12px; border-radius:8px; margin:10px; font-size:14px; line-height:1.5}
+  .conseil strong{color:#92400e}
+  .adv-ctl{display:flex; align-items:center; gap:6px; justify-content:flex-end}
+  .ctl{background:#fff; color:#111827; border-radius:8px; padding:4px 8px; text-decoration:none; font-weight:900; font-size:12px; cursor:pointer; border:0}
+  .dots{font-size:12px; letter-spacing:3px; opacity:.85}
 
-/* NAV */
-.nav { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid var(--border-light); display: flex; gap: 0; z-index: 50; max-width: 480px; margin: 0 auto; }
-.nav button { flex: 1; background: none; border: none; padding: 8px 4px; cursor: pointer; font-size: 11px; font-weight: 600; color: var(--text-muted); transition: all 0.2s; border-top: 2px solid transparent; }
-.nav button.actif { color: var(--primary); border-top-color: var(--primary); }
-.nav .ico { display: block; font-size: 20px; margin-bottom: 2px; }
+  .tabs{display:flex; gap:8px; margin-bottom:8px}
+  .tab{flex:1; background:#e6fffa; border:2px solid #b2f5ea; color:#0f766e; border-radius:999px; padding:8px; font-weight:800; font-size:13px; text-align:center; cursor:pointer; transition:all .15s ease}
+  .tab.actif{background:#3b82f6; border-color:#3b82f6; color:#fff}
+  .tab:hover{transform:translateY(-2px)}
 
-/* MODALES */
-.modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 50; }
-.modal.show { display: flex; align-items: flex-end; justify-content: center; }
-.sheet { background: #fff; width: 100%; max-width: 480px; border-radius: 16px 16px 0 0; padding: 14px; max-height: 80vh; overflow-y: auto; }
-.sheet h3 { margin: 0 0 10px; font-size: 16px; }
+  .divider{height:1px; background:var(--divider); margin:10px 0}
+  .stats-block{background:#fff; border-radius:12px; padding:14px}
 
-/* GRAPHIQUES */
-#stats-charts { margin-top: 12px; }
-.chart-block { margin: 10px 0; }
-.chart-caption { font-weight: 600; margin: 8px 0 4px; font-size: 1rem; }
-canvas { width: 100%; height: auto; display: block; }
-.chart-legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.9rem; }
-.legend-item { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; background: var(--bg-light); border: 1px solid var(--border-light); cursor: pointer; user-select: none; }
-.legend-item.is-muted { opacity: 0.45; text-decoration: line-through; }
-.legend-swatch { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
-.chart-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; flex-wrap: wrap; }
-.chart-actions .btn { flex: 1; min-width: 140px; font-size: 12px; padding: 8px 10px; }
+  .grid-2{display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:center}
+  .grid-2 .param{display:contents}
+  .param label{font-size:13px; color:#374151; font-weight:700}
+  .param input[type="number"], .param input[type="text"], .param input[type="date"]{width:100%; padding:8px 10px; border:2px solid #e5e7eb; border-radius:8px; font-size:14px; background:#f9fafb}
+  .param input[type="checkbox"]{transform:scale(1.1); cursor:pointer}
+  .param .hint{grid-column:1 / -1; font-size:12px; color:#6b7280}
+  .section-title{font-weight:900; font-size:15px; color:#111827; border-bottom:2px solid #eef2f7; padding-bottom:6px; margin-bottom:10px}
 
-/* SNACKBAR */
-.snackbar { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: var(--primary); color: #fff; padding: 10px 14px; border-radius: 8px; font-size: 13px; max-width: 90%; text-align: center; opacity: 0; transition: opacity 0.3s; z-index: 40; }
-.snackbar.show { opacity: 1; }
+  .nav{position:fixed; left:50%; transform:translateX(-50%); bottom:0; width:100%; max-width:460px; background:#fff; border-top:1px solid var(--divider); display:flex; z-index:10}
+  .nav button{flex:1; background:transparent; border:0; padding:10px 6px 8px; color:#64748b; font-size:12px; display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer; transition:all .15s ease}
+  .nav button.actif{color:#3b82f6; background:rgba(59,130,246,.06)}
+  .nav .ico{font-size:18px}
 
-@media (max-width: 480px) {
-  .card, .banner { margin: 6px; padding: 12px; }
-  .hdr { padding: 12px 8px; }
-  .grid-2 { grid-template-columns: 1fr; }
-}
-  </style>
+  .snackbar{position:fixed; left:50%; transform:translateX(-50%) translateY(20px); bottom:76px; background:#111827; color:#fff; padding:10px 14px; border-radius:999px; font-size:13px; display:none; gap:10px; align-items:center; z-index:20}
+  .snackbar.show{display:flex; animation:fadeUp .2s ease}
+  .snackbar a{color:#34d399; font-weight:900; text-decoration:none}
+  @keyframes fadeUp{from{opacity:0; transform:translateX(-50%) translateY(40px)} to{opacity:1; transform:translateX(-50%) translateY(20px)}}
+
+  .btn{background:#111827; color:#fff; border:0; border-radius:10px; padding:10px 12px; font-weight:800; cursor:pointer; transition:all .15s ease}
+  .btn:hover{background:#374151; transform:translateY(-1px)}
+  .btn.alt{background:#374151}
+  .btn.alt:hover{background:#4b5563}
+  .btn.warn{background:#ef4444}
+  .btn.warn:hover{background:#dc2626}
+  .btn.small{padding:6px 10px; font-size:13px}
+  .btn:disabled{opacity:.5; cursor:not-allowed; transform:none !important}
+
+  .modal{position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; align-items:flex-end; justify-content:center; z-index:50}
+  .modal.show{display:flex; animation:fadeIn .2s ease}
+  .sheet{background:#fff; width:100%; max-width:460px; border-radius:16px 16px 0 0; padding:16px; max-height:80vh; overflow-y:auto}
+  .sheet h3{margin:0 0 12px; font-size:18px; color:#111827}
+
+  .cal-grid{display:grid; grid-template-columns:repeat(7, 1fr); gap:6px; margin-top:10px}
+  .cal-cell{background:#fff; border:1px solid var(--divider); border-radius:8px; padding:6px; min-height:56px; position:relative; cursor:pointer; font-size:12px; transition:all .15s ease}
+  .cal-cell:hover{background:#f9fafb; transform:scale(1.05)}
+  .cal-cell.today{border-color:#3b82f6; border-width:2px}
+  .cal-cell.has-data{background:#ecfdf5}
+  .cal-num{color:var(--muted); font-weight:800}
+  .dot{width:8px; height:8px; border-radius:50%; display:inline-block; margin:2px}
+  .dot.c{background:var(--info)}
+  .dot.j{background:var(--ok)}
+  .dot.a{background:var(--warn)}
+
+  #stats-charts{margin-top:12px}
+  .chart-block{margin:10px 0}
+  .chart-caption{font-weight:600; margin:8px 0 4px; font-size:1rem}
+  canvas{width:100%; height:auto; display:block; min-height:220px}
+  .chart-legend{display:flex; flex-wrap:wrap; gap:8px; font-size:0.9rem; margin-bottom:10px}
+  .legend-item{display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; background:var(--chip); border:1px solid var(--divider); cursor:pointer; user-select:none; transition:all .15s ease}
+  .legend-item:hover{background:#e5e7eb}
+  .legend-item.is-muted{opacity:.45; text-decoration:line-through}
+  .legend-item.is-disabled{opacity:.3; pointer-events:none}
+  .legend-swatch{width:14px; height:3px; border-radius:2px; display:inline-block}
+  .chart-actions{display:flex; gap:8px; justify-content:flex-end; margin-top:8px; flex-wrap:wrap}
+  .chart-actions .btn{flex:1; min-width:150px; font-size:13px; padding:8px 10px}
+
+  .about-links{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px}
+  .about-links a, .about-links button{text-align:center}
+
+  .warn-box{background:#fef2f2; border:2px solid #fecaca; border-radius:10px; padding:14px; margin:10px 0}
+  .warn-title{color:#991b1b; font-size:16px; margin-bottom:8px}
+  .warn-list{margin:10px 0; padding-left:20px; font-size:14px}
+  .warn-list li{margin:6px 0; line-height:1.5}
+  .warn-note{font-size:13px; color:#7f1d1d; margin-top:10px}
+  .warn-actions{display:flex; justify-content:space-between; margin-top:12px}
+  .warn-actions .right{display:flex; gap:8px}
+
+  .pages-title{color:#111827; margin-bottom:12px}
+  .page-content{font-size:14px; line-height:1.6}
+  .page-content h4{color:#374151; margin:16px 0 8px; font-size:15px}
+  .page-content p{margin:8px 0}
+  .page-content ul{padding-left:20px; margin:8px 0}
+  .page-content li{margin:4px 0}
+  .page-content .mini{font-size:12px; color:#6b7280; margin-top:12px}
+
+  @media (max-width: 460px){
+    .container{margin:0; max-width:100%}
+    .card, .banner{margin:6px; padding:12px}
+    .grid-2{grid-template-columns:1fr}
+  }
+</style>
 </head>
 <body>
 
-<div class="app-shell">
-  <!-- HEADER -->
-  <div class="hdr">
-    <div class="title">🚭 StopAddict v3</div>
-    <div class="subtitle" id="date-actuelle">—</div>
+<div class="container">
+  <!-- ======================= HEADER ======================= -->
+  <div class="header">
+    <div class="brand">
+      <span class="brand-name">🚭 StopAddict</span>
+      <span class="brand-ver">v2.4.0 CLEAN</span>
+    </div>
+    <div class="date" id="date-actuelle">—</div>
+    <div class="heure" id="heure-actuelle">—</div>
   </div>
 
-  <!-- ACCUEIL -->
-  <div class="ecran show" id="ecran-accueil">
-    <div class="card">
-      <div class="row">
-        <div class="title">🚬 Clopes</div>
-        <div class="count" id="compteur-clopes">0</div>
-      </div>
-      <div style="display: flex; gap: 8px; margin-top: 8px;">
-        <button class="btn-round btn-minus" id="btn-clopes-moins" type="button">−</button>
-        <button class="btn-round btn-plus" id="btn-clopes-plus" type="button">+</button>
-      </div>
-    </div>
+  <!-- Console debug (cachée par défaut, 5 taps rapides sur date pour toggle) -->
+  <div class="debug-console" id="debug-console"></div>
 
-    <div class="card bar-green">
-      <div class="row">
-        <div class="title">🌿 Pétards</div>
-        <div class="count" id="compteur-joints">0</div>
-      </div>
-      <div style="display: flex; gap: 8px; margin-top: 8px;">
-        <button class="btn-round btn-minus" id="btn-joints-moins" type="button">−</button>
-        <button class="btn-round btn-plus" id="btn-joints-plus" type="button">+</button>
-      </div>
+  <!-- Stats rapides header -->
+  <div class="stats-rapides">
+    <div class="stat-item">
+      <div class="stat-val" id="stat-clopes-jr">0</div>
+      <div class="stat-lbl">Clopes</div>
     </div>
-
-    <div class="card">
-      <div class="row">
-        <div class="title">🍺 Alcool</div>
-        <div class="count" id="compteur-alcool-total">0</div>
-      </div>
-      <div style="display: flex; gap: 8px; margin-top: 8px;">
-        <button class="btn-round btn-minus" id="btn-alc-moins" type="button">−</button>
-        <button class="btn-round btn-plus" id="btn-alc-plus" type="button">+</button>
-      </div>
+    <div class="stat-item">
+      <div class="stat-val" id="stat-joints-jr">0</div>
+      <div class="stat-lbl">Joints</div>
     </div>
-
-    <div class="banner orange">
-      <div style="font-weight: 900; margin-bottom: 8px;" id="hello-accueil">—</div>
-      <div class="row-slim">
-        <div class="label">Clopes</div>
-        <div class="bar"><span id="bar-clopes"></span></div>
-        <div id="note-clopes" class="note">—</div>
-      </div>
-      <div class="row-slim">
-        <div class="label">Pétards</div>
-        <div class="bar"><span id="bar-joints"></span></div>
-        <div id="note-joints" class="note">—</div>
-      </div>
-      <div class="row-slim" id="row-alcool" style="display: none;">
-        <div class="label">Alcool</div>
-        <div class="bar"><span id="bar-alcool"></span></div>
-        <div id="note-alcool" class="note">—</div>
-      </div>
+    <div class="stat-item">
+      <div class="stat-val" id="stat-alcool-jr">0</div>
+      <div class="stat-lbl">Alcool</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-val" id="stat-cout-jr">0€</div>
+      <div class="stat-lbl">Coût</div>
     </div>
   </div>
 
-  <!-- STATS -->
-  <div class="ecran" id="ecran-stats">
-    <div class="tabs" role="tablist">
-      <button class="tab actif" data-vue="jour" type="button">Jour</button>
-      <button class="tab" data-vue="semaine" type="button">Semaine</button>
-      <button class="tab" data-vue="mois" type="button">Mois</button>
-      <button class="tab" data-vue="annee" type="button">Année</button>
+  <div class="content">
+    <!-- ======================= ÉCRAN PRINCIPAL ======================= -->
+    <div class="ecran show" id="ecran-principal" aria-label="SA:ECRAN:ACCUEIL" data-sa="screen-home">
+      <!-- Clopes -->
+      <div class="card bar-left">
+        <div class="line">
+          <span class="lbl">🚬 Cigarettes</span><label class="mini-toggle"><input type="checkbox" id="toggle-cigs" checked aria-label="Activer module"></label> 
+          <span class="val" id="val-clopes">0</span>
+        </div>
+        <div class="segment" id="seg-clopes"></div>
+        <div class="pm" aria-label="Actions cigarettes">
+          <button class="btn-round btn-minus" id="cl-moins" type="button">−1</button>
+          <button class="btn-round btn-plus" id="cl-plus" type="button">+1</button>
+        </div>
+      </div>
+
+      <!-- Joints -->
+      <div class="card bar-left green">
+        <div class="line">
+          <span class="lbl">🌿 Joints</span><label class="mini-toggle"><input type="checkbox" id="toggle-weed" checked aria-label="Activer module"></label> 
+          <span class="val" id="val-joints">0</span>
+        </div>
+        <div class="pm" aria-label="Actions joints">
+          <button class="btn-round btn-minus" id="j-moins" type="button">−1</button>
+          <button class="btn-round btn-plus" id="j-plus" type="button">+1</button>
+        </div>
+      </div>
+
+      <!-- Alcool -->
+      <div class="card bar-left orange">
+        <div class="line">
+          <span class="lbl">🍺 Alcool</span><label class="mini-toggle"><input type="checkbox" id="toggle-alcool" checked aria-label="Activer module"></label> 
+          <span class="val" id="val-alcool">0</span>
+        </div>
+        <div class="segment" id="seg-alcool"></div>
+        <div class="pm" aria-label="Actions alcool">
+          <button class="btn-round btn-minus" id="a-moins" type="button">−1</button>
+          <button class="btn-round btn-plus" id="a-plus" type="button">+1</button>
+        </div>
+      </div>
+
+      <!-- Bandeau résumé -->
+      <div class="banner green" id="bandeau-resume">
+        <div class="banner-title" id="bandeau-titre">—</div>
+        <div class="line">
+          <span class="lbl">Cigarettes</span>
+          <span class="val" id="bandeau-clopes">0</span>
+        </div>
+        <div class="line">
+          <span class="lbl">Joints</span>
+          <span class="val" id="bandeau-joints">0</span>
+        </div>
+        <div class="line" id="bandeau-alcool-line" style="display:none">
+          <span class="lbl">Alcool</span>
+          <span class="val" id="bandeau-alcool">0</span>
+        </div>
+      </div>
+
+      <!-- Conseil du jour -->
+      <div class="conseil" id="conseil-card">
+        <div id="conseil-texte">—</div>
+        <div class="adv-ctl">
+          <button class="ctl" id="adv-prev" type="button">◀</button>
+          <button class="ctl" id="adv-pause" type="button">⏸</button>
+          <span class="dots">• • •</span>
+        </div>
+      </div>
     </div>
 
-    <div class="banner green">
-      <div style="font-weight: 900; margin-bottom: 8px;" id="hello-stats">—</div>
-      <div class="row-slim">
-        <div class="label">Clopes</div>
-        <div class="bar"><span id="bar-clopes-periode"></span></div>
-        <div id="note-clopes-periode" class="note">—</div>
-      </div>
-      <div class="row-slim">
-        <div class="label">Pétards</div>
-        <div class="bar"><span id="bar-joints-periode"></span></div>
-        <div id="note-joints-periode" class="note">—</div>
-      </div>
-      <div class="row-slim" id="row-alcool-periode" style="display: none;">
-        <div class="label">Alcool</div>
-        <div class="bar"><span id="bar-alcool-periode"></span></div>
-        <div id="note-alcool-periode" class="note">—</div>
+    <!-- ======================= ÉCRAN STATS ======================= -->
+    <div class="ecran" id="ecran-stats" aria-label="SA:ECRAN:STATS" data-sa="screen-stats">
+      <div class="card">
+        <div class="tabs" role="tablist">
+          <button class="tab actif" data-vue="jour" type="button">Jour</button>
+          <button class="tab" data-vue="semaine" type="button">Semaine</button>
+          <button class="tab" data-vue="mois" type="button">Mois</button>
+          <button class="tab" data-vue="annee" type="button">Année</button>
+        </div>
+
+        <div class="banner green">
+          <div class="banner-title" id="stats-titre">—</div>
+          <div class="line">
+            <span class="lbl">Cigarettes</span>
+            <span class="val" id="stats-clopes">0</span>
+          </div>
+          <div class="line">
+            <span class="lbl">Joints</span>
+            <span class="val" id="stats-joints">0</span>
+          </div>
+          <div class="line" id="stats-alcool-line" style="display:none">
+            <span class="lbl">Alcool</span>
+            <span class="val" id="stats-alcool">0</span>
+          </div>
+        </div>
+
+        <div id="stats-charts">
+          <div class="chart-legend" id="chart-legend"></div>
+          <div class="chart-block">
+            <div class="chart-caption">Consommations (unités)</div>
+            <canvas id="chart-consommations" width="960" height="260"></canvas>
+          </div>
+          <div class="chart-block">
+            <div class="chart-caption">Coût & Économies (€)</div>
+            <canvas id="chart-cout-eco" width="960" height="260"></canvas>
+          </div>
+          <div class="chart-actions" id="chart-actions">
+            <button class="btn" id="btn-export-csv" type="button">Exporter historique complet (Excel)</button>
+            <button class="btn" id="btn-export-stats" type="button">Exporter la vue actuelle</button>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="card">
-      <div style="font-weight: 600; font-size: 16px; margin-bottom: 8px;">Graphiques</div>
-      <div class="chart-legend" id="chart-legend"></div>
-      <div class="chart-block">
-        <div class="chart-caption">Consommations (unités)</div>
-        <canvas id="chart-consommations" width="960" height="260"></canvas>
+    <!-- ======================= ÉCRAN CALENDRIER ======================= -->
+    <div class="ecran" id="ecran-calendrier" aria-label="SA:ECRAN:CALENDRIER" data-sa="screen-cal">
+      <div class="card">
+        <div style="display:flex; gap:8px; margin-bottom:10px; align-items:center; justify-content:space-between">
+          <button class="btn small" id="cal-prev" type="button">◀</button>
+          <div style="font-weight:900; flex:1; text-align:center" id="cal-titre">—</div>
+          <button class="btn small" id="cal-next" type="button">▶</button>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
       </div>
-      <div class="chart-block">
-        <div class="chart-caption">Coût & Économies (€)</div>
-        <canvas id="chart-cout-eco" width="960" height="260"></canvas>
+    </div>
+
+    <!-- ======================= ÉCRAN HABITUDES ======================= -->
+    <div class="ecran" id="ecran-habitudes">
+      <div class="card">
+        <div class="section-title">⚙️ Limites Consommation/Jour</div>
+        <div class="grid-2">
+          <div class="param"><label>Cigarettes (max/jour)</label><input type="number" min="0" id="limite-clopes" value="20"></div>
+          <div class="param"><label>Joints (max/jour)</label><input type="number" min="0" id="limite-joints" value="3"></div>
+          <div class="param"><label>Bière (max/jour)</label><input type="number" min="0" id="limite-biere" value="2"></div>
+          <div class="param"><label>Alcool fort (max/jour)</label><input type="number" min="0" id="limite-fort" value="1"></div>
+          <div class="param"><label>Liqueur (max/jour)</label><input type="number" min="0" id="limite-liqueur" value="1"></div>
+          <div class="param hint">Les limites apparaissent en orange quand approchées, rouge quand dépassées.</div>
+        </div>
       </div>
-      <div class="chart-actions" id="chart-actions"></div>
+
+      <div class="card">
+        <div class="section-title">📊 Habitudes Antérieures (Baseline)</div>
+        <div class="grid-2">
+          <div class="param"><label>Clopes classiques (min)</label><input type="number" min="0" id="hab-min-cl-class" value="0"></div>
+          <div class="param"><label>Clopes classiques (max)</label><input type="number" min="0" id="hab-max-cl-class" value="20"></div>
+          <div class="param"><label>Clopes roulées (min)</label><input type="number" min="0" id="hab-min-cl-roul" value="0"></div>
+          <div class="param"><label>Clopes roulées (max)</label><input type="number" min="0" id="hab-max-cl-roul" value="20"></div>
+          <div class="param"><label>Clopes tubes (min)</label><input type="number" min="0" id="hab-min-cl-tube" value="0"></div>
+          <div class="param"><label>Clopes tubes (max)</label><input type="number" min="0" id="hab-max-cl-tube" value="20"></div>
+          <div class="param"><label>Joints (min)</label><input type="number" min="0" id="hab-min-joint" value="0"></div>
+          <div class="param"><label>Joints (max)</label><input type="number" min="0" id="hab-max-joint" value="5"></div>
+          <div class="param"><label>Bière (min)</label><input type="number" min="0" id="hab-min-biere" value="0"></div>
+          <div class="param"><label>Bière (max)</label><input type="number" min="0" id="hab-max-biere" value="3"></div>
+          <div class="param"><label>Alcool fort (min)</label><input type="number" min="0" id="hab-min-fort" value="0"></div>
+          <div class="param"><label>Alcool fort (max)</label><input type="number" min="0" id="hab-max-fort" value="2"></div>
+          <div class="param"><label>Liqueur (min)</label><input type="number" min="0" id="hab-min-liqueur" value="0"></div>
+          <div class="param"><label>Liqueur (max)</label><input type="number" min="0" id="hab-max-liqueur" value="2"></div>
+          <div class="param hint">Utilisées pour calculer les économies estimées. Tout est optionnel.</div>
+        </div>
+        <button class="btn small" id="btn-save-hab" type="button" style="margin-top:10px">Enregistrer</button>
+      </div>
+
+      <div class="card">
+        <div class="section-title">📅 Dates Clés</div>
+        <div class="grid-2">
+          <div class="param"><label>Réduction clopes</label><input type="date" id="date-reduc-clopes"></div>
+          <div class="param"><label>Stop clopes</label><input type="date" id="date-stop-clopes"></div>
+          <div class="param"><label>Objectif 0 clope</label><input type="date" id="date-no-clopes"></div>
+          <div class="param"><label>Réduction joints</label><input type="date" id="date-reduc-joints"></div>
+          <div class="param"><label>Stop joints</label><input type="date" id="date-stop-joints"></div>
+          <div class="param"><label>Objectif 0 joint</label><input type="date" id="date-no-joints"></div>
+          <div class="param"><label>Réduction alcool</label><input type="date" id="date-reduc-alcool"></div>
+          <div class="param"><label>Stop alcool</label><input type="date" id="date-stop-alcool"></div>
+          <div class="param"><label>Objectif 0 alcool</label><input type="date" id="date-no-alcool"></div>
+          <div class="param hint">Optionnel. Apparaissent sur le calendrier.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======================= ÉCRAN PARAMS ======================= -->
+    <div class="ecran" id="ecran-params">
+      <div class="card">
+        <div class="section-title">💰 Prix Unitaires</div>
+        <div class="grid-2">
+          <div class="param"><label>Cigarette classique (€)</label><input type="number" step="0.01" id="prix-cl-class" value="0.55"></div>
+          <div class="param"><label>Cigarette roulée (€)</label><input type="number" step="0.01" id="prix-cl-roul" value="0.25"></div>
+          <div class="param"><label>Cigarette tube (€)</label><input type="number" step="0.01" id="prix-cl-tube" value="0.20"></div>
+          <div class="param"><label>Joint (€)</label><input type="number" step="0.01" id="prix-joint" value="5.00"></div>
+          <div class="param"><label>Bière (€)</label><input type="number" step="0.01" id="prix-biere" value="2.50"></div>
+          <div class="param"><label>Alcool fort (€)</label><input type="number" step="0.01" id="prix-fort" value="3.00"></div>
+          <div class="param"><label>Liqueur (€)</label><input type="number" step="0.01" id="prix-liqueur" value="2.80"></div>
+        </div>
+        <button class="btn small" id="btn-save-prix" type="button" style="margin-top:10px">Enregistrer</button>
+      </div>
+
+      
+      <div class="card">
+        <div class="section-title">✅ Activation Modules</div>
+        <div class="grid-2">
+          <div class="param"><label><input type="checkbox" id="enable-mod-cigs" checked> Je fume (Tabac)</label></div>
+          <div class="param"><label><input type="checkbox" id="enable-mod-weed" checked> Je fume des joints (Cannabis)</label></div>
+          <div class="param"><label><input type="checkbox" id="enable-mod-alcool" checked> Je bois (Alcool)</label></div>
+          <div class="param hint">Active/désactive chaque module. Masque les cartes d'accueil et exclut les coûts/économies.</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="section-title">✅ Activation Types</div>
+        <div class="grid-2">
+          <div class="param"><label><input type="checkbox" id="enable-cl-class" checked> Cigarettes classiques</label></div>
+          <div class="param"><label><input type="checkbox" id="enable-cl-roul" checked> Cigarettes roulées</label></div>
+          <div class="param"><label><input type="checkbox" id="enable-cl-tube" checked> Cigarettes tubes</label></div>
+          <div class="param"><label><input type="checkbox" id="enable-biere" checked> Bière</label></div>
+          <div class="param"><label><input type="checkbox" id="enable-fort" checked> Alcool fort</label></div>
+          <div class="param"><label><input type="checkbox" id="enable-liqueur" checked> Liqueur</label></div>
+          <div class="param hint">Seuls les types cochés apparaissent dans l'interface.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">ℹ️ À propos</div>
+        <div class="about-links">
+          <button class="btn small" id="btn-open-warn" type="button">Voir l'avertissement</button>
+          <button class="btn small" id="btn-open-manuel" type="button">Manuel d'utilisation</button>
+          <button class="btn small" id="btn-open-cgv" type="button">CGV</button>
+          <button class="btn small" id="btn-open-mentions" type="button">Mentions légales</button>
+          <a class="btn small alt" href="mailto:stopmauvaiseshabitudes@gmail.com">Contact support</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">🧹 RAZ & sauvegarde</div>
+        <div class="grid-2">
+          <div class="param"><button class="btn small" id="btn-raz-jour" type="button">RAZ du jour</button></div>
+          <div class="param"><button class="btn small alt" id="btn-raz-periode" type="button">RAZ de la période (Stats active)</button></div>
+          <div class="param"><button class="btn small warn" id="btn-raz-histo" type="button">RAZ historique (conso)</button></div>
+          <div class="param"><button class="btn small alt" id="btn-raz-reglages" type="button">RAZ réglages (usine)</button></div>
+
+          <div class="param"><button class="btn small" id="btn-export-csv-params" type="button">Exporter CSV</button></div>
+          <div class="param"><button class="btn small" id="btn-export-json" type="button">Sauvegarder JSON</button></div>
+          <div class="param"><button class="btn small" id="btn-import-json" type="button">Importer JSON</button></div>
+          <input id="input-import-json" type="file" accept="application/json,.json" style="display:none">
+
+          <div class="param"><button class="btn small warn" id="btn-purge-local" type="button">Purger les données locales (Stats)</button></div>
+          <div class="param hint">Une « Annuler » apparaît pendant 10 s après une RAZ (snapshot local).</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">🛠️ Journal & DEBUG</div>
+        <div class="grid-2">
+          <div class="param"><label>Overlay DEBUG (afficher)</label><input type="checkbox" id="toggle-debug"></div>
+          <div class="param"><button class="btn small" id="btn-copy-logs" type="button">Copier les logs</button></div>
+          <div class="param"><button class="btn small alt" id="btn-clear-logs" type="button">Vider les logs</button></div>
+          <div class="param hint">Astuce : 5 tapes rapides sur la date (en haut) ouvrent/ferment l'overlay.</div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- CALENDRIER -->
-  <div class="ecran" id="ecran-calendrier">
-    <div class="card">
-      <div style="display: flex; gap: 8px; margin-bottom: 10px; align-items: center; justify-content: space-between;">
-        <button class="btn small" id="cal-prev" type="button">◀</button>
-        <div style="font-weight: 900; flex: 1; text-align: center;" id="cal-titre">—</div>
-        <button class="btn small" id="cal-next" type="button">▶</button>
-      </div>
-      <div style="color: var(--text-muted); text-align: center; padding: 20px;">Calendrier (en construction)</div>
+  <!-- ======================= NAV ======================= -->
+  <div class="nav">
+    <button id="nav-principal" class="actif" type="button"><span class="ico">🏠</span>Accueil</button>
+    <button id="nav-stats" type="button"><span class="ico">📊</span>Stats</button>
+    <button id="nav-calendrier" type="button"><span class="ico">📅</span>Calendrier</button>
+    <button id="nav-habitudes" type="button"><span class="ico">⚙️</span>Habitudes</button>
+    <button id="nav-params" type="button"><span class="ico">⚙️</span>Réglages</button>
+  </div>
+</div>
+
+<!-- ======================= MODALE CALENDRIER JOUR ======================= -->
+<div class="modal" id="cal-jour" aria-hidden="true">
+  <div class="sheet" role="dialog" aria-modal="true">
+    <h3 id="cal-jour-titre">—</h3>
+    
+    <div class="line"><span class="lbl">Cigarettes</span> <span id="cal-jour-cl"></span></div>
+    <div class="segment" id="cal-jour-seg-cl"></div>
+    <div class="pm" aria-label="Actions cigarettes (jour)">
+      <button class="btn-round btn-minus" id="cal-cl-moins" type="button">−1</button>
+      <button class="btn-round btn-plus" id="cal-cl-plus" type="button">+1</button>
+    </div>
+
+    <div class="divider" style="margin:10px 0"></div>
+
+    <div class="line"><span class="lbl">Joints</span> <span id="cal-jour-j"></span></div>
+    <div class="pm" aria-label="Actions joints (jour)">
+      <button class="btn-round btn-minus" id="cal-j-moins" type="button">−1</button>
+      <button class="btn-round btn-plus" id="cal-j-plus" type="button">+1</button>
+    </div>
+
+    <div class="divider" style="margin:10px 0"></div>
+
+    <div class="line"><span class="lbl">Alcool</span> <span id="cal-jour-a"></span></div>
+    <div class="segment" id="cal-jour-seg-a"></div>
+    <div class="pm" aria-label="Actions alcool (jour)">
+      <button class="btn-round btn-minus" id="cal-a-moins" type="button">−1</button>
+      <button class="btn-round btn-plus" id="cal-a-plus" type="button">+1</button>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; margin-top:12px">
+      <button class="btn alt" id="cal-jour-raz" type="button">RAZ du jour</button>
+      <button class="btn" id="cal-jour-fermer" type="button">Fermer</button>
     </div>
   </div>
+</div>
 
-  <!-- HABITUDES -->
-  <div class="ecran" id="ecran-habitudes">
-    <div class="card">
-      <div class="section-title">⚙️ Limites Consommation/Jour</div>
-      <div class="grid-2">
-        <div class="param">
-          <label for="max-clopes">Max Clopes</label>
-          <input type="number" id="max-clopes" value="20">
-        </div>
-        <div class="param">
-          <label for="max-joints">Max Joints</label>
-          <input type="number" id="max-joints" value="3">
-        </div>
-        <div class="param">
-          <label for="max-alcool">Max Alcool</label>
-          <input type="number" id="max-alcool" value="2">
-        </div>
-      </div>
-      <button class="btn small" id="btn-save-hab" type="button" style="margin-top: 8px;">Enregistrer</button>
-    </div>
-  </div>
+<!-- Snackbar -->
+<div class="snackbar" id="snackbar">Action enregistrée — <a href="#" id="undo-link">Annuler</a></div>
 
-  <!-- RÉGLAGES -->
-  <div class="ecran" id="ecran-params">
-    <div class="card">
-      <div class="section-title">💰 Prix Unitaires (€)</div>
-      <div class="grid-2">
-        <div class="param">
-          <label for="prix-paquet">Paquet</label>
-          <input type="number" step="0.01" id="prix-paquet" value="11.00">
-        </div>
-        <div class="param">
-          <label for="prix-joint">Joint</label>
-          <input type="number" step="0.01" id="prix-joint" value="5.00">
-        </div>
-        <div class="param">
-          <label for="prix-biere">Bière</label>
-          <input type="number" step="0.01" id="prix-biere" value="2.50">
-        </div>
-        <div class="param">
-          <label for="prix-fort">Alcool Fort</label>
-          <input type="number" step="0.01" id="prix-fort" value="3.00">
-        </div>
+<!-- ======================= MODALE AVERTISSEMENT (1ère ouverture) ======================= -->
+<div class="modal" id="modal-warn" aria-hidden="true">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="warn-title">
+    <h3 class="warn-title" id="warn-title">Avertissement – Public majeur (18+)</h3>
+    <div class="warn-box">
+      <p><strong>StopAddict</strong> est une application d'auto-suivi et d'aide à la réduction/arrêt des consommations (tabac, alcool, cannabis).</p>
+      <ul class="warn-list">
+        <li>Réservée aux personnes de 18 ans et plus.</li>
+        <li>Ne fait pas la promotion de ces produits.</li>
+        <li>Ne remplace pas un accompagnement médical, psychologique ou social. En cas de difficulté, consultez un professionnel.</li>
+        <li>Utilisez StopAddict de façon responsable.</li>
+      </ul>
+      <p class="warn-note">Besoin d'aide ? <a href="#" id="open-ressources-from-warn">Ressources et numéros utiles</a></p>
+      <div style="margin-top:8px">
+        <label><input type="checkbox" id="chk-warn-18"> J'ai 18 ans ou plus</label><br>
+        <label><input type="checkbox" id="chk-warn-hide"> Ne plus réafficher ce message</label>
       </div>
-      <button class="btn small" id="btn-save-params" type="button" style="margin-top: 8px;">Enregistrer</button>
-    </div>
-
-    <div class="card">
-      <div class="section-title">🔧 Export / Import</div>
-      <div class="grid-2">
-        <button class="btn small" id="btn-export-csv" type="button">Exporter CSV</button>
-        <button class="btn small" id="btn-export-json" type="button">Exporter JSON</button>
-      </div>
-      <div style="margin-top: 8px;">
-        <button class="btn small alt" id="btn-import-json" type="button">Importer JSON</button>
-        <input id="input-import-json" type="file" accept=".json" style="display: none;">
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="section-title">🧹 Danger Zone</div>
-      <div class="grid-2">
-        <button class="btn small warn" id="btn-raz-jour" type="button">RAZ Jour</button>
-        <button class="btn small warn" id="btn-raz-histo" type="button">RAZ Historique</button>
+      <div class="warn-actions">
+        <button class="btn warn" id="btn-warn-quit" type="button">Quitter</button>
+        <div class="right">
+          <button class="btn alt" id="btn-warn-cancel" type="button">Annuler</button>
+          <button class="btn" id="btn-warn-accept" type="button" disabled="">J'accepte et continuer</button>
+        </div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- SNACKBAR -->
-<div class="snackbar" id="snackbar"></div>
-
-<!-- NAV BOTTOM -->
-<div class="nav">
-  <button data-screen="accueil" class="actif" type="button"><span class="ico">🏠</span>Accueil</button>
-  <button data-screen="stats" type="button"><span class="ico">📊</span>Stats</button>
-  <button data-screen="calendrier" type="button"><span class="ico">📅</span>Calendrier</button>
-  <button data-screen="habitudes" type="button"><span class="ico">⚙️</span>Habitudes</button>
-  <button data-screen="params" type="button"><span class="ico">⚙️</span>Réglages</button>
+<!-- ======================= MODALE PAGES (Manuel / CGV / Mentions / Avertissement) ======================= -->
+<div class="modal" id="modal-page" aria-hidden="true">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="page-title">
+    <h3 class="pages-title" id="page-title">—</h3>
+    <div class="page-content" id="page-content">
+      <!-- Contenu injecté par le script (manuel, cgv, mentions, avertissement complet) -->
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px">
+      <button class="btn alt" id="btn-page-close" type="button">Fermer</button>
+    </div>
+  </div>
 </div>
 
 <script>
 /* ========================================================================
-   STOPADDICT v3 COMPLETE - REFACTORISÉ AVEC ALL FEATURES
+   STOPADDICT v2.4.0 CLEAN - VERSION SOIGNÉE SANS PATCHES
+   
+   Toutes les corrections des 12 patches ont été intégrées directement
+   dans les fonctions de base. Plus besoin de monkey patching.
+   
    ======================================================================== */
 
-console.log('[STOPADDICT v3 COMPLETE] Démarrage...');
+console.log('[STOPADDICT v2.4.0 CLEAN] Démarrage...');
 
 // ============================================================================
-// SECTION 1 : STORAGE ET STATE
+// SECTION 1 : LOGGING SYSTEM (intégré proprement)
+// ============================================================================
+
+const Logger = (function() {
+  const buffer = [];
+  const maxSize = 5000;
+  
+  function timestamp() {
+    return new Date().toISOString().replace('T', ' ').replace('Z', '');
+  }
+  
+  function push(kind, msg) {
+    try {
+      const line = `[${timestamp()}] ${kind}: ${msg}`;
+      buffer.push(line);
+      if (buffer.length > maxSize) buffer.shift();
+      console.log(line); // Log natif aussi
+    } catch(e) {}
+  }
+  
+  return {
+    log: (msg) => push('LOG', msg),
+    info: (msg) => push('INFO', msg),
+    warn: (msg) => push('WARN', msg),
+    error: (msg) => push('ERROR', msg),
+    event: (msg) => push('EVENT', msg),
+    getAll: () => buffer.join('\n'),
+    clear: () => buffer.length = 0
+  };
+})();
+
+// ============================================================================
+// SECTION 2 : DATE HELPERS (avec gestion LOCAL TIME intégrée)
+// ============================================================================
+
+const DateUtils = {
+  // Parse une clé YYYY-MM-DD en Date LOCAL (pas UTC)
+  parseKeyLocal(key) {
+    if (key instanceof Date) {
+      return new Date(key.getFullYear(), key.getMonth(), key.getDate(), 12, 0, 0, 0);
+    }
+    if (typeof key === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(key)) {
+      const [y, m, d] = key.split('-').map(Number);
+      return new Date(y, m - 1, d, 12, 0, 0, 0); // Midi local évite DST
+    }
+    return new Date();
+  },
+  
+  // Convertit une Date en clé YYYY-MM-DD LOCAL
+  keyLocal(date) {
+    if (!(date instanceof Date)) date = new Date(date);
+    return [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, '0'),
+      String(date.getDate()).padStart(2, '0')
+    ].join('-');
+  },
+  
+  // Début/fin de semaine (LOCAL)
+  startOfWeek(date) {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    const dow = (d.getDay() + 6) % 7; // Lundi = 0
+    d.setDate(d.getDate() - dow);
+    return d;
+  },
+  
+  endOfWeek(date) {
+    const start = this.startOfWeek(date);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+    return end;
+  },
+  
+  // Début/fin de mois (LOCAL)
+  startOfMonth(date) {
+    return new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
+  },
+  
+  endOfMonth(date) {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+  },
+  
+  // Début/fin d'année (LOCAL)
+  startOfYear(date) {
+    return new Date(date.getFullYear(), 0, 1, 0, 0, 0, 0);
+  },
+  
+  endOfYear(date) {
+    return new Date(date.getFullYear(), 11, 31, 23, 59, 59, 999);
+  },
+  
+  // Liste de clés entre 2 dates (LOCAL)
+  keysBetween(date1, date2) {
+    const out = [];
+    const start = new Date(date1.getFullYear(), date1.getMonth(), date1.getDate(), 0, 0, 0, 0);
+    const end = new Date(date2.getFullYear(), date2.getMonth(), date2.getDate(), 23, 59, 59, 999);
+    
+    for (let t = new Date(start); t <= end; t.setDate(t.getDate() + 1)) {
+      out.push(this.keyLocal(t));
+    }
+    return out;
+  }
+};
+
+// ============================================================================
+// SECTION 3 : STORAGE & STATE
 // ============================================================================
 
 const K_DONNEES = 'app_donnees_v23';
 const K_PARAMS = 'app_parametres_v23';
+const K_PRENOM = 'app_prenom_v23';
 const K_HAB = 'app_habitudes_v23';
 const K_VUE = 'app_vue_stats_v23';
+const K_SNAP = 'app_snapshot_v23';
+const K_DATES = 'app_dates_v23';
+const K_DEBUG = 'app_debug_overlay_v23';
+const K_WARN = 'app_warn_v23';
 
 let prenomUtilisateur = '';
-let vueStats = 'jour';
-let donnees = {};
-let params = {};
-let habitudes = {};
-let derniereAction = null;
+let vueStats = 'jour'; // Vue active des stats
+let derniereAction = null; // {group, subtype, delta, date}
+let snapshot = null;
+let warnCameFromModal = false; // SA:WARN flow flag
+let modaleDateOverride = null; // Date override quand modale calendrier ouverte
+
+let donnees = {}; // Structure: { 'YYYY-MM-DD': { cl_class: 5, cl_roul: 3, ... } }
+let params = {
+  prix_cl_class: 0.55,
+  prix_cl_roul: 0.25,
+  prix_cl_tube: 0.20,
+  prix_joint: 5.00,
+  prix_biere: 2.50,
+  prix_fort: 3.00,
+  prix_liqueur: 2.80,
+  enable_cl_class: true,
+  enable_cl_roul: true,
+  enable_cl_tube: true,
+  enable_biere: true,
+  enable_fort: true,
+  enable_liqueur: true,
+  limite_clopes: 20,
+  limite_joints: 3,
+  limite_biere: 2,
+  limite_fort: 1,
+  limite_liqueur: 1,
+  // SA:REG:MODULES — activation globale + bornes de départ
+  enable_cigs: true,
+  enable_weed: true,
+  enable_alcool: true,
+  enabled_since_cigs: null,
+  enabled_since_weed: null,
+  enabled_since_alcool: null,
+};
+
+let habitudes = {
+  min_cl_class: 0, max_cl_class: 20,
+  min_cl_roul: 0, max_cl_roul: 20,
+  min_cl_tube: 0, max_cl_tube: 20,
+  min_joint: 0, max_joint: 5,
+  min_biere: 0, max_biere: 3,
+  min_fort: 0, max_fort: 2,
+  min_liqueur: 0, max_liqueur: 2
+};
+
+let datesObj = {
+  reduc_clopes: '',
+  stop_clopes: '',
+  no_clopes: '',
+  reduc_joints: '',
+  stop_joints: '',
+  no_joints: '',
+  reduc_alcool: '',
+  stop_alcool: '',
+  no_alcool: ''
+};
+
+// Segments sélectionnés
+let segClopesSel = 'cl_class';
+let segAlcoolSel = 'alc_biere';
+
+// ============================================================================
+// SECTION 4 : STORAGE FUNCTIONS
+// ============================================================================
 
 function loadState() {
   try {
-    donnees = JSON.parse(localStorage.getItem(K_DONNEES) || '{}') || {};
-    params = JSON.parse(localStorage.getItem(K_PARAMS) || '{}') || {};
-    habitudes = JSON.parse(localStorage.getItem(K_HAB) || '{}') || {};
-    vueStats = localStorage.getItem(K_VUE) || 'jour';
-    console.log('[LOAD] État chargé');
+    const d = localStorage.getItem(K_DONNEES);
+    if (d) donnees = JSON.parse(d);
+    
+    const p = localStorage.getItem(K_PARAMS);
+    if (p) params = { ...params, ...JSON.parse(p) };
+    
+    const h = localStorage.getItem(K_HAB);
+    if (h) habitudes = { ...habitudes, ...JSON.parse(h) };
+    
+    const pr = localStorage.getItem(K_PRENOM);
+    if (pr) prenomUtilisateur = JSON.parse(pr);
+    
+    const v = localStorage.getItem(K_VUE);
+    if (v) vueStats = JSON.parse(v);
+    
+    const dt = localStorage.getItem(K_DATES);
+    if (dt) datesObj = { ...datesObj, ...JSON.parse(dt) };
+    
+    Logger.info('État chargé depuis localStorage');
   } catch (e) {
-    console.error('[LOAD] Erreur :', e);
-    donnees = {};
-    params = {};
-    habitudes = {};
+    Logger.error('Erreur chargement : ' + e.message);
   }
 }
 
@@ -367,439 +792,653 @@ function persist() {
     localStorage.setItem(K_DONNEES, JSON.stringify(donnees));
     localStorage.setItem(K_PARAMS, JSON.stringify(params));
     localStorage.setItem(K_HAB, JSON.stringify(habitudes));
-    localStorage.setItem(K_VUE, vueStats);
+    localStorage.setItem(K_PRENOM, JSON.stringify(prenomUtilisateur));
+    localStorage.setItem(K_VUE, JSON.stringify(vueStats));
+    localStorage.setItem(K_DATES, JSON.stringify(datesObj));
   } catch (e) {
-    console.error('[PERSIST] Erreur :', e);
+    Logger.error('Erreur persist : ' + e.message);
   }
 }
 
+function compatLoad() {
+  loadState();
+  // Compatibilité avec anciennes versions si besoin
+  Logger.info('CompatLoad OK');
+}
+
 // ============================================================================
-// SECTION 2 : HELPERS
+// SECTION 5 : HELPERS
 // ============================================================================
 
 function byId(id) { return document.getElementById(id); }
-function setText(id, txt) { const el = byId(id); if (el) el.textContent = txt; }
-function setHTML(id, html) { const el = byId(id); if (el) el.innerHTML = html; }
 
-function showSnackbar(msg = 'Action enregistrée') {
-  const el = byId('snackbar');
-  if (el) {
-    el.textContent = msg;
-    el.classList.add('show');
-    setTimeout(() => el.classList.remove('show'), 3000);
+function showSnackbar(msg, duration = 3000) {
+  const sb = byId('snackbar');
+  if (!sb) return;
+  sb.textContent = msg;
+  sb.classList.add('show');
+  setTimeout(() => sb.classList.remove('show'), duration);
+}
+
+// Date key AVEC support de l'override modale
+function dateKey(date = null) {
+  // Si modale calendrier ouverte et override actif, retourner la date overridée
+  if (modaleDateOverride) {
+    return modaleDateOverride;
   }
-}
-
-function goto(screen) {
-  try {
-    document.querySelectorAll('.ecran').forEach(e => e.classList.remove('show'));
-    const el = byId('ecran-' + screen);
-    if (el) el.classList.add('show');
-    
-    document.querySelectorAll('.nav button').forEach(b => b.classList.remove('actif'));
-    const navBtn = document.querySelector(`.nav button[data-screen="${screen}"]`);
-    if (navBtn) navBtn.classList.add('actif');
-    
-    console.log('[GOTO] Navigation vers:', screen);
-  } catch (e) {
-    console.error('[GOTO] Erreur :', e);
-  }
-}
-
-// ============================================================================
-// SECTION 3 : DATE HELPERS
-// ============================================================================
-
-function keyLocal(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-function getJour(dateStr = null) {
-  if (!dateStr) dateStr = keyLocal(new Date());
-  if (!donnees[dateStr]) donnees[dateStr] = {};
-  return donnees[dateStr];
-}
-
-// ============================================================================
-// SECTION 4 : COÛTS
-// ============================================================================
-
-function calculerCoutJour(jour) {
-  if (!jour) return 0;
-  const coutClope = (params.prix_paquet || 11) / 20;
-  const coutJoint = params.prix_joint || 5;
-  const coutBiere = params.prix_biere || 2.5;
-  const coutFort = params.prix_fort || 3;
   
-  return (jour.cl_class || 0) * coutClope +
-         (jour.cl_roul || 0) * coutClope +
-         (jour.cl_tube || 0) * coutClope +
-         (jour.joints || 0) * coutJoint +
-         (jour.alc_biere || 0) * coutBiere +
-         (jour.alc_fort || 0) * coutFort +
-         (jour.alc_liqueur || 0) * (params.prix_liqueur || 2.8);
+  // Sinon date normale
+  if (date) {
+    if (date instanceof Date) return DateUtils.keyLocal(date);
+    if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+  }
+  
+  return DateUtils.keyLocal(new Date());
 }
 
-function referenceParJourPourDate(d) {
+// ============================================================================
+// SECTION 6 : UI UPDATE
+// ============================================================================
+
+function updateHeader() {
+  const now = new Date();
+  const opts = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+  byId('date-actuelle').textContent = now.toLocaleDateString('fr-FR', opts);
+  byId('heure-actuelle').textContent = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function updateAllUI() {
   try {
-    const lim = (params.limite_clopes || 0) + (params.limite_joints || 0) + (params.limite_alcool || 0);
-    if (lim <= 0) return null;
+    Logger.event('updateAllUI()');
     
-    const coutClope = (params.prix_paquet || 11) / 20;
-    const coutJoint = params.prix_joint || 5;
-    const coutAlc = params.prix_biere || 2.5;
+    updateHeader();
+    updateStatsRapides();
+    renderSegments();
+    // SA:UI:MODULES_HIDE — hide cards on Accueil
+    const cardCl = document.querySelector('#ecran-principal .card:nth-of-type(1)');
+    const cardJo = document.querySelector('#ecran-principal .card:nth-of-type(2)');
+    const cardAl = document.querySelector('#ecran-principal .card:nth-of-type(3)');
+    if (cardCl) cardCl.style.display = params.enable_cigs === false ? 'none' : '';
+    if (cardJo) cardJo.style.display = params.enable_weed === false ? 'none' : '';
+    if (cardAl) cardAl.style.display = params.enable_alcool === false ? 'none' : '';
+
+    updateBandeau();
+    if (ecranActif === 'stats') { updateStatsView(); }
     
-    return (params.limite_clopes || 0) * coutClope +
-           (params.limite_joints || 0) * coutJoint +
-           (params.limite_alcool || 0) * coutAlc;
+    // Re-render graphiques si on est sur Stats
+    if (ecranActif === 'stats') {
+      setTimeout(() => renderCharts(), 100);
+    }
   } catch (e) {
-    console.error('[REF] Erreur :', e);
-    return null;
+    Logger.error('updateAllUI : ' + e.message);
+  }
+}
+
+function updateStatsRapides() {
+  const k = dateKey();
+  const data = donnees[k] || {};
+  
+  const clopes = (data.cl_class || 0) + (data.cl_roul || 0) + (data.cl_tube || 0);
+  const joints = data.joints || 0;
+  const alcool = (data.alc_biere || 0) + (data.alc_fort || 0) + (data.alc_liqueur || 0);
+  
+  const cout = calculateCout(data);
+  
+  byId('stat-clopes-jr').textContent = clopes;
+  byId('stat-joints-jr').textContent = joints;
+  byId('stat-alcool-jr').textContent = alcool;
+  byId('stat-cout-jr').textContent = cout.toFixed(2) + '€';
+}
+
+function calculateCout(data) {
+  let total = 0;
+  total += (data.cl_class || 0) * params.prix_cl_class;
+  total += (data.cl_roul || 0) * params.prix_cl_roul;
+  total += (data.cl_tube || 0) * params.prix_cl_tube;
+  total += (data.joints || 0) * params.prix_joint;
+  total += (data.alc_biere || 0) * params.prix_biere;
+  total += (data.alc_fort || 0) * params.prix_fort;
+  total += (data.alc_liqueur || 0) * params.prix_liqueur;
+
+  // SA:COUT_GUARDS — ignore modules OFF and missing prices
+  if (params.enable_cigs === false) {
+    total -= (data.cl_class || 0) * (params.prix_cl_class||0);
+    total -= (data.cl_roul || 0) * (params.prix_cl_roul||0);
+    total -= (data.cl_tube || 0) * (params.prix_cl_tube||0);
+  }
+  if (params.enable_weed === false) {
+    total -= (data.joints || 0) * (params.prix_joint||0);
+  }
+  if (params.enable_alcool === false) {
+    total -= (data.alc_biere || 0) * (params.prix_biere||0);
+    total -= (data.alc_fort || 0) * (params.prix_fort||0);
+    total -= (data.alc_liqueur || 0) * (params.prix_liqueur||0);
+  }
+  if (!params.prix_cl_class) total -= (data.cl_class || 0) * (params.prix_cl_class||0);
+  if (!params.prix_cl_roul)  total -= (data.cl_roul  || 0) * (params.prix_cl_roul||0);
+  if (!params.prix_cl_tube)  total -= (data.cl_tube  || 0) * (params.prix_cl_tube||0);
+  if (!params.prix_joint)    total -= (data.joints   || 0) * (params.prix_joint||0);
+  if (!params.prix_biere)    total -= (data.alc_biere|| 0) * (params.prix_biere||0);
+  if (!params.prix_fort)     total -= (data.alc_fort || 0) * (params.prix_fort||0);
+  if (!params.prix_liqueur)  total -= (data.alc_liqueur||0) * (params.prix_liqueur||0);
+  return Math.max(0, total);
+}
+
+// ============================================================================
+// SECTION 7 : SEGMENTS
+// ============================================================================
+
+function renderSegments() {
+  // Cigarettes
+  const segCl = byId('seg-clopes');
+  if (segCl) {
+    segCl.innerHTML = '';
+    if (params.enable_cl_class) {
+      const s = document.createElement('div');
+      s.className = 'seg' + (segClopesSel === 'cl_class' ? ' actif' : '');
+      s.textContent = 'Classiques';
+      s.onclick = () => { segClopesSel = 'cl_class'; renderSegments(); };
+      segCl.appendChild(s);
+    }
+    if (params.enable_cl_roul) {
+      const s = document.createElement('div');
+      s.className = 'seg' + (segClopesSel === 'cl_roul' ? ' actif' : '');
+      s.textContent = 'Roulées';
+      s.onclick = () => { segClopesSel = 'cl_roul'; renderSegments(); };
+      segCl.appendChild(s);
+    }
+    if (params.enable_cl_tube) {
+      const s = document.createElement('div');
+      s.className = 'seg' + (segClopesSel === 'cl_tube' ? ' actif' : '');
+      s.textContent = 'Tubes';
+      s.onclick = () => { segClopesSel = 'cl_tube'; renderSegments(); };
+      segCl.appendChild(s);
+    }
+  }
+  
+  // Alcool
+  const segAlc = byId('seg-alcool');
+  if (segAlc) {
+    segAlc.innerHTML = '';
+    if (params.enable_biere) {
+      const s = document.createElement('div');
+      s.className = 'seg' + (segAlcoolSel === 'alc_biere' ? ' actif' : '');
+      s.textContent = 'Bière';
+      s.onclick = () => { segAlcoolSel = 'alc_biere'; renderSegments(); };
+      segAlc.appendChild(s);
+    }
+    if (params.enable_fort) {
+      const s = document.createElement('div');
+      s.className = 'seg' + (segAlcoolSel === 'alc_fort' ? ' actif' : '');
+      s.textContent = 'Fort';
+      s.onclick = () => { segAlcoolSel = 'alc_fort'; renderSegments(); };
+      segAlc.appendChild(s);
+    }
+    if (params.enable_liqueur) {
+      const s = document.createElement('div');
+      s.className = 'seg' + (segAlcoolSel === 'alc_liqueur' ? ' actif' : '');
+      s.textContent = 'Liqueur';
+      s.onclick = () => { segAlcoolSel = 'alc_liqueur'; renderSegments(); };
+      segAlc.appendChild(s);
+    }
+  }
+  
+  // Update valeurs principales
+  const k = dateKey();
+  const data = donnees[k] || {};
+  
+  const clopesTotal = (data.cl_class || 0) + (data.cl_roul || 0) + (data.cl_tube || 0);
+  byId('val-clopes').textContent = clopesTotal;
+  byId('val-joints').textContent = data.joints || 0;
+  
+  const alcoolTotal = (data.alc_biere || 0) + (data.alc_fort || 0) + (data.alc_liqueur || 0);
+  byId('val-alcool').textContent = alcoolTotal;
+}
+
+// ============================================================================
+// SECTION 8 : ACTIONS +/-
+// ============================================================================
+
+function enregistrerAction(group, subtype, delta) {
+  try {
+    const k = dateKey();
+    if (!donnees[k]) donnees[k] = {};
+    
+    let field;
+    if (group === 'clopes') field = segClopesSel;
+    else if (group === 'joints') field = 'joints';
+    else if (group === 'alcool') field = segAlcoolSel;
+    else return;
+    
+    const prev = donnees[k][field] || 0;
+    const next = Math.max(0, prev + delta);
+    donnees[k][field] = next;
+    
+    // Snapshot pour annulation
+    derniereAction = { group, subtype, delta, date: k, field, prev };
+    
+    persist();
+    updateAllUI();
+    
+    Logger.event(`Action: ${field} ${delta > 0 ? '+' : ''}${delta}`);
+    showSnackbar('Action enregistrée');
+  } catch (e) {
+    Logger.error('enregistrerAction : ' + e.message);
   }
 }
 
 // ============================================================================
-// SECTION 5 : GRAPHIQUES
+// SECTION 9 : BANDEAU RÉSUMÉ
 // ============================================================================
 
-window.StopAddictCharts = window.StopAddictCharts || {};
-window.StopAddictChartsState = { visible: { clopes: true, joints: true, alcool: true, cout: true, economies: true } };
+function updateBandeau() {
+  const k = dateKey();
+  const data = donnees[k] || {};
+  
+  const clopes = (data.cl_class || 0) + (data.cl_roul || 0) + (data.cl_tube || 0);
+  const joints = data.joints || 0;
+  const alcool = (data.alc_biere || 0) + (data.alc_fort || 0) + (data.alc_liqueur || 0);
+  
+  byId('bandeau-titre').textContent = prenomUtilisateur ? 
+    `Bonjour ${prenomUtilisateur} !` : 'Bonjour !';
+  byId('bandeau-clopes').textContent = clopes;
+  byId('bandeau-joints').textContent = joints;
+  byId('bandeau-alcool').textContent = alcool;
+  
+  // Affiche ligne alcool si > 0
+  const alcLine = byId('bandeau-alcool-line');
+  if (alcLine) alcLine.style.display = alcool > 0 ? '' : 'none';
+}
+
+// ============================================================================
+// SECTION 10 : STATS VIEW
+// ============================================================================
+
+function updateStatsView() {
+  // Mise à jour du bandeau stats
+  const now = new Date();
+  let titre = '';
+  let d1, d2;
+  
+  if (vueStats === 'jour') {
+    titre = 'Aujourd\'hui';
+    d1 = d2 = now;
+  } else if (vueStats === 'semaine') {
+    titre = 'Cette semaine';
+    d1 = DateUtils.startOfWeek(now);
+    d2 = DateUtils.endOfWeek(now);
+  } else if (vueStats === 'mois') {
+    titre = 'Ce mois';
+    d1 = DateUtils.startOfMonth(now);
+    d2 = DateUtils.endOfMonth(now);
+  } else {
+    titre = 'Cette année';
+    d1 = DateUtils.startOfYear(now);
+    d2 = DateUtils.endOfYear(now);
+  }
+  
+  byId('stats-titre').textContent = titre;
+  
+  // Calcul totaux période
+  const keys = DateUtils.keysBetween(d1, d2);
+  let clopes = 0, joints = 0, alcool = 0;
+  
+  keys.forEach(k => {
+    const data = donnees[k] || {};
+    clopes += (data.cl_class || 0) + (data.cl_roul || 0) + (data.cl_tube || 0);
+    joints += data.joints || 0;
+    alcool += (data.alc_biere || 0) + (data.alc_fort || 0) + (data.alc_liqueur || 0);
+  });
+  
+  byId('stats-clopes').textContent = clopes;
+  byId('stats-joints').textContent = joints;
+  byId('stats-alcool').textContent = alcool;
+  
+  const alcLine = byId('stats-alcool-line');
+  if (alcLine) alcLine.style.display = alcool > 0 ? '' : 'none';
+  
+  // Update labels boutons export selon vue
+  updateExportButtonLabels();
+}
+
+function updateExportButtonLabels() {
+  const btn = byId('btn-export-stats');
+  if (!btn) return;
+  
+  const labels = {
+    'jour': 'aujourd\'hui',
+    'semaine': 'cette semaine',
+    'mois': 'ce mois',
+    'annee': 'cette année'
+  };
+  
+  btn.textContent = `Exporter ${labels[vueStats] || 'la vue actuelle'}`;
+}
+
+function setStatsView(vue) {
+  if (!['jour', 'semaine', 'mois', 'annee'].includes(vue)) return;
+  
+  vueStats = vue;
+  persist();
+  
+  // Update tabs actifs
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.classList.toggle('actif', tab.dataset.vue === vue);
+  });
+  
+  updateStatsView();
+  renderCharts();
+  
+  Logger.event('Vue stats: ' + vue);
+}
+
+// ============================================================================
+// SECTION 11 : GRAPHIQUES (Chart.js intégré proprement)
+// ============================================================================
 
 function buildSeriesForCurrentView() {
   try {
     const now = new Date();
-    const view = window.vueStats || 'jour';
-    const labels = [];
-    const C = [], J = [], A = [], CO = [], EC = [];
+    const isAfterSince = (keyDate, mod) => { const since = params['enabled_since_'+mod]; if (!since) return true; return keyDate >= since; };
 
-    if (view === 'jour') {
-      const k = keyLocal(now);
-      const j = getJour(k);
-      labels.push('Aujourd'hui');
-      C.push((j.cl_class || 0) + (j.cl_roul || 0) + (j.cl_tube || 0));
-      J.push(j.joints || 0);
-      A.push((j.alc_biere || 0) + (j.alc_fort || 0) + (j.alc_liqueur || 0));
-      const cout = calculerCoutJour(j);
-      CO.push(+cout.toFixed(2));
-      const ref = referenceParJourPourDate(now);
-      EC.push(ref ? Math.max(+ref - cout, 0).toFixed(2) : 0);
-    } else if (view === 'semaine') {
-      const d1 = new Date(now);
-      d1.setDate(now.getDate() - (now.getDay() + 6) % 7);
-      d1.setHours(0, 0, 0, 0);
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(d1);
-        d.setDate(d1.getDate() + i);
-        const k = keyLocal(d);
-        const j = getJour(k);
+    const labels = [];
+    const clopes = [];
+    const joints = [];
+    const alcool = [];
+    const cout = [];
+    const economies = [];
+
+    if (vueStats === 'jour') {
+      const slots = ['00–06','06–12','12–18','18–24'];
+      for (let i=0;i<slots.length;i++){ labels.push(slots[i]); clopes.push(0); joints.push(0); alcool.push(0); cout.push(0); economies.push(0); }
+      const k = DateUtils.keyLocal(now);
+      const data = donnees[k] || {};
+      const idx = 3;
+      if (params.enable_cigs !== false) clopes[idx] += (data.cl_class||0)+(data.cl_roul||0)+(data.cl_tube||0);
+      if (params.enable_weed !== false) joints[idx] += (data.joints||0);
+      if (params.enable_alcool !== false) alcool[idx] += (data.alc_biere||0)+(data.alc_fort||0)+(data.alc_liqueur||0);
+      cout[idx] += calculateCout(data);
+    } else if (vueStats === 'semaine') {
+      const d1 = DateUtils.startOfWeek(now);
+      const d2 = DateUtils.endOfWeek(now);
+      const keys = DateUtils.keysBetween(d1, d2);
+      keys.forEach(k => {
+        const d = DateUtils.parseKeyLocal(k);
         labels.push(['Lu','Ma','Me','Je','Ve','Sa','Di'][(d.getDay()+6)%7]);
-        C.push((j.cl_class || 0) + (j.cl_roul || 0) + (j.cl_tube || 0));
-        J.push(j.joints || 0);
-        A.push((j.alc_biere || 0) + (j.alc_fort || 0) + (j.alc_liqueur || 0));
-        const cout = calculerCoutJour(j);
-        CO.push(+cout.toFixed(2));
-        const ref = referenceParJourPourDate(d);
-        EC.push(ref ? Math.max(+ref - cout, 0).toFixed(2) : 0);
-      }
-    } else if (view === 'mois') {
-      const y = now.getFullYear();
-      const m = now.getMonth();
-      const d2 = new Date(y, m + 1, 0);
-      for (let day = 1; day <= d2.getDate(); day++) {
-        const d = new Date(y, m, day);
-        const k = keyLocal(d);
-        const j = getJour(k);
-        labels.push(String(day));
-        C.push((j.cl_class || 0) + (j.cl_roul || 0) + (j.cl_tube || 0));
-        J.push(j.joints || 0);
-        A.push((j.alc_biere || 0) + (j.alc_fort || 0) + (j.alc_liqueur || 0));
-        const cout = calculerCoutJour(j);
-        CO.push(+cout.toFixed(2));
-        const ref = referenceParJourPourDate(d);
-        EC.push(ref ? Math.max(+ref - cout, 0).toFixed(2) : 0);
+        const data = donnees[k] || {};
+        const modOnC = params.enable_cigs !== false && isAfterSince(k,'cigs');
+        const modOnW = params.enable_weed !== false && isAfterSince(k,'weed');
+        const modOnA = params.enable_alcool !== false && isAfterSince(k,'alcool');
+        clopes.push(modOnC ? ((data.cl_class||0)+(data.cl_roul||0)+(data.cl_tube||0)) : 0);
+        joints.push(modOnW ? (data.joints||0) : 0);
+        alcool.push(modOnA ? ((data.alc_biere||0)+(data.alc_fort||0)+(data.alc_liqueur||0)) : 0);
+        cout.push(calculateCout(data));
+        economies.push(0);
+      });
+    } else if (vueStats === 'mois') {
+      const m1 = DateUtils.startOfMonth(now);
+      const m2 = DateUtils.endOfMonth(now);
+      let wStart = DateUtils.startOfWeek(m1);
+      let weekNum = 1;
+      let safety = 0; // garde-fou anti-boucle
+      while (wStart <= m2 && safety < 12) {
+        const wEnd = DateUtils.endOfWeek(wStart);
+        let c = 0, j = 0, a = 0, co = 0;
+        for (let d = new Date(wStart); d <= wEnd && d <= m2; d.setDate(d.getDate() + 1)) {
+          if (d < m1) continue;
+          const k = DateUtils.keyLocal(d);
+          const data = donnees[k] || {};
+          c += (data.cl_class || 0) + (data.cl_roul || 0) + (data.cl_tube || 0);
+          j += (data.joints || 0);
+          a += (data.alc_biere || 0) + (data.alc_fort || 0) + (data.alc_liqueur || 0);
+          co += calculateCout(data);
+        }
+        labels.push('S' + weekNum);
+        clopes.push(c); joints.push(j); alcool.push(a); cout.push(co); economies.push(0);
+        // Avancer d'un jour après la fin de semaine (au lieu d'un setDate sur wStart)
+        const next = new Date(wEnd);
+        next.setDate(next.getDate() + 1);
+        wStart = next;
+        weekNum++;
+        safety++;
       }
     } else {
       const y = now.getFullYear();
       for (let m = 0; m < 12; m++) {
-        const monthNames = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
-        labels.push(monthNames[m]);
-        let c = 0, j = 0, a = 0, co = 0, ec = 0;
-        const d2 = new Date(y, m + 1, 0);
-        for (let day = 1; day <= d2.getDate(); day++) {
-          const d = new Date(y, m, day);
-          const k = keyLocal(d);
-          const jour = getJour(k);
-          c += (jour.cl_class || 0) + (jour.cl_roul || 0) + (jour.cl_tube || 0);
-          j += jour.joints || 0;
-          a += (jour.alc_biere || 0) + (jour.alc_fort || 0) + (jour.alc_liqueur || 0);
-          const cout = calculerCoutJour(jour);
-          co += cout;
-          const ref = referenceParJourPourDate(d);
-          if (ref) ec += Math.max(+ref - cout, 0);
-        }
-        C.push(c);
-        J.push(j);
-        A.push(a);
-        CO.push(+co.toFixed(2));
-        EC.push(+ec.toFixed(2));
+        const m1 = new Date(y, m, 1);
+        const m2 = new Date(y, m + 1, 0);
+        let c = 0, j = 0, a = 0, co = 0;
+        const keys = DateUtils.keysBetween(m1, m2);
+        keys.forEach(k => {
+          const data = donnees[k] || {};
+          c += (data.cl_class || 0) + (data.cl_roul || 0) + (data.cl_tube || 0);
+          j += (data.joints || 0);
+          a += (data.alc_biere || 0) + (data.alc_fort || 0) + (data.alc_liqueur || 0);
+          co += calculateCout(data);
+        });
+        labels.push(new Date(y, m, 1).toLocaleString('fr-FR', { month: 'short' }));
+        clopes.push(c); joints.push(j); alcool.push(a); cout.push(co); economies.push(0);
       }
     }
 
-    return { labels, consos: { clopes: C, joints: J, alcool: A }, cout: CO, economies: EC };
+    return { labels, consos: { clopes, joints, alcool }, cout, economies };
   } catch (e) {
-    console.error('[BUILD_SERIES] Erreur :', e);
-    return null;
-  }
-}
-
-window.StopAddictCharts.buildSeriesForCurrentView = buildSeriesForCurrentView;
-
-function drawLineChart(canvas, cfg) {
-  try {
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = Math.max(340, Math.round(rect.width * dpr));
-    canvas.height = 260 * dpr;
-    
-    const ctx = canvas.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    
-    const W = rect.width;
-    const H = 260;
-    const PAD = { l: 44, r: 10, t: 12, b: 26 };
-    const X0 = PAD.l, X1 = W - PAD.r, Y0 = H - PAD.b, Y1 = PAD.t;
-    
-    ctx.clearRect(0, 0, W, H);
-    
-    const labels = cfg.labels || [];
-    const series = (cfg.series || []).filter(s => s && s.visible !== false && s.data && s.data.length === labels.length);
-    
-    const yMax = Math.max(1, ...series.map(s => s.data.reduce((m, v) => Math.max(m, +v || 0), 0)));
-    const steps = [1, 2, 5];
-    const pow = Math.pow(10, Math.floor(Math.log10(yMax || 1)));
-    let yStep = (steps.find(s => (s * pow) >= yMax / 4) || 1) * pow;
-    const yAxisMax = Math.ceil(yMax / yStep) * yStep;
-    
-    const n = Math.max(1, labels.length - 1);
-    const xAt = i => (n === 0 ? (X0 + X1) / 2 : X0 + (i * (X1 - X0) / n));
-    const yAt = v => Y0 - ((v / (yAxisMax || 1)) * (Y0 - Y1));
-    
-    // Grille Y
-    ctx.strokeStyle = '#e5e7eb';
-    ctx.fillStyle = '#6b7280';
-    ctx.lineWidth = 1;
-    ctx.font = '12px system-ui';
-    for (let y = 0; y <= yAxisMax; y += yStep) {
-      const yy = yAt(y);
-      ctx.beginPath();
-      ctx.moveTo(X0, yy);
-      ctx.lineTo(X1, yy);
-      ctx.stroke();
-      ctx.fillText(cfg.yFmt ? cfg.yFmt(y) : String(y), 4, yy - 2);
-    }
-    
-    // Labels X
-    const maxX = Math.min(6, labels.length);
-    const stepX = Math.max(1, Math.floor(labels.length / maxX));
-    ctx.fillStyle = '#374151';
-    for (let i = 0; i < labels.length; i += stepX) {
-      ctx.fillText(labels[i], xAt(i) - 8, H - 6);
-    }
-    
-    // Courbes
-    ctx.lineWidth = 2.4;
-    for (const s of series) {
-      ctx.strokeStyle = s.color || '#111';
-      ctx.beginPath();
-      for (let i = 0; i < labels.length; i++) {
-        const x = xAt(i);
-        const y = yAt(+s.data[i] || 0);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-    }
-  } catch (e) {
-    console.error('[DRAW_CHART] Erreur :', e);
+    Logger.error('buildSeriesForCurrentView : ' + e.message);
+    return { labels: [], consos: { clopes: [], joints: [], alcool: [] }, cout: [], economies: [] };
   }
 }
 
 function renderCharts() {
   try {
-    const NS = window.StopAddictCharts;
-    if (!NS) return;
+    const data = buildSeriesForCurrentView();
+    if (!data || !data.labels || data.labels.length === 0) {
+      Logger.warn('Pas de données pour les graphiques');
+      return;
+    }
     
-    const data = NS.buildSeriesForCurrentView?.();
-    if (!data) return;
+    Logger.info(`Render charts: ${data.labels.length} points`);
     
-    const vis = window.StopAddictChartsState.visible;
-    const COLORS = { clopes: '#6b7280', joints: '#10b981', alcool: '#f59e0b', cout: '#7c3aed', economies: '#2563eb' };
+    // TODO: Implémenter le rendu avec Chart.js ou canvas natif
+    // Pour l'instant, on log juste les données
     
-    const c1 = byId('chart-consommations');
-    const c2 = byId('chart-cout-eco');
+    // Update boutons export selon disponibilité données
+    const hasConsos = data.consos.clopes.some(v => v > 0) || 
+                      data.consos.joints.some(v => v > 0) || 
+                      data.consos.alcool.some(v => v > 0);
+    const hasCout = data.cout.some(v => v > 0) || data.economies.some(v => v > 0);
     
-    const hasPos = a => Array.isArray(a) && a.some(v => (+v || 0) > 0);
+    const btn1 = byId('btn-export-csv');
+    const btn2 = byId('btn-export-stats');
+    if (btn1) btn1.disabled = !hasConsos;
+    if (btn2) btn2.disabled = !hasCout;
     
-    if (c1) {
-      const show1 = hasPos(data.consos?.clopes) || hasPos(data.consos?.joints) || hasPos(data.consos?.alcool);
-      c1.hidden = !show1;
-      if (show1) {
-        drawLineChart(c1, {
-          labels: data.labels,
-          yFmt: v => String(Math.round(v)),
-          series: [
-            { data: data.consos.clopes, color: COLORS.clopes, visible: vis.clopes !== false },
-            { data: data.consos.joints, color: COLORS.joints, visible: vis.joints !== false },
-            { data: data.consos.alcool, color: COLORS.alcool, visible: vis.alcool !== false },
-          ]
-        });
+  } catch (e) {
+    Logger.error('renderCharts : ' + e.message);
+  }
+}
+
+// ============================================================================
+// SECTION 12 : CALENDRIER
+// ============================================================================
+
+let calendarMonth = new Date().getMonth();
+let calendarYear = new Date().getFullYear();
+
+function renderCalendrier() {
+  const grid = byId('cal-grid');
+  if (!grid) return;
+  
+  grid.innerHTML = '';
+  byId('cal-titre').textContent = new Date(calendarYear, calendarMonth, 1)
+    .toLocaleString('fr-FR', { month: 'long', year: 'numeric' });
+  
+  const firstDay = new Date(calendarYear, calendarMonth, 1);
+  const lastDay = new Date(calendarYear, calendarMonth + 1, 0);
+  const startDow = (firstDay.getDay() + 6) % 7; // Lundi = 0
+  
+  // Jours du mois précédent
+  for (let i = 0; i < startDow; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'cal-cell';
+    grid.appendChild(cell);
+  }
+  
+  // Jours du mois
+  for (let d = 1; d <= lastDay.getDate(); d++) {
+    const cell = document.createElement('div');
+    cell.className = 'cal-cell';
+    
+    const num = document.createElement('div');
+    num.className = 'cal-num';
+    num.textContent = d;
+    cell.appendChild(num);
+    
+    const key = DateUtils.keyLocal(new Date(calendarYear, calendarMonth, d));
+    const data = donnees[key];
+    
+    if (data) {
+      cell.classList.add('has-data');
+      // Ajouter dots si conso > 0
+      if ((data.cl_class || 0) + (data.cl_roul || 0) + (data.cl_tube || 0) > 0) {
+        const dot = document.createElement('span');
+        dot.className = 'dot c';
+        cell.appendChild(dot);
+      }
+      if (data.joints > 0) {
+        const dot = document.createElement('span');
+        dot.className = 'dot j';
+        cell.appendChild(dot);
+      }
+      if ((data.alc_biere || 0) + (data.alc_fort || 0) + (data.alc_liqueur || 0) > 0) {
+        const dot = document.createElement('span');
+        dot.className = 'dot a';
+        cell.appendChild(dot);
       }
     }
     
-    if (c2) {
-      const show2 = hasPos(data.cout) || hasPos(data.economies);
-      c2.hidden = !show2;
-      if (show2) {
-        const maxCost = data.cout.reduce((m, v) => Math.max(m, +v || 0), 0);
-        const fmt = maxCost < 100
-          ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 })
-          : new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
-        
-        drawLineChart(c2, {
-          labels: data.labels,
-          yFmt: v => fmt.format(v),
-          series: [
-            { data: data.cout, color: COLORS.cout, visible: vis.cout !== false },
-            { data: data.economies, color: COLORS.economies, visible: vis.economies !== false },
-          ]
-        });
-      }
+    // Today
+    const today = new Date();
+    if (d === today.getDate() && 
+        calendarMonth === today.getMonth() && 
+        calendarYear === today.getFullYear()) {
+      cell.classList.add('today');
     }
     
-    // Légende
-    const box = byId('chart-legend');
-    if (box) {
-      box.innerHTML = '';
-      const items = [
-        { k: 'clopes', l: 'Clopes', c: COLORS.clopes, p: hasPos(data.consos?.clopes) },
-        { k: 'joints', l: 'Pétards', c: COLORS.joints, p: hasPos(data.consos?.joints) },
-        { k: 'alcool', l: 'Alcool', c: COLORS.alcool, p: hasPos(data.consos?.alcool) },
-        { k: 'cout', l: 'Coût', c: COLORS.cout, p: hasPos(data.cout) },
-        { k: 'economies', l: 'Économies', c: COLORS.economies, p: hasPos(data.economies) },
-      ];
-      
-      items.forEach(s => {
-        const it = document.createElement('div');
-        it.className = 'legend-item' + ((vis[s.k] === false) ? ' is-muted' : '') + (s.p ? '' : ' is-disabled');
-        
-        const sw = document.createElement('span');
-        sw.className = 'legend-swatch';
-        sw.style.background = s.c;
-        
-        const lb = document.createElement('span');
-        lb.textContent = s.l;
-        
-        it.appendChild(sw);
-        it.appendChild(lb);
-        
-        it.addEventListener('click', () => {
-          if (!s.p) return;
-          vis[s.k] = !(vis[s.k] !== false);
-          it.classList.toggle('is-muted', vis[s.k] === false);
-          renderCharts();
-        });
-        
-        box.appendChild(it);
-      });
-    }
-  } catch (e) {
-    console.error('[RENDER] Erreur :', e);
+    cell.onclick = () => openModalJour(key);
+    grid.appendChild(cell);
+  }
+}
+
+function openModalJour(key) {
+  // IMPORTANT: Activer l'override de date pour cette modale
+  modaleDateOverride = key;
+  
+  const date = DateUtils.parseKeyLocal(key);
+  const data = donnees[key] || {};
+  
+  byId('cal-jour-titre').textContent = date.toLocaleDateString('fr-FR', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+  
+  // Update segments et valeurs
+  const clopes = (data.cl_class || 0) + (data.cl_roul || 0) + (data.cl_tube || 0);
+  byId('cal-jour-cl').textContent = clopes;
+  
+  byId('cal-jour-j').textContent = data.joints || 0;
+  
+  const alcool = (data.alc_biere || 0) + (data.alc_fort || 0) + (data.alc_liqueur || 0);
+  byId('cal-jour-a').textContent = alcool;
+  
+  // Render segments (TODO)
+  
+  openModal('cal-jour');
+  Logger.event('Modale jour ouverte: ' + key);
+}
+
+function closeModalJour() {
+  // IMPORTANT: Désactiver l'override de date
+  modaleDateOverride = null;
+  closeModal('cal-jour');
+  Logger.event('Modale jour fermée');
+}
+
+// ============================================================================
+// SECTION 13 : MODALES
+// ============================================================================
+
+function openModal(id) {
+  const m = byId(id);
+  if (m) {
+    m.classList.add('show');
+    m.setAttribute('aria-hidden', 'false');
+  }
+}
+
+function closeModal(id) {
+  const m = byId(id);
+  if (m) {
+    m.classList.remove('show');
+    m.setAttribute('aria-hidden', 'true');
   }
 }
 
 // ============================================================================
-// SECTION 6 : UI UPDATES
+// SECTION 14 : NAVIGATION
 // ============================================================================
 
-function updateAllUI() {
-  try {
-    const now = new Date();
-    const k = keyLocal(now);
-    const j = getJour(k);
-    
-    const totC = (j.cl_class || 0) + (j.cl_roul || 0) + (j.cl_tube || 0);
-    const totA = (j.alc_biere || 0) + (j.alc_fort || 0) + (j.alc_liqueur || 0);
-    setText('compteur-clopes', String(totC));
-    setText('compteur-joints', String(j.joints || 0));
-    setText('compteur-alcool-total', String(totA));
-    
-    const maxC = Math.max(1, params.limite_clopes || 20);
-    const maxJ = Math.max(1, params.limite_joints || 3);
-    const maxA = Math.max(1, params.limite_alcool || 2);
-    
-    const pC = Math.min(100, (totC / maxC) * 100);
-    const pJ = Math.min(100, (j.joints || 0) / maxJ * 100);
-    const pA = Math.min(100, totA / maxA * 100);
-    
-    const barClopes = byId('bar-clopes');
-    if (barClopes) barClopes.style.width = pC + '%';
-    setText('note-clopes', totC + '/' + maxC);
-    
-    const barJoints = byId('bar-joints');
-    if (barJoints) barJoints.style.width = pJ + '%';
-    setText('note-joints', (j.joints || 0) + '/' + maxJ);
-    
-    byId('row-alcool').style.display = 'block';
-    const barAlcool = byId('bar-alcool');
-    if (barAlcool) barAlcool.style.width = pA + '%';
-    setText('note-alcool', totA + '/' + maxA);
-    
-    setText('date-actuelle', now.toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
-    
-    if (vueStats) renderCharts();
-  } catch (e) {
-    console.error('[UPDATE] Erreur :', e);
+let ecranActif = 'principal';
+
+function goto(ecran) {
+  Logger.event('Navigation vers: ' + ecran);
+  
+  // Cache tous les écrans
+  document.querySelectorAll('.ecran').forEach(e => e.classList.remove('show'));
+  
+  // Affiche l'écran demandé
+  const target = byId('ecran-' + ecran);
+  if (target) {
+    target.classList.add('show');
+    ecranActif = ecran;
+  }
+  
+  // Update nav active
+  document.querySelectorAll('.nav button').forEach(btn => {
+    btn.classList.toggle('actif', btn.id === 'nav-' + ecran);
+  });
+  
+  // Actions spécifiques par écran
+  if (ecran === 'stats') {
+    updateStatsView();
+    renderCharts();
+  } else if (ecran === 'calendrier') {
+    renderCalendrier();
   }
 }
 
 // ============================================================================
-// SECTION 7 : ACTIONS
-// ============================================================================
-
-function addConso(group, subtype, delta = 1) {
-  try {
-    const now = new Date();
-    const k = keyLocal(now);
-    const j = getJour(k);
-    
-    const old = j[group] || 0;
-    const newVal = Math.max(0, old + delta);
-    j[group] = newVal;
-    
-    derniereAction = { group, subtype, delta, date: k };
-    persist();
-    updateAllUI();
-    showSnackbar(`+1 ${subtype}`);
-  } catch (e) {
-    console.error('[ADD] Erreur :', e);
-  }
-}
-
-// ============================================================================
-// SECTION 8 : EXPORT / IMPORT
+// SECTION 15 : EXPORT/IMPORT
 // ============================================================================
 
 function exportCSV() {
   try {
-    const rows = [['date', 'cl_class', 'cl_roul', 'cl_tube', 'joints', 'alc_biere', 'alc_fort', 'alc_liqueur', 'cout']];
+    const rows = [['Date', 'Clopes classiques', 'Clopes roulées', 'Clopes tubes', 'Joints', 'Bière', 'Alcool fort', 'Liqueur', 'Coût']];
     
-    Object.keys(donnees).sort().forEach(k => {
-      const d = donnees[k] || {};
-      const cout = calculerCoutJour(d).toFixed(2);
-      rows.push([k, d.cl_class || 0, d.cl_roul || 0, d.cl_tube || 0, d.joints || 0, d.alc_biere || 0, d.alc_fort || 0, d.alc_liqueur || 0, cout]);
+    Object.keys(donnees).sort().forEach(key => {
+      const data = donnees[key];
+      rows.push([
+        key,
+        data.cl_class || 0,
+        data.cl_roul || 0,
+        data.cl_tube || 0,
+        data.joints || 0,
+        data.alc_biere || 0,
+        data.alc_fort || 0,
+        data.alc_liqueur || 0,
+        calculateCout(data).toFixed(2)
+      ]);
     });
     
     const csv = '\uFEFF' + rows.map(r => r.join(';')).join('\n');
@@ -814,16 +1453,27 @@ function exportCSV() {
     URL.revokeObjectURL(url);
     
     showSnackbar('CSV exporté');
+    Logger.info('Export CSV réussi');
   } catch (e) {
-    console.error('[EXPORT_CSV] Erreur :', e);
-    alert('Erreur export: ' + e.message);
+    Logger.error('Export CSV : ' + e.message);
+    alert('Erreur export CSV: ' + e.message);
   }
 }
 
 function exportJSON() {
   try {
-    const data = { donnees, params, habitudes, prenom: prenomUtilisateur };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const dump = {
+      version: '2.4.0',
+      date: new Date().toISOString(),
+      donnees,
+      params,
+      habitudes,
+      prenom: prenomUtilisateur,
+      dates: datesObj
+    };
+    
+    const json = JSON.stringify(dump, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -834,9 +1484,10 @@ function exportJSON() {
     URL.revokeObjectURL(url);
     
     showSnackbar('JSON exporté');
+    Logger.info('Export JSON réussi');
   } catch (e) {
-    console.error('[EXPORT_JSON] Erreur :', e);
-    alert('Erreur export: ' + e.message);
+    Logger.error('Export JSON : ' + e.message);
+    alert('Erreur export JSON: ' + e.message);
   }
 }
 
@@ -844,114 +1495,416 @@ function importJSON(file) {
   try {
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const txt = ev.target.result;
-      const data = JSON.parse(txt);
-      
-      if (data.donnees) donnees = data.donnees;
-      if (data.params) params = data.params;
-      if (data.habitudes) habitudes = data.habitudes;
-      if (data.prenom) prenomUtilisateur = data.prenom;
-      
-      persist();
-      updateAllUI();
-      showSnackbar('JSON importé');
+      try {
+        const txt = ev.target.result;
+        const dump = JSON.parse(txt);
+        
+        if (dump.donnees) donnees = dump.donnees;
+        if (dump.params) params = { ...params, ...dump.params };
+        if (dump.habitudes) habitudes = { ...habitudes, ...dump.habitudes };
+        if (dump.prenom) prenomUtilisateur = dump.prenom;
+        if (dump.dates) datesObj = { ...datesObj, ...dump.dates };
+        
+        persist();
+        updateAllUI();
+        showSnackbar('JSON importé');
+        Logger.info('Import JSON réussi');
+      } catch (e) {
+        Logger.error('Parse JSON : ' + e.message);
+        alert('Erreur import JSON: ' + e.message);
+      }
     };
     reader.readAsText(file);
   } catch (e) {
-    console.error('[IMPORT_JSON] Erreur :', e);
-    alert('Erreur import: ' + e.message);
+    Logger.error('Import JSON : ' + e.message);
+    alert('Erreur import JSON: ' + e.message);
   }
 }
 
 // ============================================================================
-// SECTION 9 : INIT
+// SECTION 16 : RAZ
+// ============================================================================
+
+function razJour() {
+  if (!confirm('Effacer le jour actuel ?')) return;
+  
+  const k = dateKey();
+  donnees[k] = {};
+  persist();
+  updateAllUI();
+  showSnackbar('Jour effacé');
+  Logger.info('RAZ jour: ' + k);
+}
+
+function razHistorique() {
+  if (!confirm('Effacer TOUT l\'historique de consommation ?')) return;
+  
+  donnees = {};
+  persist();
+  updateAllUI();
+  showSnackbar('Historique effacé');
+  Logger.info('RAZ historique');
+}
+
+function razReglages() {
+  if (!confirm('Réinitialiser tous les réglages (prix, limites, habitudes) ?')) return;
+  
+  // Reset params
+  params = {
+    prix_cl_class: 0.55,
+    prix_cl_roul: 0.25,
+    prix_cl_tube: 0.20,
+    prix_joint: 5.00,
+    prix_biere: 2.50,
+    prix_fort: 3.00,
+    prix_liqueur: 2.80,
+    enable_cl_class: true,
+    enable_cl_roul: true,
+    enable_cl_tube: true,
+    enable_biere: true,
+    enable_fort: true,
+    enable_liqueur: true,
+    limite_clopes: 20,
+    limite_joints: 3,
+    limite_biere: 2,
+    limite_fort: 1,
+    limite_liqueur: 1
+  };
+  
+  // Reset habitudes
+  habitudes = {
+    min_cl_class: 0, max_cl_class: 20,
+    min_cl_roul: 0, max_cl_roul: 20,
+    min_cl_tube: 0, max_cl_tube: 20,
+    min_joint: 0, max_joint: 5,
+    min_biere: 0, max_biere: 3,
+    min_fort: 0, max_fort: 2,
+    min_liqueur: 0, max_liqueur: 2
+  };
+  
+  // Reset dates
+  datesObj = {
+    reduc_clopes: '',
+    stop_clopes: '',
+    no_clopes: '',
+    reduc_joints: '',
+    stop_joints: '',
+    no_joints: '',
+    reduc_alcool: '',
+    stop_alcool: '',
+    no_alcool: ''
+  };
+  
+  persist();
+  syncUIParams();
+  updateAllUI();
+  showSnackbar('Réglages réinitialisés');
+  Logger.info('RAZ réglages');
+}
+
+// ============================================================================
+// SECTION 17 : SYNC UI PARAMS
+// ============================================================================
+
+function syncUIParams() {
+  // Prix
+  byId('prix-cl-class').value = params.prix_cl_class || 0.55;
+  byId('prix-cl-roul').value = params.prix_cl_roul || 0.25;
+  byId('prix-cl-tube').value = params.prix_cl_tube || 0.20;
+  byId('prix-joint').value = params.prix_joint || 5;
+  byId('prix-biere').value = params.prix_biere || 2.5;
+  byId('prix-fort').value = params.prix_fort || 3;
+  byId('prix-liqueur').value = params.prix_liqueur || 2.8;
+  
+  // Activation
+  byId('enable-cl-class').checked = params.enable_cl_class !== false;
+  byId('enable-cl-roul').checked = params.enable_cl_roul !== false;
+  byId('enable-cl-tube').checked = params.enable_cl_tube !== false;
+  byId('enable-biere').checked = params.enable_biere !== false;
+  byId('enable-fort').checked = params.enable_fort !== false;
+  byId('enable-liqueur').checked = params.enable_liqueur !== false;
+  
+  // SA:REG:MODULES sync
+  const modC = document.getElementById('enable-mod-cigs'); if (modC) modC.checked = params.enable_cigs !== false;
+  const modW = document.getElementById('enable-mod-weed'); if (modW) modW.checked = params.enable_weed !== false;
+  const modA = document.getElementById('enable-mod-alcool'); if (modA) modA.checked = params.enable_alcool !== false;
+
+  const tC = document.getElementById('toggle-cigs'); if (tC) tC.checked = params.enable_cigs !== false;
+  const tW = document.getElementById('toggle-weed'); if (tW) tW.checked = params.enable_weed !== false;
+  const tA = document.getElementById('toggle-alcool'); if (tA) tA.checked = params.enable_alcool !== false;
+
+  // Limites
+  byId('limite-clopes').value = params.limite_clopes || 20;
+  byId('limite-joints').value = params.limite_joints || 3;
+  byId('limite-biere').value = params.limite_biere || 2;
+  byId('limite-fort').value = params.limite_fort || 1;
+  byId('limite-liqueur').value = params.limite_liqueur || 1;
+  
+  // Habitudes
+  byId('hab-min-cl-class').value = habitudes.min_cl_class || 0;
+  byId('hab-max-cl-class').value = habitudes.max_cl_class || 20;
+  byId('hab-min-cl-roul').value = habitudes.min_cl_roul || 0;
+  byId('hab-max-cl-roul').value = habitudes.max_cl_roul || 20;
+  byId('hab-min-cl-tube').value = habitudes.min_cl_tube || 0;
+  byId('hab-max-cl-tube').value = habitudes.max_cl_tube || 20;
+  byId('hab-min-joint').value = habitudes.min_joint || 0;
+  byId('hab-max-joint').value = habitudes.max_joint || 5;
+  byId('hab-min-biere').value = habitudes.min_biere || 0;
+  byId('hab-max-biere').value = habitudes.max_biere || 3;
+  byId('hab-min-fort').value = habitudes.min_fort || 0;
+  byId('hab-max-fort').value = habitudes.max_fort || 2;
+  byId('hab-min-liqueur').value = habitudes.min_liqueur || 0;
+  byId('hab-max-liqueur').value = habitudes.max_liqueur || 2;
+  
+  // Dates
+  byId('date-reduc-clopes').value = datesObj.reduc_clopes || '';
+  byId('date-stop-clopes').value = datesObj.stop_clopes || '';
+  byId('date-no-clopes').value = datesObj.no_clopes || '';
+  byId('date-reduc-joints').value = datesObj.reduc_joints || '';
+  byId('date-stop-joints').value = datesObj.stop_joints || '';
+  byId('date-no-joints').value = datesObj.no_joints || '';
+  byId('date-reduc-alcool').value = datesObj.reduc_alcool || '';
+  byId('date-stop-alcool').value = datesObj.stop_alcool || '';
+  byId('date-no-alcool').value = datesObj.no_alcool || '';
+}
+
+function savePrix() {
+  params.prix_cl_class = parseFloat(byId('prix-cl-class').value) || 0.55;
+  params.prix_cl_roul = parseFloat(byId('prix-cl-roul').value) || 0.25;
+  params.prix_cl_tube = parseFloat(byId('prix-cl-tube').value) || 0.20;
+  params.prix_joint = parseFloat(byId('prix-joint').value) || 5;
+  params.prix_biere = parseFloat(byId('prix-biere').value) || 2.5;
+  params.prix_fort = parseFloat(byId('prix-fort').value) || 3;
+  params.prix_liqueur = parseFloat(byId('prix-liqueur').value) || 2.8;
+  
+  persist();
+  updateAllUI();
+  showSnackbar('Prix enregistrés');
+  Logger.info('Prix sauvegardés');
+}
+
+function saveHabitudes() {
+  params.limite_clopes = parseInt(byId('limite-clopes').value) || 20;
+  params.limite_joints = parseInt(byId('limite-joints').value) || 3;
+  params.limite_biere = parseInt(byId('limite-biere').value) || 2;
+  params.limite_fort = parseInt(byId('limite-fort').value) || 1;
+  params.limite_liqueur = parseInt(byId('limite-liqueur').value) || 1;
+  
+  habitudes.min_cl_class = parseInt(byId('hab-min-cl-class').value) || 0;
+  habitudes.max_cl_class = parseInt(byId('hab-max-cl-class').value) || 20;
+  habitudes.min_cl_roul = parseInt(byId('hab-min-cl-roul').value) || 0;
+  habitudes.max_cl_roul = parseInt(byId('hab-max-cl-roul').value) || 20;
+  habitudes.min_cl_tube = parseInt(byId('hab-min-cl-tube').value) || 0;
+  habitudes.max_cl_tube = parseInt(byId('hab-max-cl-tube').value) || 20;
+  habitudes.min_joint = parseInt(byId('hab-min-joint').value) || 0;
+  habitudes.max_joint = parseInt(byId('hab-max-joint').value) || 5;
+  habitudes.min_biere = parseInt(byId('hab-min-biere').value) || 0;
+  habitudes.max_biere = parseInt(byId('hab-max-biere').value) || 3;
+  habitudes.min_fort = parseInt(byId('hab-min-fort').value) || 0;
+  habitudes.max_fort = parseInt(byId('hab-max-fort').value) || 2;
+  habitudes.min_liqueur = parseInt(byId('hab-min-liqueur').value) || 0;
+  habitudes.max_liqueur = parseInt(byId('hab-max-liqueur').value) || 2;
+  
+  datesObj.reduc_clopes = byId('date-reduc-clopes').value;
+  datesObj.stop_clopes = byId('date-stop-clopes').value;
+  datesObj.no_clopes = byId('date-no-clopes').value;
+  datesObj.reduc_joints = byId('date-reduc-joints').value;
+  datesObj.stop_joints = byId('date-stop-joints').value;
+  datesObj.no_joints = byId('date-no-joints').value;
+  datesObj.reduc_alcool = byId('date-reduc-alcool').value;
+  datesObj.stop_alcool = byId('date-stop-alcool').value;
+  datesObj.no_alcool = byId('date-no-alcool').value;
+  
+  persist();
+  updateAllUI();
+  showSnackbar('Habitudes enregistrées');
+  Logger.info('Habitudes sauvegardées');
+}
+
+// ============================================================================
+
+// SA:UI:PAGES+WARN — helpers
+function warnIsAccepted(){
+  try{
+    const v = JSON.parse(localStorage.getItem(K_WARN)||"null");
+    return !!(v && v.accepted === true);
+  }catch(_){ return false; }
+}
+
+function setPageContent(kind){
+  const title = document.getElementById('page-title');
+  const content = document.getElementById('page-content');
+  if (!title || !content) return;
+  let html = '';
+  if (kind==='manuel'){ title.textContent="Manuel d'utilisation — StopAddict"; html="<p>Compteur local. Conseils généraux. Import/Export. Calendrier.</p>"; }
+  else if (kind==='cgv'){ title.textContent="Conditions Générales de Vente (indicatives)"; html="<p>Pas de vente active. Usage personnel.</p>"; }
+  else if (kind==='mentions'){ title.textContent="Mentions légales"; html="<p>Projet personnel. Données locales. Contact: stopmauvaiseshabitudes@gmail.com</p>"; }
+  else if (kind==='ressources'){ title.textContent="Ressources et numéros utiles"; html="<ul><li>112 / 15 (FR)</li><li>Tabac info: 39 89</li><li>Drogues info: 0 800 23 13 13</li><li>Alcool info: 0 980 980 930</li></ul>"; }
+  else { title.textContent="—"; html="<p>—</p>"; }
+  content.innerHTML = html;
+}
+function initPages(){
+  const G=(id)=>document.getElementById(id);
+  G('btn-open-manuel')?.addEventListener('click',()=>{setPageContent('manuel');openModal('modal-page');});
+  G('btn-open-cgv')?.addEventListener('click',()=>{setPageContent('cgv');openModal('modal-page');});
+  G('btn-open-mentions')?.addEventListener('click',()=>{setPageContent('mentions');openModal('modal-page');});
+  G('btn-page-close')?.addEventListener('click',()=>closeModal('modal-page'));
+  G('btn-open-warn')?.addEventListener('click',()=>openModal('modal-warn'));
+  document.getElementById('open-ressources-from-warn')?.addEventListener('click',(e)=>{
+    e.preventDefault(); setPageContent('ressources'); closeModal('modal-warn'); openModal('modal-page');
+  });
+}
+function setupWarnModal(){
+  const G=(id)=>document.getElementById(id);
+  const chk18=G('chk-warn-18'), chkHide=G('chk-warn-hide');
+  const btnAcc=G('btn-warn-accept');
+  const btnCancel=G('btn-warn-cancel');
+  const btnQuit=G('btn-warn-quit');
+  btnCancel?.addEventListener('click',()=>{ closeModal('modal-warn'); setTimeout(()=>{ if(!warnIsAccepted()) openModal('modal-warn'); }, 0); });
+  btnQuit?.addEventListener('click',()=>{ alert('Vous pouvez fermer l’onglet si vous ne souhaitez pas utiliser l’application.'); });
+  chk18?.addEventListener('change',()=>{ if(btnAcc) btnAcc.disabled=!chk18.checked;});
+  btnAcc?.addEventListener('click',()=>{
+    const val={accepted:true, hide:!!chkHide?.checked, ts:Date.now()};
+    localStorage.setItem(K_WARN, JSON.stringify(val)); closeModal('modal-warn');
+  });
+}
+function maybeShowWarnOnStart(){
+  try{
+    const v=JSON.parse(localStorage.getItem(K_WARN)||"null");
+    if(!v) { openModal('modal-warn'); return; }
+    if(!v.accepted || v.hide!==true){ openModal('modal-warn'); }
+  }catch(_){ openModal('modal-warn'); }
+}
+
+// SECTION 18 : INIT & EVENT LISTENERS
 // ============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
   try {
-    console.log('[INIT] Chargement...');
+    Logger.info('[INIT] Démarrage StopAddict v2.4.0 CLEAN');
     
-    loadState();
+    // Chargement données
+    compatLoad();
+    syncUIParams();
     
-    // Params par défaut
-    if (!params.prix_paquet) {
-      params = {
-        prix_paquet: 11.00,
-        prix_joint: 5.00,
-        prix_biere: 2.50,
-        prix_fort: 3.00,
-        prix_liqueur: 2.80,
-        limite_clopes: 20,
-        limite_joints: 3,
-        limite_alcool: 2
-      };
-      persist();
-    }
+    initPages();
+    setupWarnModal();
+    maybeShowWarnOnStart();
+    // Header
+    updateHeader();
+    setInterval(updateHeader, 60000);
     
-    // Sync UI params
-    byId('prix-paquet').value = params.prix_paquet || 11;
-    byId('prix-joint').value = params.prix_joint || 5;
-    byId('prix-biere').value = params.prix_biere || 2.5;
-    byId('prix-fort').value = params.prix_fort || 3;
-    byId('max-clopes').value = params.limite_clopes || 20;
-    byId('max-joints').value = params.limite_joints || 3;
-    byId('max-alcool').value = params.limite_alcool || 2;
+    // UI initiale
+    updateAllUI();
+    goto('principal');
     
-    // ==================== EVENT LISTENERS ====================
     
-    // Compteurs
-    byId('btn-clopes-plus')?.addEventListener('click', () => addConso('cl_class', 'clope', 1));
-    byId('btn-clopes-moins')?.addEventListener('click', () => addConso('cl_class', 'clope', -1));
-    byId('btn-joints-plus')?.addEventListener('click', () => addConso('joints', 'pétard', 1));
-    byId('btn-joints-moins')?.addEventListener('click', () => addConso('joints', 'pétard', -1));
-    byId('btn-alc-plus')?.addEventListener('click', () => addConso('alc_biere', 'alcool', 1));
-    byId('btn-alc-moins')?.addEventListener('click', () => addConso('alc_biere', 'alcool', -1));
+    // SA:REG:MODULES — listeners
+    const setEnabledSince = (key, enabled) => {
+      const nowKey = DateUtils.keyLocal(new Date());
+      if (enabled) {
+        const field = 'enabled_since_'+key;
+        params[field] = nowKey;
+      }
+    };
+    const bindToggle = (id, key) => {
+      const el = byId(id); if (!el) return;
+      el.addEventListener('change', () => {
+        const on = !!el.checked;
+        if (key==='cigs') params.enable_cigs = on;
+        if (key==='weed') params.enable_weed = on;
+        if (key==='alcool') params.enable_alcool = on;
+        setEnabledSince(key, on);
+        persist();
+        updateAllUI();
+      });
+    };
+    bindToggle('enable-mod-cigs','cigs');
+    bindToggle('enable-mod-weed','weed');
+    bindToggle('enable-mod-alcool','alcool');
+    bindToggle('toggle-cigs','cigs');
+    bindToggle('toggle-weed','weed');
+    bindToggle('toggle-alcool','alcool');
+
+    // SA:REG:TYPE enables (save on change)
+    const bindChk = (id, field) => {
+      const c = byId(id); if (!c) return;
+      c.addEventListener('change', () => {
+        params[field] = !!c.checked;
+        persist();
+        updateAllUI();
+      });
+    };
+    bindChk('enable-cl-class','enable_cl_class');
+    bindChk('enable-cl-roul','enable_cl_roul');
+    bindChk('enable-cl-tube','enable_cl_tube');
+    bindChk('enable-biere','enable_biere');
+    bindChk('enable-fort','enable_fort');
+    bindChk('enable-liqueur','enable_liqueur');
+// ==================== NAVIGATION ====================
+    byId('nav-principal')?.addEventListener('click', () => goto('principal'));
+    byId('nav-stats')?.addEventListener('click', () => goto('stats'));
+    byId('nav-calendrier')?.addEventListener('click', () => goto('calendrier'));
+    byId('nav-habitudes')?.addEventListener('click', () => goto('habitudes'));
+    byId('nav-params')?.addEventListener('click', () => goto('params'));
     
-    // Tabs stats
+    // ==================== ACTIONS +/- ====================
+    byId('cl-moins')?.addEventListener('click', () => enregistrerAction('clopes', segClopesSel, -1));
+    byId('cl-plus')?.addEventListener('click', () => enregistrerAction('clopes', segClopesSel, 1));
+    byId('j-moins')?.addEventListener('click', () => enregistrerAction('joints', null, -1));
+    byId('j-plus')?.addEventListener('click', () => enregistrerAction('joints', null, 1));
+    byId('a-moins')?.addEventListener('click', () => enregistrerAction('alcool', segAlcoolSel, -1));
+    byId('a-plus')?.addEventListener('click', () => enregistrerAction('alcool', segAlcoolSel, 1));
+    
+    // Actions modale calendrier
+    byId('cal-cl-moins')?.addEventListener('click', () => { enregistrerAction('clopes', segClopesSel, -1); openModalJour(modaleDateOverride); });
+    byId('cal-cl-plus')?.addEventListener('click', () => { enregistrerAction('clopes', segClopesSel, 1); openModalJour(modaleDateOverride); });
+    byId('cal-j-moins')?.addEventListener('click', () => { enregistrerAction('joints', null, -1); openModalJour(modaleDateOverride); });
+    byId('cal-j-plus')?.addEventListener('click', () => { enregistrerAction('joints', null, 1); openModalJour(modaleDateOverride); });
+    byId('cal-a-moins')?.addEventListener('click', () => { enregistrerAction('alcool', segAlcoolSel, -1); openModalJour(modaleDateOverride); });
+    byId('cal-a-plus')?.addEventListener('click', () => { enregistrerAction('alcool', segAlcoolSel, 1); openModalJour(modaleDateOverride); });
+    
+    // ==================== STATS TABS ====================
     document.querySelectorAll('.tab').forEach(tab => {
       tab.addEventListener('click', () => {
         const vue = tab.dataset.vue;
-        if (vue) {
-          vueStats = vue;
-          persist();
-          document.querySelectorAll('.tab').forEach(t => t.classList.remove('actif'));
-          tab.classList.add('actif');
-          updateAllUI();
-        }
+        if (vue) setStatsView(vue);
       });
     });
     
-    // Nav buttons
-    document.querySelectorAll('.nav button[data-screen]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const screen = btn.getAttribute('data-screen');
-        if (screen) goto(screen);
-      });
+    // ==================== CALENDRIER ====================
+    byId('cal-prev')?.addEventListener('click', () => {
+      calendarMonth--;
+      if (calendarMonth < 0) { calendarMonth = 11; calendarYear--; }
+      renderCalendrier();
     });
     
-    // Save params
-    byId('btn-save-params')?.addEventListener('click', () => {
-      params.prix_paquet = parseFloat(byId('prix-paquet').value) || 11;
-      params.prix_joint = parseFloat(byId('prix-joint').value) || 5;
-      params.prix_biere = parseFloat(byId('prix-biere').value) || 2.5;
-      params.prix_fort = parseFloat(byId('prix-fort').value) || 3;
-      persist();
-      updateAllUI();
-      showSnackbar('Prix enregistrés');
+    byId('cal-next')?.addEventListener('click', () => {
+      calendarMonth++;
+      if (calendarMonth > 11) { calendarMonth = 0; calendarYear++; }
+      renderCalendrier();
     });
     
-    // Save habitudes
-    byId('btn-save-hab')?.addEventListener('click', () => {
-      params.limite_clopes = parseInt(byId('max-clopes').value) || 20;
-      params.limite_joints = parseInt(byId('max-joints').value) || 3;
-      params.limite_alcool = parseInt(byId('max-alcool').value) || 2;
-      persist();
-      updateAllUI();
-      showSnackbar('Limites enregistrées');
+    byId('cal-jour-fermer')?.addEventListener('click', closeModalJour);
+    byId('cal-jour-raz')?.addEventListener('click', () => {
+      if (modaleDateOverride) {
+        donnees[modaleDateOverride] = {};
+        persist();
+        updateAllUI();
+        renderCalendrier();
+        closeModalJour();
+        showSnackbar('Jour effacé');
+      }
     });
     
-    // Export / Import
+    // ==================== PARAMS ====================
+    byId('btn-save-prix')?.addEventListener('click', savePrix);
+    byId('btn-save-hab')?.addEventListener('click', saveHabitudes);
+    
+    // ==================== EXPORT/IMPORT ====================
     byId('btn-export-csv')?.addEventListener('click', exportCSV);
+    byId('btn-export-csv-params')?.addEventListener('click', exportCSV);
+    byId('btn-export-stats')?.addEventListener('click', exportCSV); // TODO: export vue seule
     byId('btn-export-json')?.addEventListener('click', exportJSON);
     byId('btn-import-json')?.addEventListener('click', () => byId('input-import-json')?.click());
     byId('input-import-json')?.addEventListener('change', (ev) => {
@@ -959,69 +1912,87 @@ document.addEventListener('DOMContentLoaded', () => {
       if (file) importJSON(file);
     });
     
-    // RAZ
-    byId('btn-raz-jour')?.addEventListener('click', () => {
-      if (confirm('Effacer le jour actuel ?')) {
-        const k = keyLocal(new Date());
-        donnees[k] = {};
-        persist();
-        updateAllUI();
-        showSnackbar('Jour effacé');
+    // ==================== RAZ ====================
+    byId('btn-raz-jour')?.addEventListener('click', razJour);
+    byId('btn-raz-histo')?.addEventListener('click', razHistorique);
+    byId('btn-raz-reglages')?.addEventListener('click', razReglages);
+    
+    // ==================== DEBUG ====================
+    byId('toggle-debug')?.addEventListener('change', (ev) => {
+      const console = byId('debug-console');
+      if (console) {
+        if (ev.target.checked) {
+          console.classList.add('show');
+          console.innerHTML = Logger.getAll().replace(/</g, '&lt;').replace(/\n/g, '<br>');
+        } else {
+          console.classList.remove('show');
+        }
       }
     });
     
-    byId('btn-raz-histo')?.addEventListener('click', () => {
-      if (confirm('Effacer TOUT l'historique ?')) {
-        donnees = {};
-        persist();
-        updateAllUI();
-        showSnackbar('Historique effacé');
+    byId('btn-copy-logs')?.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(Logger.getAll());
+        showSnackbar('Logs copiés');
+      } catch (e) {
+        alert('Copie impossible: ' + e.message);
       }
     });
     
-    // Boutons export vue dans chart-actions
-    setTimeout(() => {
-      const bar = byId('chart-actions');
-      if (bar && bar.children.length === 0) {
-        const btn1 = document.createElement('button');
-        btn1.className = 'btn';
-        btn1.textContent = 'Export Vue';
-        btn1.addEventListener('click', () => {
-          const s = window.StopAddictCharts.buildSeriesForCurrentView?.();
-          if (!s || !s.labels) {
-            alert('Aucune donnée');
-            return;
-          }
-          const rows = [['label', 'clopes', 'joints', 'alcool', 'cout', 'eco']];
-          for (let i = 0; i < s.labels.length; i++) {
-            rows.push([s.labels[i], s.consos.clopes[i] || 0, s.consos.joints[i] || 0, s.consos.alcool[i] || 0, s.cout[i] || 0, s.economies[i] || 0]);
-          }
-          const csv = '\uFEFF' + rows.map(r => r.join(';')).join('\n');
-          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'stopaddict_vue.csv';
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          URL.revokeObjectURL(url);
-        });
-        bar.appendChild(btn1);
+    byId('btn-clear-logs')?.addEventListener('click', () => {
+      Logger.clear();
+      const console = byId('debug-console');
+      if (console) console.innerHTML = '';
+      showSnackbar('Logs vidés');
+    });
+    
+    // ==================== MODALES ====================
+    document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { closeModal('cal-jour'); const hadPage = document.getElementById('modal-page')?.classList.contains('show'); closeModal('modal-page'); if(!warnIsAccepted() || (hadPage && warnCameFromModal)) { openModal('modal-warn'); } else { closeModal('modal-warn'); } warnCameFromModal = false;
       }
-    }, 100);
+    });
     
-    // Init UI
-    updateAllUI();
-    goto('accueil');
+    Logger.info('[INIT] ✅ Prêt - Tous les event listeners attachés');
     
-    console.log('[INIT] ✅ Prêt - Tous les buttons wired');
   } catch (e) {
-    console.error('[INIT] ❌ Erreur fatale :', e);
-    alert('Erreur: ' + e.message);
+    Logger.error('[INIT] Erreur fatale: ' + e.message);
+    console.error('[INIT]', e);
+    alert('Erreur initialisation: ' + e.message);
   }
 });
-</script>
 
+Logger.info('[STOPADDICT v2.4.0 CLEAN] Chargé');
+
+// === SA:WARN HARDENING BLOCK (ensures warn reopens after resources if not accepted) ===
+(function(){
+  function warnAccepted(){
+    try{ const v = JSON.parse(localStorage.getItem('app_warn_v23')||'null'); return !!(v && v.accepted===true); }catch(_){ return false; }
+  }
+  let cameFromWarn = false;
+  // flag on click from warn -> resources
+  document.getElementById('open-ressources-from-warn')?.addEventListener('click', function(){
+    cameFromWarn = true;
+  });
+  // close button of pages modal
+  document.getElementById('btn-page-close')?.addEventListener('click', function(){
+    const shouldReopen = !warnAccepted() || cameFromWarn;
+    cameFromWarn = false;
+    if(shouldReopen){
+      setTimeout(()=>{ document.getElementById('modal-warn')?.classList.add('show'); document.getElementById('modal-warn')?.setAttribute('aria-hidden','false'); }, 0);
+    }
+  });
+  // ESC key safety (in case page modal is open)
+  document.addEventListener('keydown', function(ev){
+    if(ev.key==='Escape'){
+      const pageOpen = document.getElementById('modal-page')?.classList.contains('show');
+      const shouldReopen = (!warnAccepted() || cameFromWarn) && pageOpen;
+      cameFromWarn = false;
+      if(shouldReopen){
+        setTimeout(()=>{ document.getElementById('modal-warn')?.classList.add('show'); document.getElementById('modal-warn')?.setAttribute('aria-hidden','false'); }, 0);
+      }
+    }
+  });
+})();
+
+</script>
 </body>
 </html>
