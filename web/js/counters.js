@@ -1,123 +1,222 @@
 // web/js/counters.js
-import { addEntry, removeOneToday, on, emit } from "./state.js";
-import { $, formatDate } from "./utils.js";
+// ------------------------------------------------------------
+// Gestion des compteurs + / - (Accueil & Cal Jour)
+// - Pas besoin de data-type: fallback par ID des boutons
+// - Utilise state.addEntry / state.removeOneToday
+// - Undo strict de la dernière action
+// - Écoute le bus d’événements via state.on(...)
+// - Met à jour l’entête (stats rapides + bandeau)
+// ------------------------------------------------------------
+import {
+  addEntry,
+  removeOneToday,
+  setActiveSegment,
+  getActiveSegments,
+  totalsHeader,
+  ymd,
+  emit,
+  on, // <-- écoute le bus d’événements interne de state.js
+} from "./state.js";
 
-let lastAction = null; // { type: "cigs"|"weed"|"alcohol", delta: +1|-1, ts: number }
+// --- Mémoire de la dernière action pour Undo ---
+let lastAction = null; // { type, delta, dateKey }
 
-/** Mappe un id de bouton (+/-) vers le type logique attendu par state.js */
-function typeFromButtonId(id) {
-  if (!id) return null;
-  // Schémas tolérés : cl-plus / cl-moins / c-plus / c-moins
-  //                   j-plus  / j-moins
-  //                   a-plus  / a-moins
-  const low = id.toLowerCase();
-  if (low.startsWith("cl-") || low.startsWith("c-")) return "cigs";
-  if (low.startsWith("j-")) return "weed";
-  if (low.startsWith("a-")) return "alcohol";
+// --- Déduction du type depuis l'ID du bouton (fallback sans data-type) ---
+function inferTypeFromButtonId(id) {
+  // Accueil
+  if (id === "c-plus" || id === "c-moins") return "cigs";
+  if (id === "j-plus" || id === "j-moins") return "weed";
+  if (id === "a-plus" || id === "a-moins") return "alcohol";
+  // Cal jour
+  if (id === "cal-cl-plus" || id === "cal-cl-moins") return "cigs";
+  if (id === "cal-j-plus"  || id === "cal-j-moins")  return "weed";
+  if (id === "cal-a-plus"  || id === "cal-a-moins")  return "alcohol";
   return null;
 }
 
-/** Détermine le type soit via data-type, soit via l’ID du bouton */
-function resolveType(btn) {
-  // 1) si l’attribut data-type est présent, on le prend
-  const dt = btn?.dataset?.type;
-  if (dt === "cigs" || dt === "weed" || dt === "alcohol") return dt;
+// Branche les segments (si présents) pour Cigarettes & Alcool
+function wireSegments() {
+  const segC = document.getElementById("seg-clopes");
+  const segA = document.getElementById("seg-alcool");
+  const uiSeg = getActiveSegments();
 
-  // 2) sinon on infère depuis l’ID
-  return typeFromButtonId(btn?.id);
-}
-
-function applyDelta(type, delta) {
-  if (!type || !Number.isInteger(delta) || delta === 0) return;
-
-  if (delta > 0) addEntry(type, delta);
-  else if (delta < 0) removeOneToday(type);
-
-  lastAction = { type, delta, ts: Date.now() };
-
-  // Snackbar “Annuler”
-  const bar = $("#snackbar");
-  const undo = $("#undo-link");
-  if (bar && undo) {
-    bar.classList.add("show");
-    // auto-hide après 3.5s
-    window.clearTimeout(bar._hideTimer);
-    bar._hideTimer = setTimeout(() => bar.classList.remove("show"), 3500);
+  if (segC) {
+    segC.querySelectorAll(".seg").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const sub = btn.dataset.subtype || "classic";
+        setActiveSegment("cigs", sub);
+        segC.querySelectorAll(".seg").forEach(b => b.classList.toggle("actif", b === btn));
+      });
+    });
+    // État visuel initial
+    segC.querySelectorAll(".seg").forEach(b => {
+      const sub = b.dataset.subtype || "classic";
+      b.classList.toggle("actif", sub === uiSeg.cigs);
+    });
   }
 
-  emit("counters:updated", { type, delta });
+  if (segA) {
+    segA.querySelectorAll(".seg").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const sub = btn.dataset.subtype || "beer";
+        setActiveSegment("alcohol", sub);
+        segA.querySelectorAll(".seg").forEach(b => b.classList.toggle("actif", b === btn));
+      });
+    });
+    segA.querySelectorAll(".seg").forEach(b => {
+      const sub = b.dataset.subtype || "beer";
+      b.classList.toggle("actif", sub === uiSeg.alcohol);
+    });
+  }
 }
 
-/** Gestion du clic sur le lien “Annuler” (dernier mouvement uniquement) */
-function handleUndo(e) {
-  e?.preventDefault?.();
-  const bar = $("#snackbar");
+// Met à jour le header (stats rapides & bandeau)
+function refreshHeaderCounters() {
+  const today = totalsHeader(new Date());
+  const map = [
+    ["stat-clopes-jr", today.cigs],
+    ["stat-joints-jr", today.weed],
+    ["stat-alcool-jr", today.alcohol],
+    ["stat-cout-jr",   (today.cost || 0).toFixed(2) + "€"],
+    ["bandeau-clopes", today.cigs],
+    ["bandeau-joints", today.weed],
+    ["bandeau-alcool", today.alcohol],
+  ];
+  for (const [id, val] of map) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(val);
+  }
+  const line = document.getElementById("bandeau-alcool-line");
+  if (line) line.style.display = today.alcohol > 0 ? "" : "none";
+}
+
+// Snackbar simple
+function showSnack(msg, withUndo = true) {
+  const sb = document.getElementById("snackbar");
+  if (!sb) return;
+  // On garde la structure “Action enregistrée — [Annuler]”
+  // Le premier nœud texte avant le lien est mis à jour
+  const undo = document.getElementById("undo-link");
+  if (undo) undo.style.display = withUndo ? "" : "none";
+
+  // Remet la phrase complète AVANT le lien
+  // (si tu as modifié la structure HTML de la snackbar, tu peux adapter)
+  sb.innerHTML = `${msg} — <a href="#" id="undo-link">Annuler</a>`;
+
+  // rebranche le lien après avoir réécrit le HTML
+  const link = document.getElementById("undo-link");
+  if (link) {
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      handleUndo();
+    }, { once: true });
+  }
+
+  sb.classList.add("show");
+  setTimeout(() => sb.classList.remove("show"), 2500);
+}
+
+// Applique l’action et mémorise pour Undo
+function apply(type, delta) {
+  const now = new Date();
+  const key = ymd(now);
+
+  if (delta > 0) {
+    addEntry(type, +delta);
+  } else {
+    removeOneToday(type);
+  }
+
+  lastAction = { type, delta, dateKey: key };
+  refreshHeaderCounters();
+  emit("ui:counter-applied", { type, delta, dateKey: key });
+}
+
+// Undo strict de la dernière action
+function handleUndo() {
   if (!lastAction) return;
   const { type, delta } = lastAction;
 
-  // On inverse : si dernier mouvement était +1, on retire 1 ; si −1, on remet +1
-  if (delta > 0) removeOneToday(type);
-  else if (delta < 0) addEntry(type, Math.abs(delta));
+  if (delta > 0) {
+    // Annule un +1 par un -1
+    removeOneToday(type);
+  } else if (delta < 0) {
+    // Annule un -1 par un +1
+    addEntry(type, Math.abs(delta));
+  }
 
   lastAction = null;
-  if (bar) bar.classList.remove("show");
-  emit("counters:updated", { type, delta: -delta, undo: true });
+  refreshHeaderCounters();
+  showSnack("Annulé", false);
 }
 
-/** Branche tous les boutons +1 / −1 sur l’écran d’accueil */
-function bindHomeButtons() {
-  // Tous les boutons ronds
-  document.querySelectorAll(".btn-round").forEach((btn) => {
+// Branche tous les boutons +/- (Accueil + Calendrier jour)
+function wirePlusMinus() {
+  const ids = [
+    "c-plus","c-moins","j-plus","j-moins","a-plus","a-moins",
+    "cal-cl-plus","cal-cl-moins","cal-j-plus","cal-j-moins","cal-a-plus","cal-a-moins",
+  ];
+  ids.forEach(id => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+
     btn.addEventListener("click", () => {
-      // +1 ?
-      if (btn.classList.contains("btn-plus") || btn.classList.contains("plus")) {
-        const type = resolveType(btn);
-        if (type) applyDelta(type, +1);
+      // 1) data-type prioritaire si jamais présent
+      let type = btn.dataset.type || null;
+      // 2) fallback par ID
+      if (!type) type = inferTypeFromButtonId(btn.id);
+      if (!type) {
+        console.warn("[counters] Bouton non relié (type introuvable)", btn.id);
         return;
       }
-      // −1 ?
-      if (btn.classList.contains("btn-minus") || btn.classList.contains("minus")) {
-        const type = resolveType(btn);
-        if (type) applyDelta(type, -1);
-      }
+
+      const isPlus = btn.classList.contains("btn-plus") || btn.id.includes("plus");
+      const delta = isPlus ? +1 : -1;
+
+      apply(type, delta);
+      showSnack("Action enregistrée");
     });
   });
-
-  // Lien Annuler
-  $("#undo-link")?.addEventListener("click", handleUndo);
 }
 
-/** Branche les boutons de la modale “Calendrier > Jour” */
-function bindCalendarDay() {
-  $("#cal-cl-plus")?.addEventListener("click", () => applyDelta("cigs", +1));
-  $("#cal-cl-moins")?.addEventListener("click", () => applyDelta("cigs", -1));
+// Horloge (date/heure du header)
+function wireClock() {
+  const elDate = document.getElementById("date-actuelle");
+  const elHeure = document.getElementById("heure-actuelle");
 
-  $("#cal-j-plus")?.addEventListener("click", () => applyDelta("weed", +1));
-  $("#cal-j-moins")?.addEventListener("click", () => applyDelta("weed", -1));
-
-  $("#cal-a-plus")?.addEventListener("click", () => applyDelta("alcohol", +1));
-  $("#cal-a-moins")?.addEventListener("click", () => applyDelta("alcohol", -1));
+  function fmtDate(d) {
+    return d.toLocaleDateString("fr-FR", {
+      weekday: "long", day: "2-digit", month: "long", year: "numeric"
+    });
+  }
+  function fmtTime(d) {
+    return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  }
+  function tick() {
+    const d = new Date();
+    if (elDate)  elDate.textContent  = fmtDate(d);
+    if (elHeure) elHeure.textContent = fmtTime(d);
+  }
+  tick();
+  setInterval(tick, 30_000);
 }
 
-/** Met à jour les petits totaux de l’entête (jour courant) si l’app expose ces IDs */
-function updateQuickStats(s) {
-  const { today } = s || {};
-  if (!today) return;
-  $("#stat-clopes-jr") && ($("#stat-clopes-jr").textContent = today.cigs ?? 0);
-  $("#stat-joints-jr") && ($("#stat-joints-jr").textContent = today.weed ?? 0);
-  $("#stat-alcool-jr") && ($("#stat-alcool-jr").textContent = today.alcohol ?? 0);
-  $("#stat-cout-jr") && ($("#stat-cout-jr").textContent = (today.cost ?? 0) + "€");
-}
-
-/** Init public */
+// --- Public API ---
 export function initCounters() {
-  bindHomeButtons();
-  bindCalendarDay();
+  wireClock();
+  wireSegments();
+  wirePlusMinus();
+  refreshHeaderCounters();
 
-  // Si la page gère des “segments horaires”, d’autres modules les rempliront ;
-  // on se contente d’écouter les mises à jour pour rafraîchir l’entête.
-  on("state:changed", (s) => updateQuickStats(s));
-  on("economy:recomputed", () => emit("charts:refresh"));
-  // première passe éventuelle
-  emit("request:state:ping");
+  // Écoute du BUS interne de state.js (et non document)
+  on("state:changed",  refreshHeaderCounters);
+  on("state:daily",    refreshHeaderCounters);
+  on("state:economy",  refreshHeaderCounters);
+  on("state:settings", refreshHeaderCounters);
+
+  // Rafraîchit aussi quand on revient sur l’onglet / autre fenêtre modifie le LS
+  window.addEventListener("storage", () => refreshHeaderCounters());
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refreshHeaderCounters();
+  });
 }
