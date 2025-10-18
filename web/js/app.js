@@ -7,9 +7,11 @@ import { initLimits }       from "./limits.js";
 import { initCharts }       from "./charts.js";
 import { initCalendar }     from "./calendar.js";
 import { initEconomy }      from "./economy.js";
+import { initI18n }         from "./i18n.js"; // i18n (fr/en) si présent
 
 document.addEventListener("DOMContentLoaded", () => {
-  // Initialisations "légères"
+  // ===================== INIT DE BASE =====================
+  try { initI18n?.(); } catch (e) { console.warn("[i18n] init skipped:", e); }
   initCounters();
   initSettings();
   initImportExport();
@@ -18,9 +20,79 @@ document.addEventListener("DOMContentLoaded", () => {
   initCalendar();
   initEconomy();
 
-  // --- Lazy init des charts si la section Stats est présente ---
-  // Objectif : éviter de calculer/rendre les graphes tant que l'écran Stats n'est pas visible.
-  // Si #screen-stats n'existe pas, on tombe en "init immédiat" (comportement d'avant).
+  // ===================== NAVIGATION / ROUTER =====================
+  const SCREENS = {
+    accueil:    "ecran-principal",
+    stats:      "ecran-stats",
+    cal:        "ecran-calendrier",
+    habitudes:  "ecran-habitudes",
+  };
+
+  const NAV_BTNS = {
+    "ecran-principal":  document.getElementById("nav-principal"),
+    "ecran-stats":      document.getElementById("nav-stats"),
+    "ecran-calendrier": document.getElementById("nav-calendrier"),
+    "ecran-habitudes":  document.getElementById("nav-habitudes"),
+    // "nav-params" est géré par settings.js (ouverture de la page/réglages)
+  };
+
+  function setActiveNav(screenId) {
+    Object.entries(NAV_BTNS).forEach(([sid, btn]) => {
+      if (!btn) return;
+      btn.classList.toggle("actif", sid === screenId);
+    });
+  }
+
+  function showScreen(screenId) {
+    // Masquer toutes les .ecran et n'afficher que celle demandée
+    document.querySelectorAll(".ecran").forEach(el => el.classList.remove("show"));
+    const target = document.getElementById(screenId);
+    if (target) target.classList.add("show");
+    setActiveNav(screenId);
+
+    // Si on arrive sur STATS, on s'assure d'initialiser les charts au besoin
+    if (screenId === "ecran-stats") ensureCharts();
+  }
+
+  // Liens nav bas
+  NAV_BTNS["ecran-principal"]?.addEventListener("click", () => navigateTo("accueil"));
+  NAV_BTNS["ecran-stats"]?.addEventListener("click",     () => navigateTo("stats"));
+  NAV_BTNS["ecran-calendrier"]?.addEventListener("click",() => navigateTo("cal"));
+  NAV_BTNS["ecran-habitudes"]?.addEventListener("click", () => navigateTo("habitudes"));
+  document.getElementById("nav-params")?.addEventListener("click", () => {
+    // Laisse settings.js gérer l’ouverture (page/modale).
+    window.dispatchEvent(new CustomEvent("sa:open:settings"));
+  });
+
+  function navigateTo(alias) {
+    const id = SCREENS[alias] || SCREENS.accueil;
+    // Mettre à jour le hash pour deep-linking (#stats, #cal…)
+    const nextHash = `#${alias}`;
+    if (location.hash !== nextHash) {
+      // Déclenchera hashchange -> showScreen
+      location.hash = nextHash;
+    } else {
+      showScreen(id);
+    }
+  }
+
+  function applyHashRoute() {
+    const raw = (location.hash || "").replace(/^#/, "");
+    const alias = SCREENS[raw] ? raw : (Object.prototype.hasOwnProperty.call(SCREENS, raw) ? raw : null);
+    if (alias && SCREENS[alias]) {
+      showScreen(SCREENS[alias]);
+    } else {
+      // Valeurs acceptées: #accueil #stats #cal #habitudes
+      // Par défaut: accueil
+      showScreen(SCREENS.accueil);
+      if (!location.hash) history.replaceState(null, "", "#accueil");
+    }
+  }
+
+  window.addEventListener("hashchange", applyHashRoute);
+  applyHashRoute();
+
+  // ===================== LAZY INIT DES CHARTS =====================
   const statsScreen = document.getElementById("ecran-stats");
   let chartsInitialized = false;
 
@@ -43,15 +115,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }, { root: null, threshold: 0.1 });
     io.observe(statsScreen);
   } else {
-    // Fallback (structure différente) : init direct comme avant
+    // Fallback (si pas d'IO ou pas d'élément) : init direct
     ensureCharts();
   }
 
-  // ======================================================================
-  // Sécurisation du flux AVERTISSEMENT 18+ (pas de "validation fantôme")
-  // ======================================================================
-
-  // Lecture de l'état "avertissement accepté" depuis le stockage (clé v23)
+  // ===================== MODALE AVERTISSEMENT 18+ =====================
   function warnAccepted() {
     try {
       const v = JSON.parse(localStorage.getItem("app_warn_v23") || "null");
@@ -61,28 +129,20 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Drapeau interne : "je viens d'ouvrir Ressources depuis la modale 18+"
   let warnCameFromModal = false;
 
-  // Quand on clique le lien "Ressources et numéros utiles" depuis la modale 18+
-  // (id à brancher dans le HTML : #open-ressources-from-warn)
   document.getElementById("open-ressources-from-warn")?.addEventListener("click", () => {
     warnCameFromModal = true;
-    // NOTE : l'ouverture effective de la page Ressources/modale-page
-    // est gérée ailleurs (routeur/modale existants).
+    // L’ouverture de la page “Ressources” est gérée ailleurs (router/modale)
+    window.dispatchEvent(new CustomEvent("sa:open:resources"));
   });
 
-  // Bouton "Fermer" de la modale des pages (Ressources, Manuel, etc.)
-  // (id à brancher dans le HTML : #btn-page-close)
   document.getElementById("btn-page-close")?.addEventListener("click", () => {
-    // On masque la page/modale en cours…
     const page = document.getElementById("modal-page");
     if (page) {
       page.classList.remove("show");
       page.setAttribute("aria-hidden", "true");
     }
-    // …et si l'avertissement n'est pas accepté OU qu'on venait de l'avertissement,
-    // on ré-ouvre la modale 18+
     const mustReopen = !warnAccepted() || warnCameFromModal;
     warnCameFromModal = false;
     if (mustReopen) {
@@ -94,8 +154,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Sécurité au clavier (Échap) : si on ferme la page ouverte alors que
-  // l'avertissement n'est pas accepté (ou qu'on vient de lui), on le rouvre.
   document.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape") {
       const page = document.getElementById("modal-page");
@@ -114,4 +172,29 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
   });
+
+  // ===================== PETIT PLUS : CONSOLE DEBUG (5 taps) =====================
+  (function setupDebugToggle() {
+    const dateEl  = document.getElementById("date-actuelle");
+    const dbg     = document.getElementById("debug-console");
+    if (!dateEl || !dbg) return;
+    let taps = 0, tmr = null;
+    dateEl.addEventListener("click", () => {
+      taps++;
+      clearTimeout(tmr);
+      tmr = setTimeout(() => { taps = 0; }, 600);
+      if (taps >= 5) {
+        taps = 0;
+        dbg.classList.toggle("show");
+      }
+    });
+  })();
+
+  // Expose un mini namespace (facultatif, utile pour diag)
+  window.SA = window.SA || {};
+  window.SA.app = {
+    version: "2.4.0-clean",
+    ensureCharts,
+    navigateTo,
+  };
 });
