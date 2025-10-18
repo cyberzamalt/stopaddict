@@ -1,117 +1,143 @@
 // web/js/limits.js
-// Conseils dynamiques + rappel des limites
-// Lit: state.settings (enable, limits), state.entries (aujourd'hui)
-// Met à jour: #conseil-texte (+ petits contrôles: prev/pause facultatifs)
+// -----------------------------------------------------------------------------
+// Gestion des limites quotidiennes + mise en évidence quand on approche/dépasse.
+// - Persistance dans localStorage ("app_limits_v23").
+// - Lecture/écriture des inputs #limite-* de l'écran Habitudes.
+// - Écoute l'historique du jour pour appliquer un style "avertissement" sur
+//   les compteurs de l'écran principal (couleur orange/rouge).
+// -----------------------------------------------------------------------------
 
-import { state } from "./state.js";
-import { startOfDay } from "./utils.js";
+const LS_KEY = "app_limits_v23";
 
-let tips = [];
-let tipIdx = 0;
-let timer = null;
-let paused = false;
+// --- lecture / écriture limites ---
+function loadLimits() {
+  try {
+    const v = JSON.parse(localStorage.getItem(LS_KEY) || "null");
+    if (v && typeof v === "object") return v;
+  } catch {}
+  // valeurs par défaut raisonnables
+  return {
+    cigs: 20,
+    joints: 3,
+    beer: 2,
+    strong: 1,
+    liquor: 1
+  };
+}
+function saveLimits(lim) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(lim)); } catch {}
+  // prévenir les autres modules (facultatif)
+  window.dispatchEvent(new Event("sa:limits:changed"));
+}
 
-function todayTotals() {
-  const a0 = startOfDay(new Date());
-  const a1 = new Date(+a0 + 86400000);
-  let c=0, j=0, a=0;
-  for (const e of (state.entries || [])) {
-    const t = new Date(e.ts);
-    if (t < a0 || t >= a1) continue;
-    if (e.type==="cig" || e.type==="cig_class" || e.type==="cig_roul" || e.type==="cig_tube") c += (e.qty||1);
-    else if (e.type==="weed" || e.type==="joint" || e.type==="joints") j += (e.qty||1);
-    else if (e.type==="beer" || e.type==="strong" || e.type==="liquor" || e.type==="alc_biere" || e.type==="alc_fort" || e.type==="alc_liqueur" || e.type==="alcohol") a += (e.qty||1);
+// --- accès best-effort à l'historique ---
+function pickFirstLocalStorageKey(keys) {
+  for (const k of keys) {
+    try {
+      const v = localStorage.getItem(k);
+      if (v) return JSON.parse(v);
+    } catch {}
   }
-  return { cigs:c, weed:j, alcohol:a };
+  return null;
+}
+function getHistory() {
+  if (window?.SA?.state?.history) return window.SA.state.history;
+  return pickFirstLocalStorageKey(["app_history_v23","history","sa_history_v2"]) || [];
 }
 
-function buildTips() {
-  const en = (state.settings && state.settings.enable) || {};
-  const L  = (state.settings && state.settings.limits && state.settings.limits.day) || {};
-  const { cigs, weed, alcohol } = todayTotals();
+// --- util datation ---
+function startOfLocalDayTS(t) {
+  const d = new Date(typeof t === "number" ? t : Date.now());
+  d.setHours(0,0,0,0);
+  return d.getTime();
+}
 
-  const out = [];
-
-  // Modules off → messages spécifiques
-  if (en.cigs === false && en.weed === false && en.alcohol === false) {
-    out.push("Tous les modules sont désactivés. Active « Je fume / Joints / Je bois » dans Réglages pour suivre tes consommations.");
-  } else {
-    if (en.cigs === false)    out.push("Le suivi tabac est désactivé. Tu peux l’activer à tout moment depuis Réglages.");
-    if (en.weed === false)    out.push("Le suivi cannabis est désactivé. Tu peux l’activer à tout moment depuis Réglages.");
-    if (en.alcohol === false) out.push("Le suivi alcool est désactivé. Tu peux l’activer à tout moment depuis Réglages.");
+// --- total du jour par type (cigs/weed/alcohol) ---
+function getTodayTotals() {
+  const hist = getHistory();
+  const d0 = startOfLocalDayTS(Date.now());
+  const d1 = d0 + 24*3600*1000;
+  let c=0, w=0, a=0;
+  for (const e of hist) {
+    const ts = Number(e?.ts||0);
+    if (!ts || ts<d0 || ts>=d1) continue;
+    const q = Number(e?.qty||1);
+    if (e.type === "cigs") c += q;
+    else if (e.type === "weed") w += q;
+    else if (e.type === "alcohol") a += q;
   }
+  return { cigs:c, weed:w, alcohol:a };
+}
 
-  // Limites (si définies)
-  if (en.cigs !== false && +L.cigs > 0) {
-    if (cigs === 0) out.push("🎯 Objectif tabac: " + L.cigs + "/jour. Astuce: fixe un créneau sans cigarette (ex: matin).");
-    else if (cigs < L.cigs) out.push("👍 Tabac: " + cigs + "/" + L.cigs + " aujourd’hui. Tu es sous la limite, continue !");
-    else if (cigs === L.cigs) out.push("⚠️ Tabac: tu viens d’atteindre ta limite journalière (" + L.cigs + ").");
-    else out.push("🚨 Tabac: " + cigs + " > " + L.cigs + " aujourd’hui. Pense à une pause longue ou à repousser la prochaine.");
+// --- applique les styles d'avertissement sur l'écran principal ---
+function applyLimitStyles() {
+  const lim = loadLimits();
+  const tot = getTodayTotals();
+
+  // helpers
+  const colorFor = (val, limit) => {
+    if (!limit || limit <= 0) return "";      // pas de limite => pas d'avertissement
+    const ratio = val / limit;
+    if (ratio >= 1) return "danger";          // rouge
+    if (ratio >= 0.8) return "warn";          // orange (approche)
+    return "";                                // normal
+  };
+
+  const styleByKey = {
+    cigs:   { el: document.getElementById("val-clopes"),   limit: lim.cigs,   val: tot.cigs   },
+    weed:   { el: document.getElementById("val-joints"),   limit: lim.joints, val: tot.weed   },
+    alcohol:{ el: document.getElementById("val-alcool"),   limit: (lim.beer||0)+(lim.strong||0)+(lim.liquor||0), val: tot.alcohol }
+  };
+
+  for (const k of Object.keys(styleByKey)) {
+    const { el, limit, val } = styleByKey[k];
+    if (!el) continue;
+    const lvl = colorFor(val, limit);
+    // reset
+    el.style.color = "var(--ink)";
+    // appliquer
+    if (lvl === "warn")   el.style.color = "var(--warn)";
+    if (lvl === "danger") el.style.color = "var(--danger)";
   }
+}
 
-  if (en.weed !== false && +L.weed > 0) {
-    if (weed === 0) out.push("🎯 Cannabis: objectif " + L.weed + "/jour. Planifie un soir sur deux sans joint.");
-    else if (weed < L.weed) out.push("👍 Cannabis: " + weed + "/" + L.weed + " aujourd’hui. Reste à l’écoute de ton corps.");
-    else if (weed === L.weed) out.push("⚠️ Cannabis: limite du jour atteinte (" + L.weed + "). Hydrate-toi, respire.");
-    else out.push("🚨 Cannabis: " + weed + " > " + L.weed + " aujourd’hui. Essaie une activité de substitution (marche courte, douche).");
+// --- synchronise inputs <-> stockage ---
+function wireInputs() {
+  const lim = loadLimits();
+  const map = [
+    ["limite-clopes","cigs"],
+    ["limite-joints","joints"],
+    ["limite-biere","beer"],
+    ["limite-fort","strong"],
+    ["limite-liqueur","liquor"],
+  ];
+  for (const [id,key] of map) {
+    const input = document.getElementById(id);
+    if (!input) continue;
+    input.value = Number(lim[key] ?? 0);
+    input.addEventListener("change", () => {
+      const v = Math.max(0, Number(input.value||0));
+      lim[key] = v;
+      saveLimits(lim);
+      applyLimitStyles();
+    });
   }
-
-  if (en.alcohol !== false && +L.alcohol > 0) {
-    if (alcohol === 0) out.push("🎯 Alcool: objectif " + L.alcohol + " verres/jour. Prévois des boissons sans alcool dans le frigo.");
-    else if (alcohol < L.alcohol) out.push("👍 Alcool: " + alcohol + "/" + L.alcohol + " aujourd’hui. Continue à alterner avec de l’eau.");
-    else if (alcohol === L.alcohol) out.push("⚠️ Alcool: limite du jour atteinte (" + L.alcohol + ").");
-    else out.push("🚨 Alcool: " + alcohol + " > " + L.alcohol + " aujourd’hui. Ralentis maintenant pour mieux récupérer.");
-  }
-
-  // Conseils génériques si aucune limite définie
-  if (out.length === 0) {
-    out.push("Astuce: définis des limites dans Habitudes → Limites consommation/jour pour activer les alertes intelligentes.");
-    out.push("Pense à noter les dates clés (réduction/stop) — elles s’affichent dans le calendrier.");
-  }
-
-  return out;
 }
 
-function renderTip() {
-  const el = document.getElementById("conseil-texte");
-  if (!el || tips.length === 0) return;
-  tipIdx = (tipIdx + tips.length) % tips.length;
-  el.textContent = tips[tipIdx];
-}
-
-function nextTipAuto() {
-  if (paused) return;
-  tipIdx = (tipIdx + 1) % tips.length;
-  renderTip();
-}
-
-function attachControls() {
-  const prev  = document.getElementById("adv-prev");
-  const pause = document.getElementById("adv-pause");
-  prev?.addEventListener("click", ()=>{ tipIdx = (tipIdx - 1 + tips.length) % tips.length; renderTip(); });
-  pause?.addEventListener("click", ()=>{
-    paused = !paused;
-    if (!paused) nextTipAuto();
-    pause.textContent = paused ? "▶" : "⏸";
-  });
-}
-
-function schedule() {
-  clearInterval(timer);
-  timer = setInterval(nextTipAuto, 6500);
-}
-
-function render() {
-  tips = buildTips();
-  tipIdx = 0;
-  renderTip();
-  schedule();
-}
-
+// --- init public ---
 export function initLimits() {
-  attachControls();
-  render();
-  document.addEventListener("sa:changed", render);
-  document.addEventListener("sa:settingsSaved", render);
-  document.addEventListener("sa:imported", render);
+  // charge valeurs dans les inputs
+  wireInputs();
+  // applique les styles au chargement
+  applyLimitStyles();
+
+  // Recalcule quand les données changent
+  window.addEventListener("sa:history:changed", applyLimitStyles);
+  window.addEventListener("sa:data:changed", applyLimitStyles);
+
+  // expose un petit util de debug
+  try {
+    window.SA = window.SA || {};
+    window.SA.limits = { get: loadLimits, set: (l)=>{ saveLimits({...loadLimits(), ...l}); applyLimitStyles(); } };
+  } catch {}
 }
