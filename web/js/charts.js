@@ -1,417 +1,390 @@
 // web/js/charts.js
 // -----------------------------------------------------------------------------
-// Charts sans dépendance externe (canvas 2D) pour Jour / Semaine / Mois.
-// Corrige les abscisses "Jour" (00:00→23:00) et intègre la série "Économies"
-// avec préférence de visibilité persistante (via economy.js).
-//
-// L’historique et les réglages sont lus en "best effort":
-//  - via window.SA.state si dispo (déconseillé de modifier ailleurs),
-//  - sinon via localStorage (plusieurs clés testées).
-//
-// Les boutons d'export restent gérés par web/js/export.js (initImportExport).
-// Ici, on gère uniquement l’affichage du graphe et les boutons d’échelle.
+// Graphiques Jour / Semaine / Mois sur <canvas id="chartCanvas">,
+// + maj du bandeau Stats (#stats-titre, #stats-*) et boutons d'échelle (#chartRange).
+// + options cocher/décocher des séries (Cigarettes / Joints / Alcool / Coût).
+// - Corrige l'échelle "Jour" : abscisses = heures locales 0..23 (pas d'UTC).
+// - S'appuie sur window.SA.economy (si présent) pour le coût/économies.
 // -----------------------------------------------------------------------------
 
-import { isEconomyVisible, setEconomyVisible, computeEconomies } from "./economy.js";
-
-// ---- Accès "best effort" aux données ----
-function pickFirstLocalStorageKey(keys) {
-  for (const k of keys) {
-    try {
-      const v = localStorage.getItem(k);
-      if (v) return JSON.parse(v);
-    } catch {}
-  }
-  return null;
-}
-function getSettings() {
-  // essaie fenêtre -> localStorage
-  if (window?.SA?.state?.settings) return window.SA.state.settings;
-  return pickFirstLocalStorageKey([
-    "app_settings_v23", "settings", "sa_settings_v2"
-  ]) || {};
-}
-function getHistory() {
-  if (window?.SA?.state?.history) return window.SA.state.history;
-  return pickFirstLocalStorageKey([
-    "app_history_v23", "history", "sa_history_v2"
-  ]) || [];
-}
-
-// ---- Utils temps/labels ----
-function startOfLocalDay(d){ const x=new Date(d); x.setHours(0,0,0,0); return x; }
-function startOfWeek(d){
-  const x=startOfLocalDay(d); // lundi comme début de semaine
-  const day=(x.getDay()||7)-1; // 0..6 (lundi=0)
-  x.setDate(x.getDate()-day);
-  return x;
-}
-function startOfMonth(d){ const x=startOfLocalDay(d); x.setDate(1); return x; }
-function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
-function fmtDay(d){ return d.toLocaleDateString(undefined,{weekday:"short", day:"2-digit"}); }
-function fmtDate(d){ return d.toLocaleDateString(); }
-function hoursLabels24(){ const lab=[]; for(let h=0;h<24;h++) lab.push(String(h).padStart(2,"0")+":00"); return lab; }
-
-// ---- Buckets jour (24h) ----
-function buildDayBuckets(history, dayDate, settings) {
-  const buckets = {
-    labels: hoursLabels24(),
-    cigs: new Array(24).fill(0),
-    weed: new Array(24).fill(0),
-    alcohol: new Array(24).fill(0),
-    cost: new Array(24).fill(0),
-    savings: new Array(24).fill(0),
-  };
-  const d0 = startOfLocalDay(dayDate).getTime();
-  const d1 = d0 + 24*3600*1000;
-
-  // Injecte calcul économies JOUR si possible
-  const econDaily = computeEconomies(history, settings)
-    .filter(e => e.ts>=d0 && e.ts<d1)
-    .reduce((acc,e)=>acc+(e.saving||0),0);
-
-  for (const e of history) {
-    const t = e?.ts|0; if (!t) continue;
-    if (t<d0 || t>=d1) continue;
-    const h = new Date(t).getHours();
-    const q = Number(e?.qty ?? 1);
-    if (e.type === "cigs")    buckets.cigs[h]    += q;
-    else if (e.type === "weed")    buckets.weed[h]    += q;
-    else if (e.type === "alcohol") buckets.alcohol[h] += q;
-
-    if (e.cost) buckets.cost[h] += Number(e.cost);
-  }
-
-  // Répartir l'économie du jour à plat (option simple/visuelle)
-  if (econDaily>0) {
-    const step = econDaily / 24;
-    for (let i=0;i<24;i++) buckets.savings[i]+=step;
-  }
-  return buckets;
-}
-
-// ---- Buckets semaine (7 jours) ----
-function buildWeekBuckets(history, refDate, settings) {
-  const week0 = startOfWeek(refDate).getTime(); // lundi 00:00
-  const labels=[], C=new Array(7).fill(0), W=new Array(7).fill(0), A=new Array(7).fill(0), K=new Array(7).fill(0), S=new Array(7).fill(0);
-
-  // économies par jour
-  const econ = computeEconomies(history, settings);
-  const econByDay = new Map(econ.map(e=>[e.ts, e.saving]));
-
-  for (let i=0;i<7;i++){
-    const d0 = week0 + i*86400000;
-    const d1 = d0 + 86400000;
-    labels.push(fmtDay(new Date(d0)));
-    for (const e of history) {
-      const t = e?.ts|0; if (!t || t<d0 || t>=d1) continue;
-      const q = Number(e?.qty ?? 1);
-      if (e.type === "cigs")    C[i]+=q;
-      else if (e.type === "weed")    W[i]+=q;
-      else if (e.type === "alcohol") A[i]+=q;
-      if (e.cost) K[i]+=Number(e.cost);
-    }
-    if (econByDay.has(d0)) S[i]+=Number(econByDay.get(d0) || 0);
-  }
-  return { labels, cigs:C, weed:W, alcohol:A, cost:K, savings:S };
-}
-
-// ---- Buckets mois (jusqu’à 31 jours) ----
-function daysInMonth(y,m){ return new Date(y, m+1, 0).getDate(); }
-function buildMonthBuckets(history, refDate, settings) {
-  const d = startOfMonth(refDate);
-  const y = d.getFullYear(), m = d.getMonth();
-  const dim = daysInMonth(y,m);
-  const labels=[], C=new Array(dim).fill(0), W=new Array(dim).fill(0), A=new Array(dim).fill(0), K=new Array(dim).fill(0), S=new Array(dim).fill(0);
-
-  const econ = computeEconomies(history, settings);
-  const econByDay = new Map(econ.map(e=>[e.ts, e.saving]));
-
-  for (let i=1;i<=dim;i++){
-    const d0 = new Date(y,m,i); d0.setHours(0,0,0,0);
-    const d1 = new Date(y,m,i+1); d1.setHours(0,0,0,0);
-    const idx = i-1;
-    labels.push(String(i).padStart(2,"0"));
-    for (const e of history) {
-      const t = e?.ts|0; if (!t || t<d0.getTime() || t>=d1.getTime()) continue;
-      const q = Number(e?.qty ?? 1);
-      if (e.type === "cigs")    C[idx]+=q;
-      else if (e.type === "weed")    W[idx]+=q;
-      else if (e.type === "alcohol") A[idx]+=q;
-      if (e.cost) K[idx]+=Number(e.cost);
-    }
-    const k = d0.getTime();
-    if (econByDay.has(k)) S[idx]+=Number(econByDay.get(k) || 0);
-  }
-  return { labels, cigs:C, weed:W, alcohol:A, cost:K, savings:S };
-}
-
-// ---- Canvas rendu simple (lignes/aires minimalistes) ----
-function clearCanvas(ctx, w, h){
-  ctx.save();
-  ctx.clearRect(0,0,w,h);
-  ctx.fillStyle="#ffffff";
-  ctx.fillRect(0,0,w,h);
-  ctx.restore();
-}
-function drawAxes(ctx, w, h, padding, yMax){
-  ctx.save();
-  ctx.strokeStyle="#e5e7eb";
-  ctx.lineWidth=1;
-  // Axe X
-  ctx.beginPath();
-  ctx.moveTo(padding, h-padding);
-  ctx.lineTo(w-padding, h-padding);
-  ctx.stroke();
-  // graduations Y (5)
-  const steps=5;
-  ctx.fillStyle="#6b7280";
-  ctx.font="10px system-ui, sans-serif";
-  for (let i=0;i<=steps;i++){
-    const y = h - padding - (i/steps)*(h-2*padding);
-    ctx.beginPath();
-    ctx.moveTo(padding-4, y);
-    ctx.lineTo(w-padding, y);
-    ctx.stroke();
-    const val = Math.round((i/steps)*yMax);
-    ctx.fillText(String(val), 6, y-2);
-  }
-  ctx.restore();
-}
-function plotLine(ctx, w, h, padding, labels, data, color, yMax){
-  const n = data.length||0;
-  if (!n || yMax<=0) return;
-  ctx.save();
-  ctx.strokeStyle=color;
-  ctx.lineWidth=2;
-  ctx.beginPath();
-  for (let i=0;i<n;i++){
-    const x = padding + (i/(n-1))*(w-2*padding);
-    const y = h - padding - (data[i]/yMax)*(h-2*padding);
-    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-  }
-  ctx.stroke();
-  ctx.restore();
-}
-function fillArea(ctx, w, h, padding, labels, data, color, yMax, alpha=0.12){
-  const n = data.length||0;
-  if (!n || yMax<=0) return;
-  ctx.save();
-  ctx.fillStyle=color;
-  ctx.globalAlpha = alpha;
-  ctx.beginPath();
-  for (let i=0;i<n;i++){
-    const x = padding + (i/(n-1))*(w-2*padding);
-    const y = h - padding - (data[i]/yMax)*(h-2*padding);
-    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-  }
-  // fermer vers l'axe X
-  ctx.lineTo(padding + (w-2*padding), h-padding);
-  ctx.lineTo(padding, h-padding);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-}
-function drawLabelsX(ctx, w, h, padding, labels){
-  ctx.save();
-  ctx.fillStyle="#6b7280";
-  ctx.font="10px system-ui, sans-serif";
-  const n = labels.length||0;
-  if (!n) return;
-  const step = Math.max(1, Math.floor(n/8));
-  for (let i=0;i<n;i+=step){
-    const x = padding + (i/(n-1))*(w-2*padding);
-    ctx.fillText(labels[i], x-12, h-padding+12);
-  }
-  ctx.restore();
-}
-
-// Palette discrète (pas de styles imposés par CSS)
-const COLORS = {
-  cigs:    "#3b82f6",
-  weed:    "#22c55e",
-  alcohol: "#f59e0b",
-  cost:    "#0ea5e9",
-  savings: "#10b981"
+const LS_KEYS = {
+  HISTORY: "app_history_v23",
+  CHART_SERIES: "app_chart_series_v23", // persiste (cigs/weed/alcohol/cost) activés
 };
 
-// Légende cliquable générée dynamiquement
-function makeLegend(container, visible, onToggle) {
-  container.innerHTML = "";
-  const entries = [
-    ["cigs","Cigarettes"],
-    ["weed","Joints"],
-    ["alcohol","Alcool"],
-    ["cost","Coût"],
-    ["savings","Économies"]
-  ];
-  for (const [key,label] of entries) {
-    const chip = document.createElement("button");
-    chip.type = "button";
-    chip.textContent = label;
-    chip.style.cssText = `
-      margin:6px 6px 0 0; padding:6px 10px; border-radius:999px; border:2px solid ${COLORS[key]};
-      background:${visible[key] ? COLORS[key] : "#fff"}; color:${visible[key] ? "#fff" : COLORS[key]};
-      font-weight:800; font-size:12px; cursor:pointer;
-    `;
-    chip.addEventListener("click", ()=>onToggle(key));
-    container.appendChild(chip);
-  }
+const DEFAULT_SERIES = { cigs: true, weed: true, alcohol: true, cost: true };
+
+function getHistory() {
+  if (window?.SA?.state?.history) return window.SA.state.history;
+  try {
+    const v = JSON.parse(localStorage.getItem(LS_KEYS.HISTORY) || "null");
+    return Array.isArray(v) ? v : [];
+  } catch { return []; }
 }
 
-// ---- Rendu principal ----
-function render(canvas, state) {
-  const ctx = canvas.getContext("2d");
-  const w = canvas.width, h = canvas.height;
-  const padding = 36;
-
-  // data visibles selon toggles
-  const { labels, series, visible } = state;
-
-  // Y max auto (prend le max des séries visibles)
-  let yMax = 0;
-  for (const k of Object.keys(series)) {
-    if (!visible[k]) continue;
-    for (const v of series[k]) yMax = Math.max(yMax, v||0);
-  }
-  if (yMax <= 0) yMax = 5;
-
-  clearCanvas(ctx, w, h);
-  drawAxes(ctx, w, h, padding, yMax);
-  drawLabelsX(ctx, w, h, padding, labels);
-
-  // Aires douces pour coût/économies, lignes pour cigs/weed/alcool
-  if (visible.cost)    fillArea(ctx, w, h, padding, labels, series.cost,    COLORS.cost,    yMax, 0.10);
-  if (visible.savings) fillArea(ctx, w, h, padding, labels, series.savings, COLORS.savings, yMax, 0.12);
-
-  if (visible.cigs)    plotLine(ctx, w, h, padding, labels, series.cigs,    COLORS.cigs,    yMax);
-  if (visible.weed)    plotLine(ctx, w, h, padding, labels, series.weed,    COLORS.weed,    yMax);
-  if (visible.alcohol) plotLine(ctx, w, h, padding, labels, series.alcohol, COLORS.alcohol, yMax);
+function getSeriesPrefs() {
+  try {
+    const v = JSON.parse(localStorage.getItem(LS_KEYS.CHART_SERIES) || "null");
+    return { ...DEFAULT_SERIES, ...(v||{}) };
+  } catch { return { ...DEFAULT_SERIES }; }
+}
+function setSeriesPrefs(p) {
+  try { localStorage.setItem(LS_KEYS.CHART_SERIES, JSON.stringify(p)); } catch {}
 }
 
-// ---- Construction des séries selon l’échelle ----
-function buildSeries(range, history, settings, refDate){
+// ----- Dates util -----
+const DAY = 24*60*60*1000;
+
+function startOfLocalDay(ts=Date.now()) {
+  const d = new Date(ts);
+  d.setHours(0,0,0,0);
+  return d.getTime();
+}
+function mondayOfWeek(ts=Date.now()) {
+  const d = new Date(ts);
+  const day = (d.getDay() || 7) - 1; // Lundi=0
+  d.setDate(d.getDate()-day);
+  d.setHours(0,0,0,0);
+  return d.getTime();
+}
+function monthBounds(ts=Date.now()) {
+  const d = new Date(ts);
+  const first = new Date(d.getFullYear(), d.getMonth(), 1); first.setHours(0,0,0,0);
+  const next = new Date(d.getFullYear(), d.getMonth()+1, 1); next.setHours(0,0,0,0);
+  return [first.getTime(), next.getTime()];
+}
+
+// ----- Agrégation -----
+function aggregate(range) {
+  const hist = getHistory();
+  const now = Date.now();
+  const out = { labels: [], cigs: [], weed: [], alcohol: [], cost: [] };
+
   if (range === "day") {
-    const b = buildDayBuckets(history, refDate, settings);
-    return {
-      labels: b.labels,
-      series: { cigs:b.cigs, weed:b.weed, alcohol:b.alcohol, cost:b.cost, savings:b.savings }
+    const d0 = startOfLocalDay(now), d1 = d0 + DAY;
+    const buckets = Array.from({length:24}, (_,h)=>({h, c:0, w:0, a:0, entries:[]}));
+    for (const e of hist) {
+      const t = +e.ts || 0;
+      if (t < d0 || t >= d1) continue;
+      const h = new Date(t).getHours(); // LOCAL hour
+      const b = buckets[h];
+      const qty = Number(e.qty||1);
+      if (e.type==="cigs") b.c += qty;
+      else if (e.type==="weed") b.w += qty;
+      else if (e.type==="alcohol") b.a += qty;
+      b.entries.push(e);
+    }
+    const eco = window?.SA?.economy;
+    for (const b of buckets) {
+      out.labels.push(String(b.h).padStart(2,"0")+"h");
+      out.cigs.push(b.c);
+      out.weed.push(b.w);
+      out.alcohol.push(b.a);
+      out.cost.push(eco ? eco.costFor(b.entries) : 0);
+    }
+    return out;
+  }
+
+  if (range === "week") {
+    const t0 = mondayOfWeek(now), t1 = t0 + 7*DAY;
+    const buckets = Array.from({length:7}, (_,i)=>({i, c:0, w:0, a:0, entries:[], ts:t0+i*DAY}));
+    for (const e of hist) {
+      const t = +e.ts || 0;
+      if (t < t0 || t >= t1) continue;
+      const idx = Math.floor((t - t0)/DAY);
+      const b = buckets[idx];
+      const qty = Number(e.qty||1);
+      if (e.type==="cigs") b.c += qty;
+      else if (e.type==="weed") b.w += qty;
+      else if (e.type==="alcohol") b.a += qty;
+      b.entries.push(e);
+    }
+    const wd = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
+    const eco = window?.SA?.economy;
+    for (let i=0;i<buckets.length;i++) {
+      const b = buckets[i];
+      out.labels.push(wd[i]);
+      out.cigs.push(b.c);
+      out.weed.push(b.w);
+      out.alcohol.push(b.a);
+      out.cost.push(eco ? eco.costFor(b.entries) : 0);
+    }
+    return out;
+  }
+
+  // month
+  const [m0, mN] = monthBounds(now);
+  const days = Math.round((mN - m0)/DAY);
+  const buckets = Array.from({length:days}, (_,i)=>({i, c:0, w:0, a:0, entries:[], ts: m0 + i*DAY}));
+  for (const e of hist) {
+    const t = +e.ts || 0;
+    if (t < m0 || t >= mN) continue;
+    const idx = Math.floor((t - m0)/DAY);
+    const b = buckets[idx];
+    const qty = Number(e.qty||1);
+    if (e.type==="cigs") b.c += qty;
+    else if (e.type==="weed") b.w += qty;
+    else if (e.type==="alcohol") b.a += qty;
+    b.entries.push(e);
+  }
+  const eco = window?.SA?.economy;
+  for (let i=0;i<buckets.length;i++) {
+    const b = buckets[i];
+    out.labels.push(String(i+1));
+    out.cigs.push(b.c);
+    out.weed.push(b.w);
+    out.alcohol.push(b.a);
+    out.cost.push(eco ? eco.costFor(b.entries) : 0);
+  }
+  return out;
+}
+
+// ----- Stats header (bandeau vert dans l'écran Stats) -----
+function updateStatsHeader(range, agg) {
+  const elTitle = document.getElementById("stats-titre");
+  const elC = document.getElementById("stats-clopes");
+  const elW = document.getElementById("stats-joints");
+  const elA = document.getElementById("stats-alcool");
+  const elALine = document.getElementById("stats-alcool-line");
+
+  const sum = (arr)=>arr.reduce((a,b)=>a+(Number(b)||0),0);
+
+  const totalC = sum(agg.cigs);
+  const totalW = sum(agg.weed);
+  const totalA = sum(agg.alcohol);
+
+  if (elC) elC.textContent = String(totalC);
+  if (elW) elW.textContent = String(totalW);
+  if (elA) elA.textContent = String(totalA);
+  if (elALine) elALine.style.display = (totalA>0) ? "" : "none";
+
+  const now = new Date();
+  let title = "—";
+  if (range==="day") {
+    const opts = { weekday:"long", day:"2-digit", month:"long" };
+    title = "Aujourd’hui – " + now.toLocaleDateString(undefined,opts);
+  } else if (range==="week") {
+    const t0 = new Date(mondayOfWeek(now));
+    const t1 = new Date(t0.getTime()+6*DAY);
+    title = `Semaine du ${t0.toLocaleDateString()} au ${t1.toLocaleDateString()}`;
+  } else {
+    const opts = { month:"long", year:"numeric" };
+    title = now.toLocaleDateString(undefined, opts);
+  }
+  if (elTitle) elTitle.textContent = title;
+}
+
+// ----- UI: toggles séries -----
+function ensureSeriesToggles() {
+  let host = document.getElementById("chart-actions");
+  if (!host) host = document.getElementById("ecran-stats");
+  if (!host) return;
+
+  // Ajoute une rangée de toggles si absente
+  if (!document.getElementById("series-toggles")) {
+    const wrap = document.createElement("div");
+    wrap.id = "series-toggles";
+    wrap.style.display = "grid";
+    wrap.style.gridTemplateColumns = "repeat(4, minmax(0,1fr))";
+    wrap.style.gap = "6px";
+    wrap.style.margin = "8px 10px 0";
+    wrap.innerHTML = `
+      <label style="display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="tg-cigs"> Cigarettes
+      </label>
+      <label style="display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="tg-weed"> Joints
+      </label>
+      <label style="display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="tg-alcohol"> Alcool
+      </label>
+      <label style="display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="tg-cost"> Coût
+      </label>
+    `;
+    host.appendChild(wrap);
+  }
+
+  const prefs = getSeriesPrefs();
+  const map = [
+    ["tg-cigs", "cigs"],
+    ["tg-weed", "weed"],
+    ["tg-alcohol", "alcohol"],
+    ["tg-cost", "cost"],
+  ];
+  for (const [id, key] of map) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.checked = !!prefs[key];
+    el.onchange = () => {
+      const p = getSeriesPrefs();
+      p[key] = !!el.checked;
+      setSeriesPrefs(p);
+      render(); // redraw
     };
   }
-  if (range === "week") {
-    const b = buildWeekBuckets(history, refDate, settings);
-    return { labels:b.labels, series:{ cigs:b.cigs, weed:b.weed, alcohol:b.alcohol, cost:b.cost, savings:b.savings } };
-  }
-  // default: month
-  const b = buildMonthBuckets(history, refDate, settings);
-  return { labels:b.labels, series:{ cigs:b.cigs, weed:b.weed, alcohol:b.alcohol, cost:b.cost, savings:b.savings } };
 }
 
-// ---- init principal ----
-export function initCharts() {
+// ----- Canvas chart (barres empilées + courbe coût) -----
+function drawChart(range, agg, prefs) {
   const canvas = document.getElementById("chartCanvas");
-  const legendHost = (() => {
-    let host = document.getElementById("chart-legend");
-    if (!host) {
-      // On crée une petite zone de légende sous le canvas si elle n'existe pas
-      const block = canvas?.closest(".chart-block");
-      host = document.createElement("div");
-      host.id = "chart-legend";
-      host.style.margin = "4px 10px 0 10px";
-      if (block) block.appendChild(host); else canvas?.parentNode?.appendChild(host);
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+
+  // Clear
+  ctx.clearRect(0,0,W,H);
+
+  // Padding
+  const padL = 42, padR = 18, padT = 10, padB = 42;
+
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+
+  // Data prep
+  const n = agg.labels.length;
+  const sum = (arr)=>arr.reduce((a,b)=>a+(Number(b)||0),0);
+  const maxStack = [];
+  for (let i=0;i<n;i++) {
+    const c = prefs.cigs ? +agg.cigs[i]||0 : 0;
+    const w = prefs.weed ? +agg.weed[i]||0 : 0;
+    const a = prefs.alcohol ? +agg.alcohol[i]||0 : 0;
+    maxStack.push(c+w+a);
+  }
+  const maxBars = Math.max(1, ...maxStack);
+
+  // cost axis scale separated to avoid dwarfing bars
+  const maxCost = prefs.cost ? Math.max(1, ...agg.cost.map(v=>+v||0)) : 1;
+
+  // Axes Y (bar)
+  ctx.strokeStyle = "#e5e7eb";
+  ctx.lineWidth = 1;
+  for (let g=0; g<=4; g++){
+    const y = padT + innerH * (g/4);
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(W - padR, y);
+    ctx.stroke();
+  }
+
+  // Helper to map value -> y pixel
+  const yBar = (v)=> padT + innerH * (1 - (v / maxBars));
+  const yCost = (v)=> padT + innerH * (1 - (v / maxCost));
+
+  // Bars stacked
+  const gap = 4;
+  const bw = innerW / Math.max(1,n);
+  const bx = (i)=> padL + i*bw + gap/2;
+  const barW = Math.max(2, bw - gap);
+
+  function rect(x,y,w,h, color){
+    ctx.fillStyle = color;
+    ctx.fillRect(x,y,w,h);
+  }
+
+  for (let i=0;i<n;i++) {
+    let y0 = yBar(0);
+    const c = prefs.cigs ? +agg.cigs[i]||0 : 0;
+    const w = prefs.weed ? +agg.weed[i]||0 : 0;
+    const a = prefs.alcohol ? +agg.alcohol[i]||0 : 0;
+
+    const hC = innerH * (c / maxBars);
+    const hW = innerH * (w / maxBars);
+    const hA = innerH * (a / maxBars);
+
+    const x = bx(i);
+    // order: cigs (bleu), weed (vert), alcool (orange)
+    if (c>0) { rect(x, y0 - hC, barW, hC, "#3b82f6"); y0 -= hC; }
+    if (w>0) { rect(x, y0 - hW, barW, hW, "#22c55e"); y0 -= hW; }
+    if (a>0) { rect(x, y0 - hA, barW, hA, "#f59e0b"); y0 -= hA; }
+  }
+
+  // Cost line
+  if (prefs.cost) {
+    ctx.strokeStyle = "#111827";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i=0;i<n;i++) {
+      const v = +agg.cost[i] || 0;
+      const x = bx(i) + barW/2;
+      const y = yCost(v);
+      if (i===0) ctx.moveTo(x,y);
+      else ctx.lineTo(x,y);
     }
-    return host;
-  })();
+    ctx.stroke();
 
-  if (!canvas) {
-    console.warn("[Charts] canvas#chartCanvas introuvable");
-    return;
+    // small dots
+    ctx.fillStyle = "#111827";
+    for (let i=0;i<n;i++) {
+      const v = +agg.cost[i] || 0;
+      const x = bx(i) + barW/2;
+      const y = yCost(v);
+      ctx.beginPath();
+      ctx.arc(x,y,2.5,0,Math.PI*2);
+      ctx.fill();
+    }
   }
 
-  // état local
-  let range = "day"; // "day" | "week" | "month"
-  let refDate = Date.now();
+  // X labels
+  ctx.fillStyle = "#6b7280";
+  ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  for (let i=0;i<n;i++) {
+    const x = bx(i) + barW/2;
+    const lbl = agg.labels[i];
+    ctx.fillText(lbl, x, H - padB + 6);
+  }
 
-  // visibilité séries (persisté pour économies uniquement)
-  let visible = {
-    cigs: true,
-    weed: true,
-    alcohol: true,
-    cost: true,
-    savings: isEconomyVisible() // important : ne jamais s'activer tout seul
-  };
+  // Y labels (bars)
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let g=0; g<=4; g++){
+    const val = Math.round(maxBars * (g/4));
+    const y = padT + innerH * (1 - (g/4));
+    ctx.fillText(String(val), padL - 6, y);
+  }
+  // Y label cost (right)
+  if (prefs.cost) {
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+    ctx.fillText("€", W - padR + 2, padT + 10);
+  }
+}
 
-  // gestion des boutons d’échelle
-  const rangeBar = document.getElementById("chartRange");
-  if (rangeBar) {
-    rangeBar.addEventListener("click", (ev) => {
-      const btn = ev.target?.closest("[data-range]");
-      if (!btn) return;
-      const r = btn.getAttribute("data-range");
-      if (r && (r==="day"||r==="week"||r==="month")) {
-        for (const b of rangeBar.querySelectorAll(".pill")) b.classList.remove("active");
-        btn.classList.add("active");
-        range = r;
-        drawNow();
-      }
+// ----- Render -----
+let currentRange = "day";
+
+function render() {
+  const prefs = getSeriesPrefs();
+  const agg = aggregate(currentRange);
+  updateStatsHeader(currentRange, agg);
+  drawChart(currentRange, agg, prefs);
+}
+
+// ----- Wiring -----
+function wireRangeButtons() {
+  const host = document.getElementById("chartRange");
+  if (!host) return;
+  host.querySelectorAll(".btn.pill").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      host.querySelectorAll(".btn.pill").forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      currentRange = btn.dataset.range || "day";
+      render();
     });
-  }
+  });
+}
 
-  function drawNow() {
-    const history  = getHistory();
-    const settings = getSettings();
-    const { labels, series } = buildSeries(range, history, settings, refDate);
+export function initCharts() {
+  wireRangeButtons();
+  ensureSeriesToggles();
+  render();
 
-    // construire la légende à chaque draw (stateless, simple)
-    makeLegend(legendHost, visible, (key)=>{
-      // Persiste seulement pour "Économies"
-      if (key === "savings") {
-        const nv = !visible.savings;
-        setEconomyVisible(nv);
-        visible.savings = nv;
-      } else {
-        visible[key] = !visible[key];
-      }
-      drawNow();
-    });
-
-    render(canvas, { labels, series, visible });
-
-    // Met à jour les petits totaux sous le titre si présents (facultatif)
-    try {
-      const sum = (arr)=>arr.reduce((a,b)=>a+(Number(b)||0),0);
-      const elT = document.getElementById("stats-titre");
-      const elC = document.getElementById("stats-clopes");
-      const elW = document.getElementById("stats-joints");
-      const elA = document.getElementById("stats-alcool");
-      if (elT) {
-        if (range==="day")   elT.textContent = "Aujourd'hui – " + fmtDate(new Date(refDate));
-        if (range==="week")  elT.textContent = "Semaine du " + fmtDate(startOfWeek(refDate));
-        if (range==="month") elT.textContent = "Mois de " + new Date(refDate).toLocaleDateString(undefined,{month:"long", year:"numeric"});
-      }
-      if (elC) elC.textContent = String(sum(series.cigs));
-      if (elW) elW.textContent = String(sum(series.weed));
-      if (elA) {
-        const totA = sum(series.alcohol);
-        const line = document.getElementById("stats-alcool-line");
-        if (line) line.style.display = "block";
-        elA.textContent = String(totA);
-      }
-    } catch {}
-  }
-
-  // premier draw
-  drawNow();
-
-  // Redessiner quand d'autres modules annoncent une mise à jour des données
-  // (ex. counters.js, import/export, settings…)
-  window.addEventListener("sa:data:changed", drawNow);
-  window.addEventListener("sa:settings:changed", drawNow);
-  window.addEventListener("sa:history:changed", drawNow);
-
-  // Expose un petit hook pour d'autres modules si besoin
-  try {
-    window.SA = window.SA || {};
-    window.SA.charts = { redraw: drawNow, setRange:(r)=>{range=r; drawNow();} };
-  } catch {}
+  // redraw when data or settings change
+  window.addEventListener("sa:history:changed", render);
+  window.addEventListener("sa:data:changed", render);
+  window.addEventListener("sa:settings:changed", render);
+  // redraw if economy toggled or prices change
+  window.addEventListener("sa:economy:changed", render);
 }
