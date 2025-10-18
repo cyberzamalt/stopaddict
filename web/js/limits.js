@@ -1,143 +1,120 @@
 // web/js/limits.js
 // -----------------------------------------------------------------------------
-// Gestion des limites quotidiennes + mise en évidence quand on approche/dépasse.
-// - Persistance dans localStorage ("app_limits_v23").
-// - Lecture/écriture des inputs #limite-* de l'écran Habitudes.
-// - Écoute l'historique du jour pour appliquer un style "avertissement" sur
-//   les compteurs de l'écran principal (couleur orange/rouge).
+// Limites quotidiennes :
+// - Persiste les limites (clopes/joints/alcool) dans localStorage
+// - Met à jour l'écran Habitudes (champs #limite-* existants)
+// - Expose window.SA.limits pour que charts.js affiche les overlays
+// - Déclenche "sa:limits:changed" à chaque modification
 // -----------------------------------------------------------------------------
 
-const LS_KEY = "app_limits_v23";
 
-// --- lecture / écriture limites ---
+const LS_LIMITS = "app_limits_v23";
+
 function loadLimits() {
   try {
-    const v = JSON.parse(localStorage.getItem(LS_KEY) || "null");
-    if (v && typeof v === "object") return v;
+    const v = JSON.parse(localStorage.getItem(LS_LIMITS) || "null");
+    if (v && typeof v === "object") {
+      // Normalise les clés attendues
+      return {
+        cigs: Number(v.cigs || 0),
+        weed: Number(v.weed || 0),
+        alcohol_biere: Number(v.alcohol_biere || 0),
+        alcohol_fort: Number(v.alcohol_fort || 0),
+        alcohol_liqueur: Number(v.alcohol_liqueur || 0),
+      };
+    }
   } catch {}
-  // valeurs par défaut raisonnables
   return {
     cigs: 20,
-    joints: 3,
-    beer: 2,
-    strong: 1,
-    liquor: 1
+    weed: 3,
+    alcohol_biere: 2,
+    alcohol_fort: 1,
+    alcohol_liqueur: 1,
   };
 }
+
 function saveLimits(lim) {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(lim)); } catch {}
-  // prévenir les autres modules (facultatif)
+  try { localStorage.setItem(LS_LIMITS, JSON.stringify(lim)); } catch {}
   window.dispatchEvent(new Event("sa:limits:changed"));
 }
 
-// --- accès best-effort à l'historique ---
-function pickFirstLocalStorageKey(keys) {
-  for (const k of keys) {
-    try {
-      const v = localStorage.getItem(k);
-      if (v) return JSON.parse(v);
-    } catch {}
-  }
-  return null;
-}
-function getHistory() {
-  if (window?.SA?.state?.history) return window.SA.state.history;
-  return pickFirstLocalStorageKey(["app_history_v23","history","sa_history_v2"]) || [];
+// ----- API publique -----
+function exposeAPI() {
+  window.SA = window.SA || {};
+  window.SA.limits = {
+    get raw() { return loadLimits(); },
+
+    // total quotidien pour la série "alcohol" (on additionne les sous-types)
+    get alcoholDailyTotal() {
+      const L = loadLimits();
+      return Number(L.alcohol_biere||0) + Number(L.alcohol_fort||0) + Number(L.alcohol_liqueur||0);
+    },
+
+    /**
+     * Valeurs de limite par "bucket" du graphe en fonction de l'échelle.
+     * - range = "day"   : il y a 24 barres (une par heure) => limite/24
+     * - range = "week"  : 7 barres (une par jour)         => limite/jour
+     * - range = "month" : 28~31 barres (une par jour)     => limite/jour
+     * Retourne un objet { cigs, weed, alcohol }
+     */
+    perBucket(range) {
+      const L = loadLimits();
+      const alc = this.alcoholDailyTotal;
+      if (range === "day") {
+        return {
+          cigs: (Number(L.cigs||0))/24,
+          weed: (Number(L.weed||0))/24,
+          alcohol: (Number(alc||0))/24,
+        };
+      }
+      // week / month => 1 barre = 1 jour
+      return {
+        cigs: Number(L.cigs||0),
+        weed: Number(L.weed||0),
+        alcohol: Number(alc||0),
+      };
+    },
+
+    // setter partiel
+    set(partial) {
+      const cur = loadLimits();
+      saveLimits({ ...cur, ...(partial||{}) });
+    }
+  };
 }
 
-// --- util datation ---
-function startOfLocalDayTS(t) {
-  const d = new Date(typeof t === "number" ? t : Date.now());
-  d.setHours(0,0,0,0);
-  return d.getTime();
-}
+// ----- Wiring écran Habitudes -----
+function $(id){ return document.getElementById(id); }
 
-// --- total du jour par type (cigs/weed/alcohol) ---
-function getTodayTotals() {
-  const hist = getHistory();
-  const d0 = startOfLocalDayTS(Date.now());
-  const d1 = d0 + 24*3600*1000;
-  let c=0, w=0, a=0;
-  for (const e of hist) {
-    const ts = Number(e?.ts||0);
-    if (!ts || ts<d0 || ts>=d1) continue;
-    const q = Number(e?.qty||1);
-    if (e.type === "cigs") c += q;
-    else if (e.type === "weed") w += q;
-    else if (e.type === "alcohol") a += q;
-  }
-  return { cigs:c, weed:w, alcohol:a };
-}
+function wireUI() {
+  // Les inputs existent dans l’index fourni :
+  // #limite-clopes, #limite-joints, #limite-biere, #limite-fort, #limite-liqueur
+  const L = loadLimits();
 
-// --- applique les styles d'avertissement sur l'écran principal ---
-function applyLimitStyles() {
-  const lim = loadLimits();
-  const tot = getTodayTotals();
+  if ($("limite-clopes")) $("limite-clopes").value = L.cigs ?? 0;
+  if ($("limite-joints")) $("limite-joints").value = L.weed ?? 0;
+  if ($("limite-biere")) $("limite-biere").value = L.alcohol_biere ?? 0;
+  if ($("limite-fort")) $("limite-fort").value = L.alcohol_fort ?? 0;
+  if ($("limite-liqueur")) $("limite-liqueur").value = L.alcohol_liqueur ?? 0;
 
-  // helpers
-  const colorFor = (val, limit) => {
-    if (!limit || limit <= 0) return "";      // pas de limite => pas d'avertissement
-    const ratio = val / limit;
-    if (ratio >= 1) return "danger";          // rouge
-    if (ratio >= 0.8) return "warn";          // orange (approche)
-    return "";                                // normal
+  const onChange = () => {
+    const lim = {
+      cigs: Number($("limite-clopes")?.value || 0),
+      weed: Number($("limite-joints")?.value || 0),
+      alcohol_biere: Number($("limite-biere")?.value || 0),
+      alcohol_fort: Number($("limite-fort")?.value || 0),
+      alcohol_liqueur: Number($("limite-liqueur")?.value || 0),
+    };
+    saveLimits(lim);
   };
 
-  const styleByKey = {
-    cigs:   { el: document.getElementById("val-clopes"),   limit: lim.cigs,   val: tot.cigs   },
-    weed:   { el: document.getElementById("val-joints"),   limit: lim.joints, val: tot.weed   },
-    alcohol:{ el: document.getElementById("val-alcool"),   limit: (lim.beer||0)+(lim.strong||0)+(lim.liquor||0), val: tot.alcohol }
-  };
-
-  for (const k of Object.keys(styleByKey)) {
-    const { el, limit, val } = styleByKey[k];
-    if (!el) continue;
-    const lvl = colorFor(val, limit);
-    // reset
-    el.style.color = "var(--ink)";
-    // appliquer
-    if (lvl === "warn")   el.style.color = "var(--warn)";
-    if (lvl === "danger") el.style.color = "var(--danger)";
-  }
+  ["limite-clopes","limite-joints","limite-biere","limite-fort","limite-liqueur"]
+    .forEach(id => $(id)?.addEventListener("input", onChange));
 }
 
-// --- synchronise inputs <-> stockage ---
-function wireInputs() {
-  const lim = loadLimits();
-  const map = [
-    ["limite-clopes","cigs"],
-    ["limite-joints","joints"],
-    ["limite-biere","beer"],
-    ["limite-fort","strong"],
-    ["limite-liqueur","liquor"],
-  ];
-  for (const [id,key] of map) {
-    const input = document.getElementById(id);
-    if (!input) continue;
-    input.value = Number(lim[key] ?? 0);
-    input.addEventListener("change", () => {
-      const v = Math.max(0, Number(input.value||0));
-      lim[key] = v;
-      saveLimits(lim);
-      applyLimitStyles();
-    });
-  }
-}
-
-// --- init public ---
 export function initLimits() {
-  // charge valeurs dans les inputs
-  wireInputs();
-  // applique les styles au chargement
-  applyLimitStyles();
-
-  // Recalcule quand les données changent
-  window.addEventListener("sa:history:changed", applyLimitStyles);
-  window.addEventListener("sa:data:changed", applyLimitStyles);
-
-  // expose un petit util de debug
-  try {
-    window.SA = window.SA || {};
-    window.SA.limits = { get: loadLimits, set: (l)=>{ saveLimits({...loadLimits(), ...l}); applyLimitStyles(); } };
-  } catch {}
+  exposeAPI();
+  wireUI();
+  // Signal initial (utile si charts.js est déjà monté)
+  window.dispatchEvent(new Event("sa:limits:changed"));
 }
