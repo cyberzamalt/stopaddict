@@ -21,7 +21,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- Lazy init des charts si la section Stats est présente ---
   // Objectif : éviter de calculer/rendre les graphes tant que l'écran Stats n'est pas visible.
   // Si #screen-stats n'existe pas, on tombe en "init immédiat" (comportement d'avant).
-  const statsScreen = document.getElementById("screen-stats");
+  const statsScreen = document.getElementById("ecran-stats");
   let chartsInitialized = false;
 
   function ensureCharts() {
