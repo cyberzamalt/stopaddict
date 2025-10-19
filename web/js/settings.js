@@ -1,8 +1,9 @@
 // web/js/settings.js
-// FICHIER COMPLET - Copier-coller direct dans GitHub
-// Rôle: Toggles modules + Pages (modale) + Clock + Debug
+// FICHIER PROPRE - Copier-coller direct dans GitHub
+// Rôle UNIQUE: Toggles modules + Pages (modale) + Clock + Debug
+// LA NAVIGATION EST GÉRÉE UNIQUEMENT PAR app.js (PAS DE DOUBLE WIRING)
 
-import { getSettings, saveSettings, on, emit } from "./state.js";
+const LS_SETTINGS = "app_settings_v23";
 
 // ============================================================
 // HORLOGE HEADER
@@ -32,80 +33,98 @@ function startClock() {
 
     tick();
     setInterval(tick, 1000);
-    console.log("[settings.clock] Clock started");
+    console.log("[settings.clock] Horloge démarrée");
   } catch (e) {
-    console.error("[settings.clock] error:", e);
+    console.error("[settings.clock] Erreur:", e);
   }
 }
 
 // ============================================================
-// TOGGLES MODULES (Accueil: Je fume / Je bois)
+// TOGGLES MODULES (Accueil: Je fume / Je bois / Je consomme)
 // ============================================================
+function loadSettings() {
+  try {
+    const v = JSON.parse(localStorage.getItem(LS_SETTINGS) || "null");
+    if (v && typeof v === "object") return v;
+  } catch {}
+  return {
+    enabled: { cigs: true, weed: true, alcohol: true }
+  };
+}
+
+function saveSettings(s) {
+  try {
+    localStorage.setItem(LS_SETTINGS, JSON.stringify(s));
+  } catch {}
+  window.dispatchEvent(new Event("sa:settings:changed"));
+  console.log("[settings] Paramètres sauvegardés:", s);
+}
+
 function applyModuleVisibility() {
   try {
-    const settings = getSettings() || {};
-    const modules = settings.modules || { cigs: true, weed: true, alcohol: true };
+    const st = loadSettings();
+    const enabled = st.enabled || { cigs: true, weed: true, alcohol: true };
 
     // Cibles: les 3 cartes de l'accueil
     const cardCigs = document.querySelector("#ecran-principal .card.bar-left");
     const cardWeed = document.querySelector("#ecran-principal .card.bar-left.green");
-    const cardAlc = document.querySelector("#ecran-principal .card.bar-left.orange");
+    const cardAlcohol = document.querySelector("#ecran-principal .card.bar-left.orange");
 
-    if (cardCigs) cardCigs.style.display = modules.cigs ? "" : "none";
-    if (cardWeed) cardWeed.style.display = modules.weed ? "" : "none";
-    if (cardAlc) cardAlc.style.display = modules.alcohol ? "" : "none";
+    if (cardCigs) cardCigs.style.display = enabled.cigs ? "" : "none";
+    if (cardWeed) cardWeed.style.display = enabled.weed ? "" : "none";
+    if (cardAlcohol) cardAlcohol.style.display = enabled.alcohol ? "" : "none";
 
     // Ligne alcool du bandeau (aussi conditionnel)
-    const lineAlc = document.getElementById("bandeau-alcool-line");
-    if (lineAlc) lineAlc.style.display = modules.alcohol ? "" : "none";
+    const lineAlcohol = document.getElementById("bandeau-alcool-line");
+    if (lineAlcohol) lineAlcohol.style.display = enabled.alcohol ? "" : "none";
 
-    console.log("[settings.modules] Applied visibility:", modules);
+    console.log("[settings.modules] Visibilité appliquée:", enabled);
   } catch (e) {
-    console.error("[settings.applyModuleVisibility] error:", e);
+    console.error("[settings.applyModuleVisibility] Erreur:", e);
   }
 }
 
 function wireModuleToggles() {
   try {
-    const settings = getSettings() || {};
-    const modules = settings.modules || { cigs: true, weed: true, alcohol: true };
+    const st = loadSettings();
+    const enabled = st.enabled || { cigs: true, weed: true, alcohol: true };
 
     const chkCigs = document.getElementById("toggle-cigs");
     const chkWeed = document.getElementById("toggle-weed");
-    const chkAlc = document.getElementById("toggle-alcool");
+    const chkAlcohol = document.getElementById("toggle-alcool");
 
-    // Initialiser l'état des checkboxes
-    if (chkCigs) chkCigs.checked = !!modules.cigs;
-    if (chkWeed) chkWeed.checked = !!modules.weed;
-    if (chkAlc) chkAlc.checked = !!modules.alcohol;
+    // Initialiser l'état des cases
+    if (chkCigs) chkCigs.checked = !!enabled.cigs;
+    if (chkWeed) chkWeed.checked = !!enabled.weed;
+    if (chkAlcohol) chkAlcohol.checked = !!enabled.alcohol;
 
-    // Attach listeners
+    // Listeners
     chkCigs?.addEventListener("change", (e) => {
-      modules.cigs = !!e.target.checked;
-      saveSettings({ ...settings, modules });
+      enabled.cigs = !!e.target.checked;
+      saveSettings({ ...st, enabled });
       applyModuleVisibility();
-      console.log("[settings] Cigs toggle:", modules.cigs);
+      console.log("[settings] Toggle Cigarettes:", enabled.cigs);
     });
 
     chkWeed?.addEventListener("change", (e) => {
-      modules.weed = !!e.target.checked;
-      saveSettings({ ...settings, modules });
+      enabled.weed = !!e.target.checked;
+      saveSettings({ ...st, enabled });
       applyModuleVisibility();
-      console.log("[settings] Weed toggle:", modules.weed);
+      console.log("[settings] Toggle Joints:", enabled.weed);
     });
 
-    chkAlc?.addEventListener("change", (e) => {
-      modules.alcohol = !!e.target.checked;
-      saveSettings({ ...settings, modules });
+    chkAlcohol?.addEventListener("change", (e) => {
+      enabled.alcohol = !!e.target.checked;
+      saveSettings({ ...st, enabled });
       applyModuleVisibility();
-      console.log("[settings] Alcohol toggle:", modules.alcohol);
+      console.log("[settings] Toggle Alcool:", enabled.alcohol);
     });
 
     // Appliquer la visibilité initiale
     applyModuleVisibility();
     console.log("[settings.toggles] Wired");
   } catch (e) {
-    console.error("[settings.wireModuleToggles] error:", e);
+    console.error("[settings.wireModuleToggles] Erreur:", e);
   }
 }
 
@@ -180,7 +199,7 @@ function openPageModal(title, content) {
     const bodyEl = document.getElementById("page-content");
 
     if (!modal || !titleEl || !bodyEl) {
-      console.warn("[settings.openPageModal] DOM elements missing");
+      console.warn("[settings.openPageModal] Éléments DOM manquants");
       return;
     }
 
@@ -189,9 +208,20 @@ function openPageModal(title, content) {
     modal.classList.add("show");
     modal.setAttribute("aria-hidden", "false");
 
-    console.log("[settings] Opened page modal:", title);
+    console.log("[settings] Modale page ouverte:", title);
   } catch (e) {
-    console.error("[settings.openPageModal] error:", e);
+    console.error("[settings.openPageModal] Erreur:", e);
+  }
+}
+
+function closePageModal() {
+  try {
+    const modal = document.getElementById("modal-page");
+    if (!modal) return;
+    modal.classList.remove("show");
+    modal.setAttribute("aria-hidden", "true");
+  } catch (e) {
+    console.error("[settings.closePageModal] Erreur:", e);
   }
 }
 
@@ -264,9 +294,9 @@ function openSettingsMenu() {
       });
     }
 
-    console.log("[settings] Settings menu opened");
+    console.log("[settings] Menu Réglages ouvert");
   } catch (e) {
-    console.error("[settings.openSettingsMenu] error:", e);
+    console.error("[settings.openSettingsMenu] Erreur:", e);
   }
 }
 
@@ -283,14 +313,14 @@ function wireWarnShortcut() {
       openPageModal("Ressources utiles", getPageContent("ressources"));
     });
 
-    console.log("[settings] Warn shortcut wired");
+    console.log("[settings] Raccourci 18+ wired");
   } catch (e) {
-    console.error("[settings.wireWarnShortcut] error:", e);
+    console.error("[settings.wireWarnShortcut] Erreur:", e);
   }
 }
 
 // ============================================================
-// DEBUG CONSOLE TOGGLE (5 taps sur date - alternatif)
+// DEBUG CONSOLE TOGGLE (5 taps sur date)
 // ============================================================
 function wireDebugToggle() {
   try {
@@ -304,16 +334,20 @@ function wireDebugToggle() {
     dateEl.addEventListener("click", () => {
       taps++;
       clearTimeout(timer);
-      timer = setTimeout(() => { taps = 0; }, 600);
+      timer = setTimeout(() => {
+        taps = 0;
+      }, 600);
 
       if (taps >= 5) {
         taps = 0;
         dbgBox.classList.toggle("show");
-        console.log("[settings.debug] Debug console toggled");
+        console.log("[settings.debug] Console debug basculée");
       }
     });
+
+    console.log("[settings.debug] Debug toggle wired");
   } catch (e) {
-    console.error("[settings.wireDebugToggle] error:", e);
+    console.error("[settings.wireDebugToggle] Erreur:", e);
   }
 }
 
@@ -328,7 +362,7 @@ function wireEventBus() {
 
     console.log("[settings] Event bus wired");
   } catch (e) {
-    console.error("[settings.wireEventBus] error:", e);
+    console.error("[settings.wireEventBus] Erreur:", e);
   }
 }
 
@@ -336,7 +370,7 @@ function wireEventBus() {
 // INIT PUBLIQUE
 // ============================================================
 export function initSettings() {
-  console.log("[settings.init] Starting...");
+  console.log("[settings.init] Démarrage...");
 
   try {
     startClock();
@@ -345,22 +379,17 @@ export function initSettings() {
     wireDebugToggle();
     wireEventBus();
 
-    // Écouter les changements de settings depuis state.js
-    on("state:settings", () => {
-      applyModuleVisibility();
-      console.log("[settings] State changed, reapplying visibility");
-    });
-
     // Expose helpers
     window.SA = window.SA || {};
     window.SA.pages = {
       open: openPageModal,
+      close: closePageModal,
       openSettingsMenu,
       getContent: getPageContent,
     };
 
-    console.log("[settings.init] Done");
+    console.log("[settings.init] OK");
   } catch (e) {
-    console.error("[settings.init] CRITICAL ERROR:", e);
+    console.error("[settings.init] ERREUR CRITIQUE:", e);
   }
 }
