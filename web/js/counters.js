@@ -1,499 +1,381 @@
 // web/js/counters.js
-// COMPLET v2.4.0 - Gestion des compteurs accueil (+/-), toggles modules, horloge
-// Dépendances: state.js (addEntry, removeOneToday, getSettings, saveSettings, etc.)
 
 import {
-  on, emit,
-  getSettings, saveSettings,
-  addEntry, removeOneToday,
-  ymd, totalsHeader,
-  getTodayTotals
+  addEntry,
+  removeOneToday,
+  setActiveSegment,
+  getActiveSegments,
+  totalsHeader,
+  ymd,
+  on,
+  setSetting,
+  getSettings,
+  emit,
 } from "./state.js";
 
-// --- Helpers DOM ---
-const $  = (sel, root=document) => root.querySelector(sel);
-const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
-
-// Essaye d'inférer le type (cigs/weed/alcohol) à partir de l'id du bouton
-function inferTypeFromId(id="") {
-  const s = String(id).toLowerCase();
-  if (s.startsWith("cl-") || s.includes("clope")) return "cigs";
-  if (s.startsWith("j-")  || s.includes("joint")) return "weed";
-  if (s.startsWith("a-")  || s.includes("alcool")) return "alcohol";
+/**
+ * Petite aide : conversion ID de bouton -> type de consommation
+ * cl-... => "cigs", j-... => "weed", a-... => "alcohol"
+ */
+function inferTypeFromId(id) {
+  if (!id || typeof id !== "string") return null;
+  if (id.startsWith("cl-")) return "cigs";
+  if (id.startsWith("j-"))  return "weed";
+  if (id.startsWith("a-"))  return "alcohol";
   return null;
 }
 
-function fmt(n) { return (n ?? 0).toString(); }
-
-// --- Mise à jour header (stat rapides + bandeau résumé Accueil) ---
+/**
+ * Rafraîchit les compteurs rapides (barre du haut) + bandeau résumé
+ */
 function refreshHeaderCounters() {
   try {
-    const tdy = getTodayTotals(); // { cigs, weed, alcohol, cost }
-    
-    // Stats rapides (header)
-    const statCigEl = $("#stat-clopes-jr");
-    if (statCigEl) {
-      statCigEl.textContent = fmt(tdy.cigs);
-    }
+    const t = totalsHeader(new Date()) || {};
 
-    const statJointEl = $("#stat-joints-jr");
-    if (statJointEl) {
-      statJointEl.textContent = fmt(tdy.weed);
-    }
+    // Totaux jour (fallbacks au cas où la forme diffère)
+    const day = t.today || t.day || {};
+    const dayCounts = day.counts || day.todayCounts || day.totals || {};
+    const cigs = Number(dayCounts.cigs ?? day.cigs ?? 0) || 0;
+    const weed = Number(dayCounts.weed ?? day.weed ?? 0) || 0;
+    const alcohol = Number(dayCounts.alcohol ?? day.alcohol ?? 0) || 0;
 
-    const statAlcEl = $("#stat-alcool-jr");
-    if (statAlcEl) {
-      statAlcEl.textContent = fmt(tdy.alcohol);
-    }
+    // Coût jour
+    const cost = Number(
+      day.cost ?? t.todayCost ?? t.costToday ?? 0
+    ) || 0;
 
-    const statCostEl = $("#stat-cout-jr");
-    if (statCostEl) {
-      statCostEl.textContent = (tdy.cost ?? 0).toFixed(2) + "€";
-    }
+    // Header "stats rapides"
+    const elCigs = document.getElementById("stat-clopes-jr");
+    const elWeed = document.getElementById("stat-joints-jr");
+    const elAlc = document.getElementById("stat-alcool-jr");
+    const elCost = document.getElementById("stat-cout-jr");
+    if (elCigs) elCigs.textContent = String(cigs);
+    if (elWeed) elWeed.textContent = String(weed);
+    if (elAlc) elAlc.textContent = String(alcohol);
+    if (elCost) elCost.textContent = `${cost.toFixed(2)}€`;
 
-    // Cartes Accueil
-    const valCigEl = $("#val-clopes");
-    if (valCigEl) {
-      valCigEl.textContent = fmt(tdy.cigs);
-    }
+    // Bandeau résumé Accueil
+    const bTitle = document.getElementById("bandeau-titre");
+    const bCigs  = document.getElementById("bandeau-clopes");
+    const bWeed  = document.getElementById("bandeau-joints");
+    const bAlc   = document.getElementById("bandeau-alcool");
+    const bAlcLine = document.getElementById("bandeau-alcool-line");
 
-    const valJointEl = $("#val-joints");
-    if (valJointEl) {
-      valJointEl.textContent = fmt(tdy.weed);
+    if (bTitle) {
+      const d = new Date();
+      bTitle.textContent = `Aujourd'hui — ${d.toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "2-digit" })}`;
     }
+    if (bCigs) bCigs.textContent = String(cigs);
+    if (bWeed) bWeed.textContent = String(weed);
+    if (bAlc)  bAlc.textContent  = String(alcohol);
+    if (bAlcLine) bAlcLine.style.display = "flex";
 
-    const valAlcEl = $("#val-alcool");
-    if (valAlcEl) {
-      valAlcEl.textContent = fmt(tdy.alcohol);
-    }
-
-    // Bandeau résumé
-    const hdr = totalsHeader(new Date());
-    const bandeauTitleEl = $("#bandeau-titre");
-    if (bandeauTitleEl) {
-      bandeauTitleEl.textContent = hdr.title || "Aujourd'hui";
-    }
-
-    const bandeauCigEl = $("#bandeau-clopes");
-    if (bandeauCigEl) {
-      bandeauCigEl.textContent = fmt(tdy.cigs);
-    }
-
-    const bandeauJointEl = $("#bandeau-joints");
-    if (bandeauJointEl) {
-      bandeauJointEl.textContent = fmt(tdy.weed);
-    }
-
-    const alcoolLine = $("#bandeau-alcool-line");
-    if (alcoolLine) {
-      if ((tdy.alcohol ?? 0) > 0) {
-        alcoolLine.style.display = "";
-        const bandeauAlcEl = $("#bandeau-alcool");
-        if (bandeauAlcEl) {
-          bandeauAlcEl.textContent = fmt(tdy.alcohol);
-        }
-      } else {
-        alcoolLine.style.display = "none";
-      }
-    }
-
-    console.log("[counters.refreshHeaderCounters] Updated - cigs:", tdy.cigs, "weed:", tdy.weed, "alcohol:", tdy.alcohol);
-  } catch(e) {
-    console.error("[counters] refreshHeaderCounters error:", e);
+  } catch (e) {
+    console.error("[counters.refreshHeaderCounters] error:", e);
   }
 }
 
-// --- Horloge en-tête (maj chaque minute) + 5 taps debug ---
+/**
+ * Horloge en-tête (date/heure)
+ */
 function wireClock() {
   try {
-    refreshHeaderCounters();
-    setInterval(refreshHeaderCounters, 60_000);
-    console.log("[counters.wireClock] Clock wired (updates every 60s)");
+    const elDate = document.getElementById("date-actuelle");
+    const elTime = document.getElementById("heure-actuelle");
+    const update = () => {
+      const now = new Date();
+      if (elDate) elDate.textContent = now.toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" });
+      if (elTime) elTime.textContent = now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    };
+    update();
+    setInterval(update, 30 * 1000);
   } catch (e) {
     console.error("[counters.wireClock] error:", e);
   }
 }
 
-// --- Boutons + / − (Accueil) ---
+/**
+ * Boutons +/- (Accueil)
+ * Supporte data-type="cigs|weed|alcohol" OU inférence à partir des IDs (cl-plus, j-moins, etc.)
+ */
 function wirePlusMinus() {
+  const last = { action: null }; // { type, delta }
+
+  const showSnack = (msg) => {
+    const bar = document.getElementById("snackbar");
+    const undo = document.getElementById("undo-link");
+    if (!bar || !undo) return;
+    bar.firstChild && (bar.firstChild.textContent = msg + " — ");
+    bar.classList.add("show");
+    const hide = () => bar.classList.remove("show");
+    setTimeout(hide, 2500);
+    undo.onclick = (ev) => {
+      ev.preventDefault();
+      try {
+        if (!last.action) return;
+        if (last.action.delta > 0) {
+          removeOneToday(last.action.type);
+        } else if (last.action.delta < 0) {
+          addEntry(last.action.type, Math.abs(last.action.delta));
+        }
+      } catch (e) {
+        console.error("[counters.undo] error:", e);
+      } finally {
+        hide();
+        last.action = null;
+      }
+    };
+  };
+
+  const apply = (type, delta) => {
+    try {
+      if (!type) return;
+      if (delta > 0) addEntry(type, delta);
+      else if (delta < 0) removeOneToday(type);
+      last.action = { type, delta };
+      emit("ui:snack", { type, delta });
+      refreshHeaderCounters();
+      showSnack("Action enregistrée");
+    } catch (e) {
+      console.error("[counters.wirePlusMinus] apply error:", e);
+    }
+  };
+
+  // Attacher sur tous les boutons .btn-round de l'accueil
+  const root = document.getElementById("ecran-principal") || document;
+  const btns = root.querySelectorAll(".btn-round");
+  btns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      // 1) data-type prioritaire
+      let type = btn.dataset?.type || null;
+      // 2) sinon inférer par l'ID
+      if (!type) type = inferTypeFromId(btn.id);
+
+      const isPlus  = btn.classList.contains("btn-plus");
+      const isMinus = btn.classList.contains("btn-minus");
+      if (isPlus)  apply(type, +1);
+      if (isMinus) apply(type, -1);
+    });
+  });
+}
+
+/**
+ * Segments (clopes & alcool) — 3 boutons par groupe.
+ * Sauvegarde la sélection via setActiveSegment(type, key).
+ */
+function wireSegments() {
   try {
-    // Sélecteur simplifié : tous les boutons ronds dans l'écran principal
-    const buttons = $$("#ecran-principal .btn-round");
-    
-    if (buttons.length === 0) {
-      console.warn("[counters.wirePlusMinus] No .btn-round buttons found in #ecran-principal");
-      return;
+    // CLopes
+    const segCl = document.getElementById("seg-clopes");
+    if (segCl) {
+      segCl.innerHTML = "";
+      const g = document.createDocumentFragment();
+      [
+        { k: "classic", label: "Classiques" },
+        { k: "rolled",  label: "Roulées" },
+        { k: "tube",    label: "Tubes" }
+      ].forEach(({ k, label }) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "seg";
+        b.textContent = label;
+        b.addEventListener("click", () => {
+          setActiveSegment("cigs", k);
+          updateSegmentsUI();
+        });
+        g.appendChild(b);
+      });
+      segCl.appendChild(g);
     }
 
-    console.log("[counters.wirePlusMinus] Found", buttons.length, "buttons");
+    // Alcool
+    const segAl = document.getElementById("seg-alcool");
+    if (segAl) {
+      segAl.innerHTML = "";
+      const g = document.createDocumentFragment();
+      [
+        { k: "beer",  label: "Bière" },
+        { k: "fort",  label: "Fort" },
+        { k: "liqueur", label: "Liqueur" }
+      ].forEach(({ k, label }) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "seg";
+        b.textContent = label;
+        b.addEventListener("click", () => {
+          setActiveSegment("alcohol", k);
+          updateSegmentsUI();
+        });
+        g.appendChild(b);
+      });
+      segAl.appendChild(g);
+    }
 
-    buttons.forEach((btn) => {
-      // Vérifier que le bouton a un ID reconnaissable
-      if (!btn.id) {
-        console.warn("[counters.wirePlusMinus] Button has no id, skipping");
-        return;
+    // Appliquer l'état actif visuel
+    const updateSegmentsUI = () => {
+      try {
+        const active = getActiveSegments ? (getActiveSegments() || {}) : {};
+        const activeC = active.cigs || "classic";
+        const activeA = active.alcohol || "beer";
+
+        if (segCl) {
+          const items = segCl.querySelectorAll(".seg");
+          const keys = ["classic", "rolled", "tube"];
+          items.forEach((el, idx) => {
+            el.classList.toggle("actif", keys[idx] === activeC);
+          });
+        }
+        if (segAl) {
+          const items = segAl.querySelectorAll(".seg");
+          const keys = ["beer", "fort", "liqueur"];
+          items.forEach((el, idx) => {
+            el.classList.toggle("actif", keys[idx] === activeA);
+          });
+        }
+      } catch (e) {
+        console.error("[counters.updateSegmentsUI] error:", e);
       }
+    };
 
-      const btnId = btn.id.toLowerCase();
-      
-      // Vérifier que c'est bien un bouton +/- (cl-, j-, a-)
-      if (!/(cl|j|a)-(plus|moins)/.test(btnId)) {
-        console.warn("[counters.wirePlusMinus] Button id not recognized:", btn.id);
-        return;
-      }
+    updateSegmentsUI();
+    on("state:settings", updateSegmentsUI);
+  } catch (e) {
+    console.error("[counters.wireSegments] error:", e);
+  }
+}
 
-      btn.addEventListener("click", () => {
+/**
+ * Toggles "je fume/je bois" sur l'accueil
+ */
+function wireHomeToggles() {
+  try {
+    const s = (getSettings && getSettings()) || {};
+    const map = [
+      { id: "toggle-cigs",   key: "module.cigs.enabled",   card: closestCard("val-clopes") },
+      { id: "toggle-weed",   key: "module.weed.enabled",   card: closestCard("val-joints") },
+      { id: "toggle-alcool", key: "module.alcohol.enabled", card: closestCard("val-alcool") },
+    ];
+
+    // Appliquer l'état au chargement
+    map.forEach(({ id, key, card }) => {
+      const el = document.getElementById(id);
+      const enabled = Boolean(pathGet(s, key, true));
+      if (el) el.checked = enabled;
+      if (card) card.style.display = enabled ? "" : "none";
+    });
+
+    // Listeners
+    map.forEach(({ id, key, card }) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener("change", () => {
         try {
-          const isPlus  = btn.classList.contains("btn-plus");
-          const isMinus = btn.classList.contains("btn-minus");
-          const explicitType = btn.dataset?.type;
-          const type = explicitType || inferTypeFromId(btn.id);
-
-          if (!type) {
-            console.warn("[counters.wirePlusMinus] Could not infer type from button:", btn.id);
-            return;
-          }
-
-          console.log("[counters.wirePlusMinus] Click on", btn.id, '- type:', type, '- operation:', isPlus ? '+' : '-');
-
-          if (isPlus) {
-            const addResult = addEntry(type, 1);
-            if (addResult) {
-              console.log("[counters.wirePlusMinus] Added 1 to', type);
-              emit("ui:clicked", { id: btn.id, type, op: "+" });
-              refreshHeaderCounters();
-            } else {
-              console.error("[counters.wirePlusMinus] addEntry failed for type:', type);
-            }
-          }
-
-          if (isMinus) {
-            const removeResult = removeOneToday(type);
-            if (removeResult) {
-              console.log("[counters.wirePlusMinus] Removed 1 from', type);
-              emit("ui:clicked", { id: btn.id, type, op: "-" });
-              refreshHeaderCounters();
-            } else {
-              console.error("[counters.wirePlusMinus] removeOneToday failed or no entries for type:', type);
-            }
-          }
+          const enabled = !!el.checked;
+          setSetting(key, enabled);
+          if (card) card.style.display = enabled ? "" : "none";
+          emit("state:settings", { [key]: enabled });
         } catch (e) {
-          console.error("[counters.wirePlusMinus] Click handler error:", e);
+          console.error("[counters.wireHomeToggles] change error:", e);
         }
       });
     });
-
-    console.log("[counters.wirePlusMinus] Wired", buttons.length, "buttons");
-  } catch (e) {
-    console.error("[counters.wirePlusMinus] setup error:", e);
-  }
-}
-
-// --- Toggles "je fume / je bois" (Accueil) ---
-function applyModuleTogglesToHome(s) {
-  try {
-    // On masque/affiche les cartes selon les toggles
-    const cardC = $("#ecran-principal .card.bar-left");         // 1ère carte = cigs
-    const cardJ = $("#ecran-principal .card.bar-left.green");   // 2ème = weed
-    const cardA = $("#ecran-principal .card.bar-left.orange");  // 3ème = alcohol
-
-    if (cardC) {
-      cardC.style.display = (s?.modules?.cigs === false) ? "none" : "";
-    }
-    if (cardJ) {
-      cardJ.style.display = (s?.modules?.weed === false) ? "none" : "";
-    }
-    if (cardA) {
-      cardA.style.display = (s?.modules?.alcohol === false) ? "none" : "";
-    }
-
-    // Les checkbox de l'accueil reflètent l'état
-    const tC = $("#toggle-cigs");
-    const tW = $("#toggle-weed");
-    const tA = $("#toggle-alcool");
-
-    if (tC) {
-      tC.checked = (s?.modules?.cigs !== false);
-    }
-    if (tW) {
-      tW.checked = (s?.modules?.weed !== false);
-    }
-    if (tA) {
-      tA.checked = (s?.modules?.alcohol !== false);
-    }
-
-    console.log("[counters.applyModuleTogglesToHome] Applied visibility");
-  } catch (e) {
-    console.error("[counters.applyModuleTogglesToHome] error:", e);
-  }
-}
-
-function wireHomeToggles() {
-  try {
-    const tC = $("#toggle-cigs");
-    const tW = $("#toggle-weed");
-    const tA = $("#toggle-alcool");
-
-    function updateSetting(key, checked) {
-      try {
-        const s = getSettings() || {};
-        s.modules = s.modules || { cigs: true, weed: true, alcohol: true };
-        s.modules[key] = !!checked;
-        
-        const saveResult = saveSettings(s);
-        if (saveResult) {
-          applyModuleTogglesToHome(s);
-          emit("state:settings", { modules: s.modules });
-          refreshHeaderCounters();
-          console.log("[counters.wireHomeToggles] Setting updated:', key, '=', checked);
-        } else {
-          console.error("[counters.wireHomeToggles] saveSettings failed for key:', key);
-        }
-      } catch (e) {
-        console.error("[counters.wireHomeToggles] updateSetting error for key:', key, e);
-      }
-    }
-
-    if (tC) {
-      tC.addEventListener("change", () => {
-        updateSetting("cigs", tC.checked);
-      });
-    } else {
-      console.warn("[counters.wireHomeToggles] toggle-cigs not found");
-    }
-
-    if (tW) {
-      tW.addEventListener("change", () => {
-        updateSetting("weed", tW.checked);
-      });
-    } else {
-      console.warn("[counters.wireHomeToggles] toggle-weed not found");
-    }
-
-    if (tA) {
-      tA.addEventListener("change", () => {
-        updateSetting("alcohol", tA.checked);
-      });
-    } else {
-      console.warn("[counters.wireHomeToggles] toggle-alcool not found");
-    }
-
-    console.log("[counters.wireHomeToggles] Wired");
   } catch (e) {
     console.error("[counters.wireHomeToggles] error:", e);
   }
 }
 
-// --- Conseil du jour (fallback simple si i18n pas prêt) ---
-const FALLBACK_TIPS = [
-  "Boire un grand verre d'eau quand l'envie monte.",
-  "Marcher 2 minutes : l'envie chute après une courte activité.",
-  "Respirer lentement 10 secondes, trois fois de suite.",
-  "Écrire l'envie sur une note, puis la déchirer.",
-  "Se rappeler pourquoi tu as commencé à réduire ✊"
-];
-
-function setAdvice(text) {
+function pathGet(obj, path, defVal) {
   try {
-    const el = $("#conseil-texte");
-    if (el) {
-      el.textContent = text || "—";
-    }
-  } catch (e) {
-    console.error("[counters.setAdvice] error:", e);
+    return path.split(".").reduce((o, k) => (o && k in o ? o[k] : undefined), obj) ?? defVal;
+  } catch {
+    return defVal;
   }
 }
 
-function initAdviceCarousel() {
+function closestCard(valId) {
+  const el = document.getElementById(valId);
+  return el ? el.closest(".card") : null;
+}
+
+/**
+ * Conseil du jour (simple fallback pour éviter le "—")
+ */
+function wireAdvice() {
   try {
-    let idx = 0, paused = false, timer = null;
+    const el = document.getElementById("conseil-texte");
+    if (!el) return;
+    const now = new Date();
+    const h = now.getHours();
+    let advice = "Pense à respirer profondément 3 fois et boire un verre d'eau. ♥";
 
-    function next() {
-      if (paused) return;
-      idx = (idx + 1) % FALLBACK_TIPS.length;
-      setAdvice(FALLBACK_TIPS[idx]);
-    }
+    if (h < 12) advice = "Matin zen : une marche de 5 minutes réduit souvent l'envie immédiate.";
+    else if (h < 18) advice = "Après-midi : hydrate-toi, et note ton envie sur 10 (ça aide à la faire passer).";
+    else advice = "Soir : une tisane ou une douche chaude = bons alliés. Tu avances, un pas après l'autre.";
 
-    function prev() {
-      idx = (idx - 1 + FALLBACK_TIPS.length) % FALLBACK_TIPS.length;
-      setAdvice(FALLBACK_TIPS[idx]);
-    }
-
-    function start() {
-      stop();
-      timer = setInterval(next, 8000);
-    }
-
-    function stop() {
-      if (timer) clearInterval(timer);
-      timer = null;
-    }
-
-    const advPrevBtn = $("#adv-prev");
-    const advPauseBtn = $("#adv-pause");
-
-    if (advPrevBtn) {
-      advPrevBtn.addEventListener("click", () => {
-        prev();
-        start();
-      });
-    } else {
-      console.warn("[counters.initAdviceCarousel] adv-prev not found");
-    }
-
-    if (advPauseBtn) {
-      advPauseBtn.addEventListener("click", () => {
-        paused = !paused;
-        if (!paused) {
-          start();
-        } else {
-          stop();
-        }
-      });
-    } else {
-      console.warn("[counters.initAdviceCarousel] adv-pause not found");
-    }
-
-    // Démarre avec un texte
-    setAdvice(FALLBACK_TIPS[idx]);
-    start();
-
-    console.log("[counters.initAdviceCarousel] Initialized");
+    el.textContent = advice;
   } catch (e) {
-    console.error("[counters.initAdviceCarousel] error:", e);
+    console.error("[counters.wireAdvice] error:", e);
   }
 }
 
-// --- Entrée & Undo (Annuler) ---
-let lastAction = null;
+/**
+ * Navigation basique (accueil/stats/calendrier/habitudes)
+ * — au cas où settings.js ne l’a pas déjà fait, on garde ça ultra-light
+ */
+function wireBottomNavFallback() {
+  const byId = (id) => document.getElementById(id);
+  const screens = [
+    { btn: "nav-principal",   scr: "ecran-principal"   },
+    { btn: "nav-stats",       scr: "ecran-stats"       },
+    { btn: "nav-calendrier",  scr: "ecran-calendrier"  },
+    { btn: "nav-habitudes",   scr: "ecran-habitudes"   },
+    { btn: "nav-params",      scr: "ecran-habitudes"   }, // même écran que "Habitudes" si params pas séparé
+  ];
 
-function rememberAction(type, delta) {
-  lastAction = { type, delta, at: Date.now() };
-}
+  const show = (id) => {
+    document.querySelectorAll(".ecran").forEach(el => el.classList.remove("show"));
+    const el = byId(id);
+    if (el) el.classList.add("show");
+  };
 
-function wireUndo() {
-  try {
-    const bar = $("#snackbar");
-    const link = $("#undo-link");
-
-    if (!bar || !link) {
-      console.warn("[counters.wireUndo] snackbar or undo-link not found");
-      return;
-    }
-
-    on("ui:clicked", ({ detail }) => {
-      // On mémorise seulement les +/−
-      if (!detail?.type || !detail?.op) return;
-      const delta = detail.op === "+" ? +1 : -1;
-      rememberAction(detail.type, delta);
-      
-      if (bar) {
-        bar.classList.add("show");
-        setTimeout(() => bar.classList.remove("show"), 4000);
-      }
-      
-      console.log("[counters.wireUndo] Action remembered:', detail);
+  screens.forEach(({ btn, scr }) => {
+    const b = byId(btn);
+    if (!b) return;
+    b.addEventListener("click", () => {
+      document.querySelectorAll(".nav button").forEach(x => x.classList.remove("actif"));
+      b.classList.add("actif");
+      show(scr);
     });
-
-    link.addEventListener("click", (e) => {
-      e.preventDefault();
-      
-      if (!lastAction) {
-        console.warn("[counters.wireUndo] No action to undo");
-        return;
-      }
-
-      try {
-        if (lastAction.delta > 0) {
-          // On annule un +1 → on retire
-          const removeResult = removeOneToday(lastAction.type);
-          if (removeResult) {
-            console.log("[counters.wireUndo] Undo: removed 1 from', lastAction.type);
-          } else {
-            console.error("[counters.wireUndo] removeOneToday failed');
-          }
-        } else if (lastAction.delta < 0) {
-          // On annule un -1 → on remet +1
-          const addResult = addEntry(lastAction.type, Math.abs(lastAction.delta));
-          if (addResult) {
-            console.log("[counters.wireUndo] Undo: added', Math.abs(lastAction.delta), 'to', lastAction.type);
-          } else {
-            console.error("[counters.wireUndo] addEntry failed');
-          }
-        }
-
-        emit("ui:undo", { ...lastAction });
-        refreshHeaderCounters();
-      } catch (e) {
-        console.error("[counters.wireUndo] undo error:", e);
-      } finally {
-        lastAction = null;
-        if (bar) {
-          bar.classList.remove("show");
-        }
-      }
-    });
-
-    console.log("[counters.wireUndo] Wired");
-  } catch (e) {
-    console.error("[counters.wireUndo] error:", e);
-  }
+  });
 }
 
-// --- Initialisation publique ---
+/**
+ * Initialisation publique
+ */
 export function initCounters() {
-  console.log("[counters.init] ============ STARTING ============");
-
   try {
-    // Horloge + header
     wireClock();
-
-    // Plus/Minus accueil (CRITIQUE)
+    wireSegments();
+    wireHomeToggles();
+    wireAdvice();
     wirePlusMinus();
+    wireBottomNavFallback(); // au cas où
 
-    // Toggles accueil (je fume / je bois)
-    try {
-      applyModuleTogglesToHome(getSettings() || {});
-      wireHomeToggles();
-    } catch(e) {
-      console.warn("[counters.init] toggles home skipped:", e);
-    }
-
-    // Conseil (fallback)
-    initAdviceCarousel();
-
-    // Undo
-    wireUndo();
-
-    // Rafraîchissements sur changements d'état
+    // Réagir aux changements d'état (bus interne)
     on("state:changed",  refreshHeaderCounters);
     on("state:daily",    refreshHeaderCounters);
     on("state:economy",  refreshHeaderCounters);
-    on("state:settings", () => {
-      try {
-        applyModuleTogglesToHome(getSettings() || {});
-      } catch (e) {
-        console.error("[counters.init] state:settings handler error:', e);
-      }
-      refreshHeaderCounters();
-    });
+    on("state:settings", refreshHeaderCounters);
 
-    // Réveil quand on revient en avant-plan
-    window.addEventListener("storage", () => {
-      refreshHeaderCounters();
-    });
-
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) {
-        refreshHeaderCounters();
-      }
-    });
-
-    // Premier rendu
+    // Maj initiale
     refreshHeaderCounters();
 
-    console.log("[counters.init] ============ DONE ✅ ============");
+    // Visibilité / storage
+    window.addEventListener("storage", () => refreshHeaderCounters());
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) refreshHeaderCounters();
+    });
   } catch (e) {
-    console.error("[counters.init] ============ CRITICAL ERROR ============:', e);
+    console.error("[counters.initCounters] error:", e);
   }
 }
