@@ -1,13 +1,6 @@
 // web/js/settings.js
-// CORRIGÉ v2.4.1 - Suppression des doublons (wireNav, showScreen, wireDebugConsole)
-// Rôle: Réglages & gestion des modales pages
-//   - Met à jour l'heure/la date en header
-//   - Ouvre la modale "Pages" (Manuel, CGU/CGV, Mentions, Ressources & numéros utiles)
-//   - Gère les toggles modules (cigs/weed/alcool) présents sur l'accueil
-//   - Pont "Importer/Exporter" via le menu Réglages (utilise window.SA.exporting)
-//   - Relaye l'ouverture "Ressources" depuis la modale 18+ (#open-ressources-from-warn)
-// 
-// NOTE: La NAVIGATION (routing, switchscreen) est entièrement gérée par app.js
+// COMPLET v2.4.1 - Réglages, Modales Pages, Toggles Modules
+// NOTE: La NAVIGATION (routing, showScreen) est entièrement gérée par app.js
 // NOTE: Le DEBUG TOGGLE (5 taps) est entièrement géré par app.js
 
 const LS_SETTINGS = "app_settings_v23";
@@ -131,6 +124,8 @@ function wireHomeToggles() {
           console.error("[settings.wireHomeToggles] cigs error:", e);
         }
       });
+    } else {
+      console.warn("[settings.wireHomeToggles] toggle-cigs not found");
     }
 
     if (cW) {
@@ -145,6 +140,8 @@ function wireHomeToggles() {
           console.error("[settings.wireHomeToggles] weed error:", e);
         }
       });
+    } else {
+      console.warn("[settings.wireHomeToggles] toggle-weed not found");
     }
 
     if (cA) {
@@ -159,6 +156,8 @@ function wireHomeToggles() {
           console.error("[settings.wireHomeToggles] alcohol error:", e);
         }
       });
+    } else {
+      console.warn("[settings.wireHomeToggles] toggle-alcool not found");
     }
 
     applyModuleToggles();
@@ -214,7 +213,7 @@ function closePageModal() {
 function contentRessources() {
   return `
     <div>
-      <p>Besoin d'aide&nbsp;? Voici quelques ressources utiles en France&nbsp;:</p>
+      <p>Besoin d'aide ? Voici quelques ressources utiles en France :</p>
       <ul>
         <li><strong>Tabac Info Service</strong> – 39 89 (appel non surtaxé)</li>
         <li><strong>Alcool Info Service</strong> – 0 980 980 930</li>
@@ -244,7 +243,7 @@ function contentManuel() {
 function contentCgvCgu() {
   return `
     <div>
-      <p><strong>Conditions d'utilisation</strong>&nbsp;: cette application fournit un auto-suivi à visée d'aide
+      <p><strong>Conditions d'utilisation</strong> : cette application fournit un auto-suivi à visée d'aide
       à la réduction/arrêt. Elle ne remplace pas un suivi médical. Vous devez être majeur(e).</p>
       <p>En utilisant l'application, vous acceptez que les données soient stockées localement sur votre appareil.</p>
     </div>
@@ -254,7 +253,7 @@ function contentCgvCgu() {
 function contentMentions() {
   return `
     <div>
-      <p><strong>Mentions légales</strong>&nbsp;: Application locale, sans envoi de données vers des serveurs tiers.
+      <p><strong>Mentions légales</strong> : Application locale, sans envoi de données vers des serveurs tiers.
       Les données restent sur votre appareil (localStorage).</p>
     </div>
   `;
@@ -365,6 +364,22 @@ function wireWarnShortcut() {
 }
 
 // ============================================================
+// EVENT BUS: Écouter l'événement openSettingsMenu depuis app.js
+// ============================================================
+function wireEventBus() {
+  try {
+    window.addEventListener("sa:openSettingsMenu", () => {
+      openSettingsMenu();
+      console.log("[settings.wireEventBus] openSettingsMenu called");
+    });
+
+    console.log("[settings.wireEventBus] Event listener attached for sa:openSettingsMenu");
+  } catch (e) {
+    console.error("[settings.wireEventBus] error:", e);
+  }
+}
+
+// ============================================================
 // INITIALISATION PUBLIQUE
 // ============================================================
 export function initSettings() {
@@ -374,6 +389,7 @@ export function initSettings() {
     startClock();
     wireHomeToggles();
     wireWarnShortcut();
+    wireEventBus();
 
     // Expose helpers
     window.SA = window.SA || {};
