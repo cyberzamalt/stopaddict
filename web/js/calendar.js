@@ -1,237 +1,252 @@
 // web/js/calendar.js
-// ------------------------------------------------------------
-// Calendrier mensuel + Modale "jour"
-// - Rend la grille du mois (dots par type s'il y a des données)
-// - Ouvre une modale pour éditer un jour précis (+/−, RAZ)
-// - Respecte les segments actifs (cigs: classic/rolled/tube, alcohol: beer/fort/liqueur)
-// - Écoute le bus interne (on(...)) pour se rafraîchir après import/édition/etc.
-// ------------------------------------------------------------
+// Calendrier mensuel + édition d’un jour (modale)
+
 import {
+  ymd,
   getDaily,
   saveDaily,
   addEntry,
-  removeOne,           // (dateKey, type) → retire 1 unité d'un type pour ce jour
-  ymd,
-  getActiveSegments,
-  setActiveSegment,
-  on,                  // écoute du bus interne
+  removeOne,          // <-- attendue par ce module (retire 1 sur une date précise)
   emit,
+  on
 } from "./state.js";
 
-let currentMonth = new Date();     // mois affiché
-let selectedDate = null;           // jour courant dans la modale
+let current = new Date(); // mois en cours dans la vue
+let offHandlers = [];     // pour nettoyer les listeners du bus si besoin
 
-// ----- Helpers de dates -----
-function startOfMonth(d) {
-  const x = new Date(d.getFullYear(), d.getMonth(), 1);
-  x.setHours(0,0,0,0);
-  return x;
-}
-function endOfMonth(d) {
-  const x = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  x.setHours(23,59,59,999);
-  return x;
-}
-function daysInMonth(d) {
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-}
-function isSameDay(a, b) {
-  return a.getFullYear() === b.getFullYear()
-      && a.getMonth() === b.getMonth()
-      && a.getDate() === b.getDate();
-}
+// ---------- Helpers ----------
 function fmtMonthTitle(d) {
-  return d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
-}
-function fmtDayLong(d) {
-  return d.toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
-// ----- Rendu de la grille -----
-function renderGrid() {
-  const grid = document.getElementById("cal-grid");
-  const title = document.getElementById("cal-titre");
-  if (!grid || !title) return;
+function daysInMonth(d) {
+  const y = d.getFullYear();
+  const m = d.getMonth();
+  return new Date(y, m + 1, 0).getDate();
+}
 
-  title.textContent = fmtMonthTitle(currentMonth);
+function firstWeekdayIndex(d) {
+  // on veut une grille commençant LUNDI (0=lundi)
+  const first = new Date(d.getFullYear(), d.getMonth(), 1);
+  const js = first.getDay(); // 0=dimanche..6=samedi
+  return (js + 6) % 7;       // 0=lundi..6=dimanche
+}
+
+function hasAnyData(dayObj) {
+  if (!dayObj) return false;
+  const keys = Object.keys(dayObj).filter(k => k !== "hours");
+  return keys.length > 0;
+}
+
+function sumTypes(dayObj) {
+  if (!dayObj) return 0;
+  return (dayObj.cigs || 0) + (dayObj.weed || 0) + (dayObj.alcohol || 0);
+}
+
+// ---------- Rendu du mois ----------
+function renderMonth() {
+  const titre = document.getElementById("cal-titre");
+  const grid  = document.getElementById("cal-grid");
+  if (!titre || !grid) return;
+
+  titre.textContent = fmtMonthTitle(current);
   grid.innerHTML = "";
 
-  const today = new Date();
-  const totalDays = daysInMonth(currentMonth);
-  const year = currentMonth.getFullYear();
-  const month = currentMonth.getMonth();
+  const store = getDaily();
+  const y = current.getFullYear();
+  const m = current.getMonth();
+  const nDays = daysInMonth(current);
+  const startIdx = firstWeekdayIndex(current);
 
-  for (let d = 1; d <= totalDays; d++) {
-    const date = new Date(year, month, d);
-    const key = ymd(date);
-    const dayData = getDaily(key) || {};
-
+  // cases vides avant le 1er
+  for (let i = 0; i < startIdx; i++) {
     const cell = document.createElement("div");
     cell.className = "cal-cell";
-    if (isSameDay(date, today)) cell.classList.add("today");
+    cell.setAttribute("aria-hidden", "true");
+    grid.appendChild(cell);
+  }
 
-    // badge jour
+  const todayKey = ymd(new Date());
+
+  for (let d = 1; d <= nDays; d++) {
+    const cell = document.createElement("div");
+    cell.className = "cal-cell";
+    const k = ymd(new Date(y, m, d));
+
+    // bandeau numéro
     const num = document.createElement("div");
     num.className = "cal-num";
     num.textContent = String(d);
     cell.appendChild(num);
 
-    // dots selon types existants
-    let has = false;
-    const c = Number(dayData.cigs || 0);
-    const j = Number(dayData.weed || 0);
-    const a = Number(dayData.alcohol || 0);
-    if (c > 0) { const dot = document.createElement("span"); dot.className = "dot c"; cell.appendChild(dot); has = true; }
-    if (j > 0) { const dot = document.createElement("span"); dot.className = "dot j"; cell.appendChild(dot); has = true; }
-    if (a > 0) { const dot = document.createElement("span"); dot.className = "dot a"; cell.appendChild(dot); has = true; }
-    if (has) cell.classList.add("has-data");
+    // puces si données
+    const rec = store[k];
+    if (hasAnyData(rec)) {
+      cell.classList.add("has-data");
+      const dotWrap = document.createElement("div");
+      // Affiche une pastille par type présent
+      if ((rec.cigs || 0) > 0) {
+        const dc = document.createElement("span");
+        dc.className = "dot c";
+        dc.title = `Cigarettes: ${rec.cigs || 0}`;
+        dotWrap.appendChild(dc);
+      }
+      if ((rec.weed || 0) > 0) {
+        const dj = document.createElement("span");
+        dj.className = "dot j";
+        dj.title = `Joints: ${rec.weed || 0}`;
+        dotWrap.appendChild(dj);
+      }
+      if ((rec.alcohol || 0) > 0) {
+        const da = document.createElement("span");
+        da.className = "dot a";
+        da.title = `Alcool: ${rec.alcohol || 0}`;
+        dotWrap.appendChild(da);
+      }
+      cell.appendChild(dotWrap);
+    }
 
-    // ouverture modale
-    cell.addEventListener("click", () => openDayModal(date));
+    // style "aujourd’hui"
+    if (k === todayKey) {
+      cell.classList.add("today");
+    }
 
+    // clic = ouvre modale jour
+    cell.addEventListener("click", () => openDayModal(k));
     grid.appendChild(cell);
   }
 }
 
-// ----- Modale jour -----
-function updateDayModalCounts() {
-  if (!selectedDate) return;
-  const key = ymd(selectedDate);
-  const dayData = getDaily(key) || {};
+// ---------- Modale Édition Jour ----------
+function openDayModal(dateKey) {
+  const modal = document.getElementById("cal-jour");
+  const title = document.getElementById("cal-jour-titre");
+  const spanCl = document.getElementById("cal-jour-cl");
+  const spanJ  = document.getElementById("cal-jour-j");
+  const spanA  = document.getElementById("cal-jour-a");
 
-  const elCl = document.getElementById("cal-jour-cl");
-  const elJ  = document.getElementById("cal-jour-j");
-  const elA  = document.getElementById("cal-jour-a");
+  if (!modal || !title || !spanCl || !spanJ || !spanA) return;
 
-  if (elCl) elCl.textContent = String(Number(dayData.cigs || 0));
-  if (elJ)  elJ.textContent  = String(Number(dayData.weed || 0));
-  if (elA)  elA.textContent  = String(Number(dayData.alcohol || 0));
-}
+  // Titre lisible
+  const d = new Date(dateKey);
+  title.textContent = d.toLocaleDateString(undefined, { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
 
-function wireDayModalSegments() {
-  const uiSeg = getActiveSegments();
-  // Segments cigs
-  const segC = document.getElementById("cal-jour-seg-cl");
-  if (segC) {
-    segC.querySelectorAll(".seg").forEach(btn => {
-      const sub = btn.dataset.subtype || "classic";
-      btn.classList.toggle("actif", sub === uiSeg.cigs);
-      btn.addEventListener("click", () => {
-        setActiveSegment("cigs", sub);
-        segC.querySelectorAll(".seg").forEach(b => b.classList.toggle("actif", b === btn));
-      });
-    });
-  }
-  // Segments alcool
-  const segA = document.getElementById("cal-jour-seg-a");
-  if (segA) {
-    segA.querySelectorAll(".seg").forEach(btn => {
-      const sub = btn.dataset.subtype || "beer";
-      btn.classList.toggle("actif", sub === uiSeg.alcohol);
-      btn.addEventListener("click", () => {
-        setActiveSegment("alcohol", sub);
-        segA.querySelectorAll(".seg").forEach(b => b.classList.toggle("actif", b === btn));
-      });
-    });
-  }
-}
+  // Valeurs
+  const store = getDaily();
+  const rec = store[dateKey] || {};
+  spanCl.textContent = String(rec.cigs || 0);
+  spanJ.textContent  = String(rec.weed || 0);
+  spanA.textContent  = String(rec.alcohol || 0);
 
-function wireDayModalButtons() {
-  // +/− sur la date sélectionnée (pas aujourd’hui forcément)
-  const map = [
-    ["cal-cl-plus",  "cigs",    +1],
-    ["cal-cl-moins", "cigs",    -1],
-    ["cal-j-plus",   "weed",    +1],
-    ["cal-j-moins",  "weed",    -1],
-    ["cal-a-plus",   "alcohol", +1],
-    ["cal-a-moins",  "alcohol", -1],
-  ];
-  map.forEach(([id, type, delta]) => {
-    const btn = document.getElementById(id);
-    if (!btn) return;
-    btn.onclick = () => {
-      if (!selectedDate) return;
-      const key = ymd(selectedDate);
-      if (delta > 0) {
-        addEntry(type, +1, selectedDate);   // cible ce jour
-      } else {
-        removeOne(key, type);                // retire 1 pour ce jour
-      }
-      updateDayModalCounts();
-      renderGrid();                          // met à jour la grille (dots)
-      emit("ui:day-edited", { key, type, delta });
-    };
+  // Segments (si tu veux afficher des boutons de segments dans la modale)
+  // Ici, on laisse simplement les conteneurs vides/présents (IDs existent dans ton HTML).
+  document.getElementById("cal-jour-seg-cl")?.replaceChildren(); // placeholder
+  document.getElementById("cal-jour-seg-a")?.replaceChildren();  // placeholder
+
+  // Boutons +/- (jour ciblé)
+  wireDayButtons(dateKey, spanCl, spanJ, spanA);
+
+  // RAZ & fermer
+  document.getElementById("cal-jour-raz")?.addEventListener("click", () => {
+    const st = getDaily();
+    delete st[dateKey];
+    saveDaily(st);
+    emit("state:daily", { daily: st });
+    emit("state:changed", { scope: "daily" });
+    // maj UI locale
+    spanCl.textContent = "0";
+    spanJ.textContent  = "0";
+    spanA.textContent  = "0";
+    // refresh grille
+    renderMonth();
   });
 
-  const raz = document.getElementById("cal-jour-raz");
-  if (raz) {
-    raz.onclick = () => {
-      if (!selectedDate) return;
-      const key = ymd(selectedDate);
-      saveDaily(key, {});              // RAZ
-      updateDayModalCounts();
-      renderGrid();
-      emit("state:daily", { key });    // notifie le bus
-    };
-  }
-
-  const close = document.getElementById("cal-jour-fermer");
-  if (close) close.onclick = closeDayModal;
-}
-
-function openDayModal(date) {
-  selectedDate = new Date(date.getTime());
-  selectedDate.setHours(12,0,0,0); // évite soucis fuseau
-
-  const modal = document.getElementById("cal-jour");
-  const titre = document.getElementById("cal-jour-titre");
-  if (!modal || !titre) return;
-
-  titre.textContent = fmtDayLong(selectedDate);
-  wireDayModalSegments();
-  updateDayModalCounts();
+  document.getElementById("cal-jour-fermer")?.addEventListener("click", () => {
+    modal.classList.remove("show");
+    modal.setAttribute("aria-hidden", "true");
+  });
 
   modal.classList.add("show");
   modal.setAttribute("aria-hidden", "false");
 }
 
-function closeDayModal() {
-  const modal = document.getElementById("cal-jour");
-  if (!modal) return;
-  modal.classList.remove("show");
-  modal.setAttribute("aria-hidden", "true");
-  selectedDate = null;
-}
-
-// ----- Navigation mois -----
-function wireMonthNav() {
-  const prev = document.getElementById("cal-prev");
-  const next = document.getElementById("cal-next");
-  if (prev) prev.onclick = () => { currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1); renderGrid(); };
-  if (next) next.onclick = () => { currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1); renderGrid(); };
-}
-
-// ----- Public API -----
-export function initCalendar() {
-  wireMonthNav();
-  wireDayModalButtons();
-  renderGrid();
-
-  // Écoute le bus (import, édition, économie, réglages…) → rafraîchir
-  on("state:daily",   renderGrid);
-  on("state:changed", renderGrid);
-  on("state:settings", renderGrid);
-
-  // Quand on revient sur l’onglet
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) renderGrid();
+function wireDayButtons(dateKey, spanCl, spanJ, spanA) {
+  // cig -
+  document.getElementById("cal-cl-moins")?.addEventListener("click", () => {
+    if (removeOne(dateKey, "cigs")) {
+      const v = Math.max(0, (parseInt(spanCl.textContent || "0", 10) - 1));
+      spanCl.textContent = String(v);
+      renderMonth(); // refresh pastilles
+    }
+  });
+  // cig +
+  document.getElementById("cal-cl-plus")?.addEventListener("click", () => {
+    if (addEntry("cigs", 1, new Date(dateKey))) {
+      const v = (parseInt(spanCl.textContent || "0", 10) + 1);
+      spanCl.textContent = String(v);
+      renderMonth();
+    }
   });
 
-  // Si un autre onglet change le localStorage
-  window.addEventListener("storage", () => renderGrid());
+  // weed -
+  document.getElementById("cal-j-moins")?.addEventListener("click", () => {
+    if (removeOne(dateKey, "weed")) {
+      const v = Math.max(0, (parseInt(spanJ.textContent || "0", 10) - 1));
+      spanJ.textContent = String(v);
+      renderMonth();
+    }
+  });
+  // weed +
+  document.getElementById("cal-j-plus")?.addEventListener("click", () => {
+    if (addEntry("weed", 1, new Date(dateKey))) {
+      const v = (parseInt(spanJ.textContent || "0", 10) + 1);
+      spanJ.textContent = String(v);
+      renderMonth();
+    }
+  });
 
-  // Fermer la modale si Échap
-  document.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape") closeDayModal();
+  // alcool -
+  document.getElementById("cal-a-moins")?.addEventListener("click", () => {
+    if (removeOne(dateKey, "alcohol")) {
+      const v = Math.max(0, (parseInt(spanA.textContent || "0", 10) - 1));
+      spanA.textContent = String(v);
+      renderMonth();
+    }
+  });
+  // alcool +
+  document.getElementById("cal-a-plus")?.addEventListener("click", () => {
+    if (addEntry("alcohol", 1, new Date(dateKey))) {
+      const v = (parseInt(spanA.textContent || "0", 10) + 1);
+      spanA.textContent = String(v);
+      renderMonth();
+    }
+  });
+}
+
+// ---------- Navigation mois ----------
+function wireMonthNav() {
+  document.getElementById("cal-prev")?.addEventListener("click", () => {
+    current = new Date(current.getFullYear(), current.getMonth() - 1, 1);
+    renderMonth();
+  });
+  document.getElementById("cal-next")?.addEventListener("click", () => {
+    current = new Date(current.getFullYear(), current.getMonth() + 1, 1);
+    renderMonth();
+  });
+}
+
+// ---------- Initialisation ----------
+export function initCalendar() {
+  // premier rendu
+  renderMonth();
+  wireMonthNav();
+
+  // Rafraîchissements automatiques quand le state bouge
+  offHandlers.push(on("state:daily",   () => renderMonth()));
+  offHandlers.push(on("state:changed", () => renderMonth()));
+
+  // Si on revient sur l’app (visibilité), on rafraîchit
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) renderMonth();
   });
 }
