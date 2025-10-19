@@ -1,119 +1,73 @@
 // web/js/stats.js
-// -------------------------------------------------------------------
-// En-tête "Stats" + bannière dans l’écran Stats.
-// - Met à jour les KPIs globaux (jour/semaine/mois/coût/économies)
-// - Gère les boutons d’échelle (Jour/Semaine/Mois) et notifie charts.js
-// - Met à jour la bannière Stats à partir des totaux du graphe si disponibles
-//   (écoute "charts:totals"); sinon, retombe sur les totaux du jour.
-// -------------------------------------------------------------------
-import { $, startOfWeek, startOfMonth } from "./utils.js";
-import {
-  getDaily,
-  totalsHeader,
-  ymd,
-  on,          // bus: écouter les changements d’état
-  emit         // bus: notifier le choix d’échelle
-} from "./state.js";
+//
+// Met à jour le bandeau de l’écran Stats (titre, totaux) et écoute les totaux
+// calculés/émis par charts.js via l’événement `charts:totals`.
+// Affiche aussi les KPIs rapides si présents en header.
+//
+// Dépendances : state.js (on, ymd, getTodayTotals, totalsHeader)
 
-function fmtEuros(x) {
-  try {
-    return (Number(x) || 0).toLocaleString("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
-  } catch {
-    return `${Number(x) || 0} €`;
+import { on, ymd, getTodayTotals, totalsHeader } from "./state.js";
+
+const $ = (sel, root=document) => root.querySelector(sel);
+
+// --------- Bandeau Stats (écran Stats) ----------
+function setStatsBanner(range, totals) {
+  const now = new Date();
+  const titleEl = $("#stats-titre");
+  if (titleEl) {
+    if (range === "day")   titleEl.textContent = "Aujourd’hui";
+    if (range === "week")  titleEl.textContent = "7 derniers jours";
+    if (range === "month") titleEl.textContent = "30 derniers jours";
+  }
+  $("#stats-clopes")  && ($("#stats-clopes").textContent  = String(totals?.cigs ?? 0));
+  $("#stats-joints")  && ($("#stats-joints").textContent  = String(totals?.weed ?? 0));
+  const alcLine = $("#stats-alcool-line");
+  if (alcLine) {
+    const alc = Number(totals?.alcohol ?? 0);
+    if (alc > 0) {
+      alcLine.style.display = "";
+      $("#stats-alcool").textContent = String(alc);
+    } else {
+      alcLine.style.display = "none";
+    }
   }
 }
 
-// ---------- KPIs header (si présents au-dessus du contenu) ----------
-function renderKpiHeader() {
-  const th = totalsHeader();
-  if (!th) return;
-  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+// --------- KPIs header (si présents) ----------
+function setHeaderKPIs() {
+  const today = getTodayTotals(); // { cigs, weed, alcohol, cost }
+  // On affiche seulement si les éléments existent dans le DOM
+  $("#todayTotal") && ($("#todayTotal").textContent = String((today.cigs||0)+(today.weed||0)+(today.alcohol||0)));
+  $("#todayCost")  && ($("#todayCost").textContent  = (Number(today.cost||0)).toFixed(2)+" €");
 
-  set("todayTotal",  String(th.todayTotal ?? 0));
-  set("weekTotal",   String(th.weekTotal ?? 0));
-  set("monthTotal",  String(th.monthTotal ?? 0));
-  set("todayCost",   fmtEuros(th.todayCost ?? 0));
-  set("economies-amount", fmtEuros(th.economiesAmount ?? 0));
+  // Petits cumul naifs pour "7 j" / "30 j" → on laisse charts.js faire la source de vérité,
+  // mais si les éléments existent, on montre au moins le jour.
+  // (Les vrais totaux semaine/mois seront poussés par charts.js → charts:totals quand on change d’onglet)
 }
 
-// ---------- Bannière dans l’écran Stats ----------
-let currentRange = "day"; // "day" | "week" | "month"
-
-function renderStatsBannerFallback() {
-  // Fallback si charts.js n’a pas encore envoyé ses totaux : on met le jour courant
-  const todayKey = ymd(new Date());
-  const d = getDaily(todayKey) || {};
-  const cl = Number(d.cigs || 0);
-  const j  = Number(d.weed || 0);
-  const a  = Number(d.alcohol || 0);
-
-  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-  set("stats-titre",  "Aujourd’hui");
-  set("stats-clopes", String(cl));
-  set("stats-joints", String(j));
-  const la = document.getElementById("stats-alcool-line");
-  set("stats-alcool", String(a));
-  if (la) la.style.display = a > 0 ? "" : "none";
-}
-
-function renderStatsBannerFromCharts(payload) {
-  // payload = { range, totals: { cigs, weed, alcohol, cost, economies } }
-  const r = payload?.range || currentRange;
-  const t = payload?.totals || {};
-  const titleByRange = { day: "Aujourd’hui", week: "Cette semaine", month: "Ce mois-ci" };
-
-  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-
-  document.getElementById("stats-titre") && (document.getElementById("stats-titre").textContent = titleByRange[r] || "Période");
-  set("stats-clopes", String(Number(t.cigs || 0)));
-  set("stats-joints", String(Number(t.weed || 0)));
-  set("stats-alcool", String(Number(t.alcohol || 0)));
-
-  const alLine = document.getElementById("stats-alcool-line");
-  if (alLine) alLine.style.display = Number(t.alcohol || 0) > 0 ? "" : "none";
-}
-
-// ---------- Boutons d’échelle (Jour/Semaine/Mois) ----------
-function wireRangeTabs() {
-  const holder = document.getElementById("chartRange");
-  if (!holder) return;
-
-  holder.querySelectorAll("button[data-range]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const r = btn.dataset.range || "day";
-      if (r === currentRange) return;
-      currentRange = r;
-
-      // active visuel
-      holder.querySelectorAll("button[data-range]").forEach(b => b.classList.toggle("active", b === btn));
-
-      // notifier charts.js (il écoute "ui:chart-range")
-      emit("ui:chart-range", { range: r });
-    });
-  });
-}
-
-// ---------- init ----------
+// --------- Init ----------
 export function initStatsHeader() {
-  // KPIs init
-  renderKpiHeader();
-  // Bannière Stats init (fallback jour)
-  renderStatsBannerFallback();
-  // Tabs
-  wireRangeTabs();
+  // Totaux init (fallback : affiche le jour au boot)
+  try {
+    const t = getTodayTotals();
+    setStatsBanner("day", { cigs:t.cigs||0, weed:t.weed||0, alcohol:t.alcohol||0, cost:t.cost||0 });
+    setHeaderKPIs();
+  } catch(e) {
+    console.warn("[stats] init fallback failed:", e);
+  }
 
-  // Se met à jour à chaque changement d’état
-  on("state:changed",  () => { renderKpiHeader(); /* bannière restera pilotée par charts */ });
-  on("state:daily",    () => { renderKpiHeader(); });
-  on("state:economy",  () => { renderKpiHeader(); });
-  on("state:settings", () => { renderKpiHeader(); });
-
-  // Quand charts.js a calculé ses totaux, on met à jour la bannière
-  on("charts:totals",  (e) => renderStatsBannerFromCharts(e?.detail));
-
-  // Si on revient sur l’onglet / autre fenêtre a modifié le LS
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) renderKpiHeader();
+  // Quand charts.js calcule/rend une vue, il nous envoie ses totaux
+  on("charts:totals", ({ detail }) => {
+    try {
+      setStatsBanner(detail?.range || "day", detail?.totals || {});
+    } catch(e) {
+      console.error("[stats] charts:totals handler error:", e);
+    }
   });
-  window.addEventListener("storage", () => renderKpiHeader());
+
+  // Se rafraîchir quand l’état change (au cas où on reste sur l’onglet Jour)
+  on("state:changed",  setHeaderKPIs);
+  on("state:daily",    setHeaderKPIs);
+  on("state:economy",  setHeaderKPIs);
+  on("state:settings", setHeaderKPIs);
 }
