@@ -1,4 +1,6 @@
 // web/js/counters.js
+// COMPLET v2.4.0 - Gestion des compteurs accueil (+/-), toggles modules, horloge
+// Corrections: setSetting->saveSettings, structure totalsHeader adaptée
 
 import {
   addEntry,
@@ -8,9 +10,10 @@ import {
   totalsHeader,
   ymd,
   on,
-  setSetting,
+  saveSettings,
   getSettings,
   emit,
+  getTodayTotals,
 } from "./state.js";
 
 /**
@@ -32,17 +35,15 @@ function refreshHeaderCounters() {
   try {
     const t = totalsHeader(new Date()) || {};
 
-    // Totaux jour (fallbacks au cas où la forme diffère)
-    const day = t.today || t.day || {};
-    const dayCounts = day.counts || day.todayCounts || day.totals || {};
-    const cigs = Number(dayCounts.cigs ?? day.cigs ?? 0) || 0;
-    const weed = Number(dayCounts.weed ?? day.weed ?? 0) || 0;
-    const alcohol = Number(dayCounts.alcohol ?? day.alcohol ?? 0) || 0;
+    // Totaux jour - CORRIGÉ: utiliser la vraie structure retournée par totalsHeader
+    // totalsHeader retourne: { day: { total: X, cigs: Y, weed: Z, alcohol: W }, week: {...}, month: {...} }
+    const day = t.day || {};
+    const cigs = Number(day.cigs ?? 0) || 0;
+    const weed = Number(day.weed ?? 0) || 0;
+    const alcohol = Number(day.alcohol ?? 0) || 0;
 
     // Coût jour
-    const cost = Number(
-      day.cost ?? t.todayCost ?? t.costToday ?? 0
-    ) || 0;
+    const cost = Number(day.cost ?? 0) || 0;
 
     // Header "stats rapides"
     const elCigs = document.getElementById("stat-clopes-jr");
@@ -68,8 +69,9 @@ function refreshHeaderCounters() {
     if (bCigs) bCigs.textContent = String(cigs);
     if (bWeed) bWeed.textContent = String(weed);
     if (bAlc)  bAlc.textContent  = String(alcohol);
-    if (bAlcLine) bAlcLine.style.display = "flex";
+    if (bAlcLine) bAlcLine.style.display = alcohol > 0 ? "flex" : "none";
 
+    console.log("[counters.refreshHeaderCounters] Updated counters: cigs=" + cigs + " weed=" + weed + " alcohol=" + alcohol);
   } catch (e) {
     console.error("[counters.refreshHeaderCounters] error:", e);
   }
@@ -89,6 +91,7 @@ function wireClock() {
     };
     update();
     setInterval(update, 30 * 1000);
+    console.log("[counters.wireClock] Clock started");
   } catch (e) {
     console.error("[counters.wireClock] error:", e);
   }
@@ -136,6 +139,7 @@ function wirePlusMinus() {
       emit("ui:snack", { type, delta });
       refreshHeaderCounters();
       showSnack("Action enregistrée");
+      console.log("[counters.apply] " + type + " " + (delta > 0 ? "+" : "") + delta);
     } catch (e) {
       console.error("[counters.wirePlusMinus] apply error:", e);
     }
@@ -157,6 +161,8 @@ function wirePlusMinus() {
       if (isMinus) apply(type, -1);
     });
   });
+
+  console.log("[counters.wirePlusMinus] Wired " + btns.length + " buttons");
 }
 
 /**
@@ -239,6 +245,7 @@ function wireSegments() {
 
     updateSegmentsUI();
     on("state:settings", updateSegmentsUI);
+    console.log("[counters.wireSegments] Segments wired");
   } catch (e) {
     console.error("[counters.wireSegments] error:", e);
   }
@@ -251,9 +258,9 @@ function wireHomeToggles() {
   try {
     const s = (getSettings && getSettings()) || {};
     const map = [
-      { id: "toggle-cigs",   key: "module.cigs.enabled",   card: closestCard("val-clopes") },
-      { id: "toggle-weed",   key: "module.weed.enabled",   card: closestCard("val-joints") },
-      { id: "toggle-alcool", key: "module.alcohol.enabled", card: closestCard("val-alcool") },
+      { id: "toggle-cigs",   key: "modules.cigs",      card: closestCard("val-clopes") },
+      { id: "toggle-weed",   key: "modules.weed",      card: closestCard("val-joints") },
+      { id: "toggle-alcool", key: "modules.alcohol",   card: closestCard("val-alcool") },
     ];
 
     // Appliquer l'état au chargement
@@ -271,14 +278,17 @@ function wireHomeToggles() {
       el.addEventListener("change", () => {
         try {
           const enabled = !!el.checked;
-          setSetting(key, enabled);
+          saveSettings(s); // CORRIGÉ: utiliser saveSettings au lieu de setSetting
           if (card) card.style.display = enabled ? "" : "none";
           emit("state:settings", { [key]: enabled });
+          console.log("[counters.wireHomeToggles] " + key + " = " + enabled);
         } catch (e) {
           console.error("[counters.wireHomeToggles] change error:", e);
         }
       });
     });
+
+    console.log("[counters.wireHomeToggles] Home toggles wired");
   } catch (e) {
     console.error("[counters.wireHomeToggles] error:", e);
   }
@@ -313,6 +323,7 @@ function wireAdvice() {
     else advice = "Soir : une tisane ou une douche chaude = bons alliés. Tu avances, un pas après l'autre.";
 
     el.textContent = advice;
+    console.log("[counters.wireAdvice] Advice displayed");
   } catch (e) {
     console.error("[counters.wireAdvice] error:", e);
   }
@@ -320,7 +331,7 @@ function wireAdvice() {
 
 /**
  * Navigation basique (accueil/stats/calendrier/habitudes)
- * — au cas où settings.js ne l’a pas déjà fait, on garde ça ultra-light
+ * — au cas où app.js ne l'a pas déjà fait, on garde ça ultra-light
  */
 function wireBottomNavFallback() {
   const byId = (id) => document.getElementById(id);
@@ -329,7 +340,7 @@ function wireBottomNavFallback() {
     { btn: "nav-stats",       scr: "ecran-stats"       },
     { btn: "nav-calendrier",  scr: "ecran-calendrier"  },
     { btn: "nav-habitudes",   scr: "ecran-habitudes"   },
-    { btn: "nav-params",      scr: "ecran-habitudes"   }, // même écran que "Habitudes" si params pas séparé
+    { btn: "nav-params",      scr: "ecran-habitudes"   },
   ];
 
   const show = (id) => {
@@ -347,6 +358,8 @@ function wireBottomNavFallback() {
       show(scr);
     });
   });
+
+  console.log("[counters.wireBottomNavFallback] Fallback nav wired");
 }
 
 /**
@@ -354,12 +367,14 @@ function wireBottomNavFallback() {
  */
 export function initCounters() {
   try {
+    console.log("[counters.initCounters] ============ STARTING ============");
+
     wireClock();
     wireSegments();
     wireHomeToggles();
     wireAdvice();
     wirePlusMinus();
-    wireBottomNavFallback(); // au cas où
+    wireBottomNavFallback();
 
     // Réagir aux changements d'état (bus interne)
     on("state:changed",  refreshHeaderCounters);
@@ -371,11 +386,19 @@ export function initCounters() {
     refreshHeaderCounters();
 
     // Visibilité / storage
-    window.addEventListener("storage", () => refreshHeaderCounters());
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) refreshHeaderCounters();
+    window.addEventListener("storage", () => {
+      console.log("[counters] Storage changed, refreshing");
+      refreshHeaderCounters();
     });
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        console.log("[counters] App visible, refreshing");
+        refreshHeaderCounters();
+      }
+    });
+
+    console.log("[counters.initCounters] ============ DONE ✅ ============");
   } catch (e) {
-    console.error("[counters.initCounters] error:", e);
+    console.error("[counters.initCounters] ============ CRITICAL ERROR ============:", e);
   }
 }
