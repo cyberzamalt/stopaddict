@@ -1,342 +1,312 @@
 // web/js/state.js
-// ============================================================
-// State centralisé + persistance + helpers de calcul
-// Compatible avec counters.js, charts.js, stats.js, economy.js
-// Exporte :
-// - getSettings / saveSettings
-// - getDaily / saveDaily
-// - getEconomy / saveEconomy
-// - addEntry(type, qty[, subtype])
-// - removeOneToday(type)
-// - totalsHeader(date)
-// - costToday(date)
-// - economiesHint(date)
-// - state (lecture), emit/on/off
-// ============================================================
+// Store & event bus centralisés pour StopAddict
 
-/* ---------- Constantes & clés de stockage ---------- */
-const LS_KEYS = {
-  settings: "sa_settings_v24",
-  daily:    "sa_daily_v24",
-  economy:  "sa_economy_v24",
-  ui:       "sa_ui_v24", // segments actifs, switches, etc.
-};
-
-const TYPES = {
-  cigs:    { sub: ["classic", "rolled", "tube"] },
-  weed:    { sub: [] },
-  alcohol: { sub: ["beer", "fort", "liqueur"] },
-};
-
-/* ---------- Mini bus d'événements ---------- */
+// ---------- Event bus ----------
 const bus = new EventTarget();
+
 export function emit(name, detail = {}) {
-  bus.dispatchEvent(new CustomEvent(name, { detail }));
-}
-export function on(name, fn) {
-  bus.addEventListener(name, fn);
-}
-export function off(name, fn) {
-  bus.removeEventListener(name, fn);
+  try { bus.dispatchEvent(new CustomEvent(name, { detail })); }
+  catch (e) { console.error("[state.emit] error:", e, name, detail); }
 }
 
-/* ---------- Utils dates ---------- */
-function pad(n) { return n < 10 ? "0" + n : "" + n; }
+export function on(name, handler) {
+  bus.addEventListener(name, handler);
+  return () => bus.removeEventListener(name, handler);
+}
+
+// ---------- Utils clés/temps ----------
 export function ymd(d = new Date()) {
-  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
-}
-export function startOfWeek(d = new Date(), weekStartsOn = 1) {
-  const copy = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const day = (copy.getDay() + 7 - weekStartsOn) % 7;
-  copy.setDate(copy.getDate() - day);
-  copy.setHours(0, 0, 0, 0);
-  return copy;
-}
-export function startOfMonth(d = new Date()) {
-  const copy = new Date(d.getFullYear(), d.getMonth(), 1);
-  copy.setHours(0, 0, 0, 0);
-  return copy;
+  const dt = (d instanceof Date) ? d : new Date(d);
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const da = String(dt.getDate()).padStart(2, "0");
+  return `${y}-${m}-${da}`;
 }
 
-/* ---------- Persistance générique ---------- */
-function load(key, fallback) {
+function nowHour() {
+  const d = new Date();
+  return d.getHours(); // 0..23
+}
+
+// ---------- Namespaces LocalStorage ----------
+const LS_SETTINGS = "sa_settings_v1";
+const LS_DAILY    = "sa_daily_v1";
+const LS_ECO      = "sa_economy_v1";
+const LS_SEGMENTS = "sa_segments_v1"; // segments actifs (clopes: classic/rolled/tube, alcool: beer/fort/liqueur)
+
+// ---------- Accès stockage sûr ----------
+function readJSON(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
-    if (!raw) return structuredClone(fallback);
-    const v = JSON.parse(raw);
-    return v ?? structuredClone(fallback);
-  } catch {
-    return structuredClone(fallback);
-  }
-}
-function save(key, value) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
+    if (!raw) return fallback;
+    return JSON.parse(raw);
   } catch (e) {
-    console.warn("[state] save error", key, e);
+    console.warn("[state.readJSON] parse fail for", key, e);
+    return fallback;
   }
 }
 
-/* ---------- Structures par défaut ---------- */
-const DEFAULT_SETTINGS = {
-  modules: { cigs: true, weed: true, alcohol: true },
-  // limites (par jour)
-  limits: { cigs: 20, weed: 3, beer: 2, fort: 1, liqueur: 1 },
-  // autres options UI
-  showCosts: true,
+function writeJSON(key, obj) {
+  try {
+    localStorage.setItem(key, JSON.stringify(obj));
+    return true;
+  } catch (e) {
+    console.error("[state.writeJSON] write fail for", key, e);
+    return false;
+  }
+}
+
+// ---------- Settings ----------
+export function getSettings() {
+  // Télécommande modules + prix, etc.
+  return readJSON(LS_SETTINGS, {
+    modules: { cigs: true, weed: true, alcohol: true },
+    prices:  { cigs: 0, weed: 0, beer: 0, fort: 0, liqueur: 0 },
+    i18n:    { lang: "fr" },
+  });
+}
+
+export function saveSettings(next) {
+  const ok = writeJSON(LS_SETTINGS, next);
+  if (ok) {
+    emit("state:settings", { settings: next });
+    emit("state:changed",  { scope: "settings" });
+  }
+  return ok;
+}
+
+// ---------- Segments actifs (UI accueil) ----------
+const DEFAULT_SEGMENTS = {
+  cigs: { classic: true, rolled: false, tube: false },
+  alcohol: { beer: true, fort: false, liqueur: false },
 };
 
-const DEFAULT_ECONOMY = {
-  enabled: true, // “Lien économies” coché
-  prices: {
-    cigs:    { classic: 0, rolled: 0, tube: 0 },
-    weed:    { joint: 0 },
-    alcohol: { beer: 0, fort: 0, liqueur: 0 },
-  },
-  // baseline / habitudes (pour estimer économies – facultatif)
-  baselinePerDay: {
-    cigs:    { classic: 0, rolled: 0, tube: 0 },
-    weed:    { joint: 0 },
-    alcohol: { beer: 0, fort: 0, liqueur: 0 },
-  },
-};
-
-function blankDay() {
-  return {
-    cigs:    { classic: 0, rolled: 0, tube: 0, total: 0 },
-    weed:    { total: 0 },
-    alcohol: { beer: 0, fort: 0, liqueur: 0, total: 0 },
-    cost: 0,
-  };
-}
-
-/* ---------- State en mémoire ---------- */
-const _settings = load(LS_KEYS.settings, DEFAULT_SETTINGS);
-const _economy  = load(LS_KEYS.economy,  DEFAULT_ECONOMY);
-const _daily    = load(LS_KEYS.daily,    {});            // indexé par "YYYY-MM-DD"
-const _ui       = load(LS_KEYS.ui,       { seg: { cigs: "classic", alcohol: "beer" } });
-
-export const state = {
-  settings: _settings,
-  economy:  _economy,
-  daily:    _daily,
-  ui:       _ui,
-};
-
-/* ---------- API Settings/Economy/Daily ---------- */
-export function getSettings() { return state.settings; }
-export function saveSettings(s) {
-  state.settings = { ...state.settings, ...s };
-  save(LS_KEYS.settings, state.settings);
-  emit("state:settings", { settings: state.settings });
-}
-
-export function getEconomy() { return state.economy; }
-export function saveEconomy(e) {
-  state.economy = { ...state.economy, ...e };
-  save(LS_KEYS.economy, state.economy);
-  emit("state:economy", { economy: state.economy });
-}
-
-export function getDaily() { return state.daily; }
-export function saveDaily(d) {
-  // d attendu : { "YYYY-MM-DD": {...}, ... }
-  state.daily = d;
-  save(LS_KEYS.daily, state.daily);
-  emit("state:daily", { daily: state.daily });
-}
-
-/* ---------- Helpers sous-types actifs (segments) ---------- */
-function getActiveSubtypeFor(type) {
-  // Si counters.js a enregistré un segment actif côté UI → on le respecte.
-  // Sinon fallback sûr.
-  if (type === "cigs") {
-    return state.ui?.seg?.cigs || "classic";
-  }
-  if (type === "alcohol") {
-    return state.ui?.seg?.alcohol || "beer";
-  }
-  return null; // weed : pas de sous-type
-}
-
-/* ---------- Core mutations ---------- */
-/**
- * addEntry("cigs"|"weed"|"alcohol", qty=1, subtype?)
- * - si subtype omis → on prend le segment actif (si applicable)
- */
-export function addEntry(type, qty = 1, subtype = null, date = new Date()) {
-  if (!TYPES[type]) return;
-
-  const key = ymd(date);
-  const day = state.daily[key] ?? blankDay();
-
-  // Détermine le sous-type si nécessaire
-  let st = subtype;
-  if (!st && (type === "cigs" || type === "alcohol")) {
-    st = getActiveSubtypeFor(type);
-  }
-
-  // Applique les deltas
-  if (type === "cigs") {
-    const name = TYPES.cigs.sub.includes(st) ? st : "classic";
-    day.cigs[name] = Math.max(0, (day.cigs[name] || 0) + qty);
-    day.cigs.total = Math.max(0, (day.cigs.classic + day.cigs.rolled + day.cigs.tube));
-  } else if (type === "weed") {
-    day.weed.total = Math.max(0, (day.weed.total || 0) + qty);
-  } else if (type === "alcohol") {
-    const name = TYPES.alcohol.sub.includes(st) ? st : "beer";
-    day.alcohol[name] = Math.max(0, (day.alcohol[name] || 0) + qty);
-    day.alcohol.total = Math.max(0, (day.alcohol.beer + day.alcohol.fort + day.alcohol.liqueur));
-  }
-
-  // Recalcule (coût du jour)
-  day.cost = computeCostForDay(day);
-
-  // Persiste
-  state.daily[key] = day;
-  save(LS_KEYS.daily, state.daily);
-
-  emit("state:changed", { dateKey: key, type, qty, subtype: st, day });
-  return day;
-}
-
-/**
- * removeOneToday("cigs"|"weed"|"alcohol")
- * Décrémente intelligemment :
- *  - cigs/alcohol : priorise le sous-type actif s'il est > 0, sinon cherche un sous-type non nul
- *  - weed : décrémente total si > 0
- */
-export function removeOneToday(type, date = new Date()) {
-  if (!TYPES[type]) return;
-
-  const key = ymd(date);
-  const day = state.daily[key] ?? blankDay();
-
-  if (type === "cigs") {
-    let st = getActiveSubtypeFor("cigs");
-    if (!day.cigs[st]) {
-      // cherche un sous-type non nul
-      st = TYPES.cigs.sub.find(s => (day.cigs[s] || 0) > 0) || st;
-    }
-    if ((day.cigs[st] || 0) > 0) {
-      day.cigs[st] -= 1;
-      day.cigs.total = Math.max(0, (day.cigs.classic + day.cigs.rolled + day.cigs.tube));
-    }
-  } else if (type === "weed") {
-    if ((day.weed.total || 0) > 0) day.weed.total -= 1;
-  } else if (type === "alcohol") {
-    let st = getActiveSubtypeFor("alcohol");
-    if (!day.alcohol[st]) {
-      st = TYPES.alcohol.sub.find(s => (day.alcohol[s] || 0) > 0) || st;
-    }
-    if ((day.alcohol[st] || 0) > 0) {
-      day.alcohol[st] -= 1;
-      day.alcohol.total = Math.max(0, (day.alcohol.beer + day.alcohol.fort + day.alcohol.liqueur));
-    }
-  }
-
-  day.cost = computeCostForDay(day);
-  state.daily[key] = day;
-  save(LS_KEYS.daily, state.daily);
-
-  emit("state:changed", { dateKey: key, type, qty: -1, day });
-  return day;
-}
-
-/* ---------- Calculs coûts & économies ---------- */
-function computeCostForDay(dayObj) {
-  if (!state.economy?.enabled) return 0;
-  const p = state.economy.prices || DEFAULT_ECONOMY.prices;
-
-  let cost = 0;
-  // clopes
-  cost += (dayObj.cigs.classic || 0) * (p.cigs.classic || 0);
-  cost += (dayObj.cigs.rolled  || 0) * (p.cigs.rolled  || 0);
-  cost += (dayObj.cigs.tube    || 0) * (p.cigs.tube    || 0);
-  // weed
-  cost += (dayObj.weed.total   || 0) * (p.weed.joint   || 0);
-  // alcool
-  cost += (dayObj.alcohol.beer     || 0) * (p.alcohol.beer    || 0);
-  cost += (dayObj.alcohol.fort     || 0) * (p.alcohol.fort    || 0);
-  cost += (dayObj.alcohol.liqueur  || 0) * (p.alcohol.liqueur || 0);
-
-  return Math.max(0, Math.round(cost * 100) / 100);
-}
-
-/**
- * costToday(date) → € pour la journée
- */
-export function costToday(date = new Date()) {
-  const key = ymd(date);
-  const day = state.daily[key] ?? blankDay();
-  return computeCostForDay(day);
-}
-
-/**
- * economiesHint(date) → petit texte "Économies estimées : …"
- * Logique simple : si baseline > consommation réelle, affiche l’écart * prix
- * (Ce n’est qu’un hint — l’éco cumulée peut être faite ailleurs si besoin)
- */
-export function economiesHint(date = new Date()) {
-  if (!state.economy?.enabled) return "";
-
-  const key = ymd(date);
-  const day = state.daily[key] ?? blankDay();
-  const base = state.economy.baselinePerDay || DEFAULT_ECONOMY.baselinePerDay;
-  const price = state.economy.prices || DEFAULT_ECONOMY.prices;
-
-  let saved = 0;
-
-  // cigs
-  const cDiffClassic = Math.max(0, (base.cigs.classic || 0) - (day.cigs.classic || 0));
-  const cDiffRolled  = Math.max(0, (base.cigs.rolled  || 0) - (day.cigs.rolled  || 0));
-  const cDiffTube    = Math.max(0, (base.cigs.tube    || 0) - (day.cigs.tube    || 0));
-  saved += cDiffClassic * (price.cigs.classic || 0);
-  saved += cDiffRolled  * (price.cigs.rolled  || 0);
-  saved += cDiffTube    * (price.cigs.tube    || 0);
-
-  // weed
-  const wDiff = Math.max(0, (base.weed.joint || 0) - (day.weed.total || 0));
-  saved += wDiff * (price.weed.joint || 0);
-
-  // alcool
-  const aDiffBeer    = Math.max(0, (base.alcohol.beer    || 0) - (day.alcohol.beer    || 0));
-  const aDiffFort    = Math.max(0, (base.alcohol.fort    || 0) - (day.alcohol.fort    || 0));
-  const aDiffLiqueur = Math.max(0, (base.alcohol.liqueur || 0) - (day.alcohol.liqueur || 0));
-  saved += aDiffBeer    * (price.alcohol.beer    || 0);
-  saved += aDiffFort    * (price.alcohol.fort    || 0);
-  saved += aDiffLiqueur * (price.alcohol.liqueur || 0);
-
-  if (saved <= 0) return "";
-  return `Économies estimées : ${saved.toFixed(2)} €`;
-}
-
-/**
- * totalsHeader(date) → objet de synthèse pour stats rapides / bandeau
- * { cigs, weed, alcohol, cost }
- */
-export function totalsHeader(date = new Date()) {
-  const key = ymd(date);
-  const d = state.daily[key] ?? blankDay();
-  return {
-    cigs: d.cigs.total || 0,
-    weed: d.weed.total || 0,
-    alcohol: d.alcohol.total || 0,
-    cost: computeCostForDay(d),
-  };
-}
-
-/* ---------- Sauvegarde UI (segments actifs) ---------- */
-export function setActiveSegment(type, subtype) {
-  if (!state.ui.seg) state.ui.seg = {};
-  state.ui.seg[type] = subtype;
-  save(LS_KEYS.ui, state.ui);
-  emit("state:ui", { ui: state.ui });
-}
 export function getActiveSegments() {
-  return state.ui.seg || { cigs: "classic", alcohol: "beer" };
+  const seg = readJSON(LS_SEGMENTS, DEFAULT_SEGMENTS);
+  // garde au moins un segment actif par groupe
+  if (!seg.cigs || Object.values(seg.cigs).every(v => !v)) seg.cigs = { ...DEFAULT_SEGMENTS.cigs };
+  if (!seg.alcohol || Object.values(seg.alcohol).every(v => !v)) seg.alcohol = { ...DEFAULT_SEGMENTS.alcohol };
+  return seg;
 }
 
-/* ---------- Exports legacy pour compatibilité éventuelle ---------- */
-// Certains anciens modules utilisaient save() directement :
-export { save };
+export function setActiveSegment(group, key, active) {
+  const seg = getActiveSegments();
+  if (!seg[group]) seg[group] = {};
+  seg[group][key] = !!active;
+  // Au moins 1 actif par groupe
+  if (Object.values(seg[group]).every(v => !v)) {
+    // Restaure défaut
+    seg[group] = { ...DEFAULT_SEGMENTS[group] };
+  }
+  const ok = writeJSON(LS_SEGMENTS, seg);
+  if (ok) {
+    emit("ui:segments", { group, key, active, segments: seg });
+    emit("state:changed", { scope: "segments" });
+  }
+  return ok;
+}
+
+// ---------- Données journalières ----------
+export function getDaily() {
+  return readJSON(LS_DAILY, {}); // { "YYYY-MM-DD": { cigs: n, weed: n, alcohol: n, classic: n, rolled: n, tube: n, beer: n, fort: n, liqueur: n, hours: {0..23: {cigs: n, weed: n, alcohol: n}} } }
+}
+
+export function saveDaily(next) {
+  const ok = writeJSON(LS_DAILY, next);
+  if (ok) {
+    emit("state:daily", { daily: next });
+    emit("state:changed", { scope: "daily" });
+  }
+  return ok;
+}
+
+// ---------- Économie ----------
+export function getEconomy() {
+  return readJSON(LS_ECO, {
+    habits: {
+      cigs:   { min: 0, max: 20, split: { classic: 0, rolled: 0, tube: 0 } },
+      weed:   { min: 0, max: 5 },
+      alcohol:{ min: 0, max: 3, split: { beer: 0, fort: 0, liqueur: 0 } },
+    },
+    dates: {
+      reduce: { cigs: null, weed: null, alcohol: null },
+      stop:   { cigs: null, weed: null, alcohol: null },
+      zero:   { cigs: null, weed: null, alcohol: null },
+    }
+  });
+}
+
+export function saveEconomy(next) {
+  const ok = writeJSON(LS_ECO, next);
+  if (ok) {
+    emit("state:economy", { economy: next });
+    emit("state:changed", { scope: "economy" });
+  }
+  return ok;
+}
+
+// ---------- Mutations (ajout/suppression) ----------
+
+// Ajoute 1 unité pour un type donné (cigs|weed|alcohol) au jour courant, et dans l'heure courante
+export function addEntry(type, qty = 1, date = new Date()) {
+  if (!type) return false;
+  const key = ymd(date);
+  const hour = nowHour();
+
+  const store = getDaily();
+  const day = store[key] || (store[key] = {});
+
+  // total par type
+  day[type] = (day[type] || 0) + qty;
+
+  // détail horaire
+  if (!day.hours) day.hours = {};
+  if (!day.hours[hour]) day.hours[hour] = {};
+  day.hours[hour][type] = (day.hours[hour][type] || 0) + qty;
+
+  const ok = saveDaily(store);
+  if (ok) {
+    emit("op:add", { key, type, qty, hour });
+  }
+  return ok;
+}
+
+// Retire 1 unité pour un type donné sur le jour (par défaut aujourd’hui)
+export function removeOneToday(type, date = new Date()) {
+  if (!type) return false;
+  const key = ymd(date);
+  const store = getDaily();
+  const day = store[key];
+  if (!day) return false;
+
+  if (day[type] > 0) {
+    day[type] -= 1;
+    if (day[type] === 0) delete day[type];
+  }
+
+  // Optionnel : on pourrait aussi décrémenter l’heure la plus récente > 0,
+  // mais ce n’est pas indispensable pour l’instant.
+
+  // Nettoyage si vide
+  if (Object.keys(day).filter(k => k !== "hours").length === 0 && (!day.hours || Object.keys(day.hours).length === 0)) {
+    delete store[key];
+  }
+
+  const ok = saveDaily(store);
+  if (ok) {
+    emit("op:remove", { key, type, qty: 1 });
+  }
+  return ok;
+}
+
+// *** NOUVEL EXPORT ATTENDU PAR calendar.js ***
+// Retire 1 unité sur une date précise (dateKey est "YYYY-MM-DD")
+export function removeOne(dateKey, type) {
+  try {
+    if (!dateKey || !type) return false;
+    const store = getDaily();
+    const day = store[dateKey];
+    if (!day) return false;
+
+    if (day[type] > 0) {
+      day[type] -= 1;
+      if (day[type] === 0) delete day[type];
+    } else {
+      // rien à retirer
+      return false;
+    }
+
+    // Nettoyage si vide
+    const nonHoursKeys = Object.keys(day).filter(k => k !== "hours");
+    const hoursEmpty = !day.hours || Object.keys(day.hours).length === 0;
+    if (nonHoursKeys.length === 0 && hoursEmpty) {
+      delete store[dateKey];
+    }
+
+    const ok = saveDaily(store);
+    if (ok) {
+      emit("op:remove", { key: dateKey, type, qty: 1 });
+    }
+    return ok;
+  } catch (e) {
+    console.error("[state.removeOne] error:", e, dateKey, type);
+    return false;
+  }
+}
+
+// ---------- Calculs agrégés (KPIs / bannières / coûts) ----------
+export function totalsHeader(date = new Date()) {
+  const dkey = ymd(date);
+  const store = getDaily();
+
+  // Jour
+  const day = store[dkey] || {};
+  const dayCigs = day.cigs || 0;
+  const dayWeed = day.weed || 0;
+  const dayAlc  = day.alcohol || 0;
+  const dayTotal = dayCigs + dayWeed + dayAlc;
+
+  // Semaine (lundi->dimanche)
+  const dt = new Date(date);
+  const dayIdx = (dt.getDay() + 6) % 7; // 0=lundi
+  const monday = new Date(dt); monday.setDate(dt.getDate() - dayIdx);
+  const weekKeys = [];
+  for (let i=0;i<7;i++){
+    const k = ymd(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate()+i));
+    weekKeys.push(k);
+  }
+  let weekTotal = 0;
+  for (const k of weekKeys) {
+    const r = store[k] || {};
+    weekTotal += (r.cigs||0) + (r.weed||0) + (r.alcohol||0);
+  }
+
+  // Mois
+  const first = new Date(dt.getFullYear(), dt.getMonth(), 1);
+  const next  = new Date(dt.getFullYear(), dt.getMonth()+1, 1);
+  let monthTotal = 0;
+  for (let d = new Date(first); d < next; d.setDate(d.getDate()+1)) {
+    const k = ymd(d);
+    const r = store[k] || {};
+    monthTotal += (r.cigs||0) + (r.weed||0) + (r.alcohol||0);
+  }
+
+  return {
+    day:   { total: dayTotal, cigs: dayCigs, weed: dayWeed, alcohol: dayAlc },
+    week:  { total: weekTotal },
+    month: { total: monthTotal },
+  };
+}
+
+export function costToday(date = new Date()) {
+  const s = getSettings();
+  const prices = s?.prices || {};
+  const day = getDaily()[ymd(date)] || {};
+  const cigs = (day.cigs   || 0) * (prices.cigs   || 0);
+  const weed = (day.weed   || 0) * (prices.weed   || 0);
+  // alcool détaillé : beer/fort/liqueur → si total uniquement, on applique un prix moyen 0
+  const alcUnits = (day.alcohol || 0);
+  // si des sous-segments existent avec prix, on additionne ; sinon 0
+  const beerCost    = (day.beer    || 0) * (prices.beer    || 0);
+  const fortCost    = (day.fort    || 0) * (prices.fort    || 0);
+  const liqueurCost = (day.liqueur || 0) * (prices.liqueur || 0);
+  const alcohol = (beerCost + fortCost + liqueurCost) || (alcUnits * 0);
+  return Math.round((cigs + weed + alcohol) * 100) / 100;
+}
+
+export function economiesHint(date = new Date()) {
+  // Estimation simple basée sur habits max vs consommation réelle
+  const eco = getEconomy();
+  const habits = eco?.habits || {};
+  const day = getDaily()[ymd(date)] || {};
+  const diffC = Math.max(0, (habits.cigs?.max || 0) - (day.cigs || 0));
+  const diffW = Math.max(0, (habits.weed?.max || 0) - (day.weed || 0));
+  const diffA = Math.max(0, (habits.alcohol?.max || 0) - (day.alcohol || 0));
+  const s = getSettings();
+  const p = s?.prices || {};
+  const eur = diffC*(p.cigs||0) + diffW*(p.weed||0)
+            + (day.beer?diffA*(p.beer||0):0) // approximations
+            + (day.fort?diffA*(p.fort||0):0)
+            + (day.liqueur?diffA*(p.liqueur||0):0);
+  return Math.round(eur*100)/100;
+}
