@@ -75,6 +75,34 @@ export function saveSettings(next) {
   return ok;
 }
 
+// ========== FONCTION MANQUANTE AJOUTÉE ==========
+// setSetting(key, value) - setter générique pour un chemin imbriqué dans settings
+// Attendue par counters.js ligne 274
+export function setSetting(keyPath, value) {
+  try {
+    const settings = getSettings();
+    const keys = keyPath.split(".");
+    
+    // Navigue jusqu'à l'avant-dernier niveau
+    let current = settings;
+    for (let i = 0; i < keys.length - 1; i++) {
+      if (!(keys[i] in current)) {
+        current[keys[i]] = {};
+      }
+      current = current[keys[i]];
+    }
+    
+    // Définit la valeur au dernier niveau
+    current[keys[keys.length - 1]] = value;
+    
+    console.log(`[state.setSetting] Set ${keyPath} = ${value}`);
+    return saveSettings(settings);
+  } catch (e) {
+    console.error("[state.setSetting] error:", e, keyPath, value);
+    return false;
+  }
+}
+
 // ---------- Segments actifs (UI accueil) ----------
 const DEFAULT_SEGMENTS = {
   cigs: { classic: true, rolled: false, tube: false },
@@ -311,7 +339,7 @@ export function economiesHint(date = new Date()) {
   return Math.round(eur*100)/100;
 }
 
-// ========== FONCTION CRITIQUE MANQUANTE ==========
+// ========== FONCTION CRITIQUE ==========
 // Retourne les totaux du jour (cigs, weed, alcohol, cost)
 // UTILISÉE PAR: counters.js, stats.js, export.js, et autres modules
 // SANS CETTE FONCTION: l'app affiche tout à zéro et les boutons ne fonctionnent pas
