@@ -1,21 +1,39 @@
 // web/js/app.js
-// COMPLET v2.4.0-clean - Boot principal + Routing + Modales + Navigation
-// Rôle: Orchestration centralisée de l'app, gestion du routing et des modales globales
+// COMPLET v2.4.0-secure - Boot principal sécurisé avec logging DOM
+// Rôle: Orchestration centralisée + import dynamique de tous les modules
+// Affiche les erreurs directement dans le DOM (bandeau debug en haut)
 
-import { initCounters }     from "./counters.js";
-import { initSettings }     from "./settings.js";
-import { initImportExport } from "./export.js";
-import { initStatsHeader }  from "./stats.js";
-import { initLimits }       from "./limits.js";
-import { initCharts }       from "./charts.js";
-import { initCalendar }     from "./calendar.js";
-import { initEconomy }      from "./economy.js";
-import { initI18n }         from "./i18n.js";
+// ============================================================
+// LOGGING DANS LE DOM (visible sur téléphone)
+// ============================================================
+const debugLogs = [];
+
+function addDebugLog(msg, type = "info") {
+  console.log(`[app.debug] [${type}] ${msg}`);
+  debugLogs.push({ msg, type, time: new Date().toLocaleTimeString() });
+  updateDebugUI();
+}
+
+function updateDebugUI() {
+  try {
+    const dbgBox = document.getElementById("debug-console");
+    if (!dbgBox) return;
+    
+    dbgBox.innerHTML = debugLogs
+      .map(log => `<div class="debug-line debug-${log.type}">[${log.time}] ${log.msg}</div>`)
+      .join("");
+    
+    dbgBox.scrollTop = dbgBox.scrollHeight;
+  } catch (e) {
+    console.error("[app.updateDebugUI] error:", e);
+  }
+}
 
 // ============================================================
 // VARIABLES GLOBALES
 // ============================================================
 let chartsInitialized = false;
+const modules = {};
 
 // ============================================================
 // HELPER: Vérifier si 18+ accepté
@@ -41,29 +59,25 @@ const ROUTES = {
 
 function showScreen(screenId) {
   try {
-    // Masquer tous les écrans
     document.querySelectorAll(".ecran").forEach(el => {
       el.classList.remove("show");
     });
 
-    // Afficher l'écran demandé
     const target = document.getElementById(screenId);
     if (target) {
       target.classList.add("show");
-      console.log("[app.router] Showing screen:", screenId);
+      addDebugLog(`Screen shown: ${screenId}`, "nav");
     } else {
-      console.warn("[app.router] Screen not found:", screenId);
+      addDebugLog(`Screen NOT found: ${screenId}`, "warn");
     }
 
-    // Marquer les boutons nav comme actif/inactif
     updateNavButtons(screenId);
 
-    // Si on affiche stats, on s'assure que charts est init
     if (screenId === "ecran-stats") {
       ensureCharts();
     }
   } catch (e) {
-    console.error("[app.showScreen] error:", e);
+    addDebugLog(`showScreen error: ${e.message}`, "error");
   }
 }
 
@@ -85,7 +99,7 @@ function updateNavButtons(screenId) {
       activeBtn.classList.add("actif");
     }
   } catch (e) {
-    console.error("[app.updateNavButtons] error:", e);
+    addDebugLog(`updateNavButtons error: ${e.message}`, "error");
   }
 }
 
@@ -93,21 +107,18 @@ function navigateTo(routeAlias) {
   try {
     const screenId = ROUTES[routeAlias];
     if (!screenId) {
-      console.warn("[app.navigateTo] Unknown route:", routeAlias);
+      addDebugLog(`Unknown route: ${routeAlias}`, "warn");
       return;
     }
 
-    // Mettre à jour le hash
     const newHash = `#${routeAlias}`;
     if (window.location.hash !== newHash) {
       window.location.hash = newHash;
-      // hashchange event va déclencher applyRoute()
     } else {
-      // Le hash est déjà bon, on affiche juste l'écran
       showScreen(screenId);
     }
   } catch (e) {
-    console.error("[app.navigateTo] error:", e);
+    addDebugLog(`navigateTo error: ${e.message}`, "error");
   }
 }
 
@@ -117,7 +128,7 @@ function applyRoute() {
     const screenId = ROUTES[hash] || ROUTES.accueil;
     showScreen(screenId);
   } catch (e) {
-    console.error("[app.applyRoute] error:", e);
+    addDebugLog(`applyRoute error: ${e.message}`, "error");
   }
 }
 
@@ -125,22 +136,23 @@ function applyRoute() {
 // CHARTS LAZY INIT
 // ============================================================
 function ensureCharts() {
-  if (chartsInitialized) {
-    console.log("[app.charts] Already initialized, skipping");
-    return;
-  }
+  if (chartsInitialized) return;
 
   chartsInitialized = true;
   try {
-    console.log("[app.charts] Initializing charts...");
-    initCharts();
+    if (modules.initCharts) {
+      addDebugLog("Initializing charts...", "info");
+      modules.initCharts();
+    } else {
+      addDebugLog("initCharts NOT loaded", "warn");
+    }
   } catch (e) {
-    console.error("[app.charts] init failed:", e);
+    addDebugLog(`Charts init failed: ${e.message}`, "error");
   }
 }
 
 // ============================================================
-// MODALE 18+ (minimal, juste vérif au boot)
+// MODALE 18+
 // ============================================================
 function checkAndShowWarnIfNeeded() {
   try {
@@ -150,27 +162,22 @@ function checkAndShowWarnIfNeeded() {
       if (modal) {
         modal.classList.add("show");
         modal.setAttribute("aria-hidden", "false");
-        console.log("[app.warn] Showing 18+ warning modal");
+        addDebugLog("18+ warning shown", "info");
       }
-    } else {
-      console.log("[app.warn] 18+ already accepted, skipping modal");
     }
   } catch (e) {
-    console.error("[app.warn] error:", e);
+    addDebugLog(`Warn check error: ${e.message}`, "error");
   }
 }
 
 // ============================================================
-// DEBUG CONSOLE (5 taps sur la date)
+// DEBUG CONSOLE TOGGLE
 // ============================================================
 function setupDebugToggle() {
   try {
     const dateEl = document.getElementById("date-actuelle");
     const dbgBox = document.getElementById("debug-console");
-    if (!dateEl || !dbgBox) {
-      console.warn("[app.setupDebugToggle] elements not found");
-      return;
-    }
+    if (!dateEl || !dbgBox) return;
 
     let taps = 0;
     let timer = null;
@@ -185,54 +192,43 @@ function setupDebugToggle() {
       if (taps >= 5) {
         taps = 0;
         dbgBox.classList.toggle("show");
-        console.log("[app.debug] Debug console toggled");
       }
     });
-
-    console.log("[app.setupDebugToggle] Wired");
   } catch (e) {
-    console.error("[app.setupDebugToggle] error:", e);
+    addDebugLog(`Debug toggle setup error: ${e.message}`, "error");
   }
 }
 
 // ============================================================
-// PAGE CLOSE (gère le retour à la modale 18+ si nécessaire)
+// PAGE CLOSE
 // ============================================================
 function handlePageClose() {
   try {
     const btnClose = document.getElementById("btn-page-close");
-    if (!btnClose) {
-      console.warn("[app.handlePageClose] btn-page-close not found");
-      return;
-    }
+    if (!btnClose) return;
 
     btnClose.addEventListener("click", () => {
       const modal = document.getElementById("modal-page");
       if (modal) {
         modal.classList.remove("show");
         modal.setAttribute("aria-hidden", "true");
-        console.log("[app.handlePageClose] Modal page closed");
       }
 
-      // Si 18+ pas encore accepté, on réouvre la modale
       if (!warnAccepted()) {
         const warn = document.getElementById("modal-warn");
         if (warn) {
           warn.classList.add("show");
           warn.setAttribute("aria-hidden", "false");
-          console.log("[app.handlePageClose] Reopening warn modal (18+ not accepted)");
         }
       }
     });
-
-    console.log("[app.handlePageClose] Wired");
   } catch (e) {
-    console.error("[app.handlePageClose] error:", e);
+    addDebugLog(`Page close handler error: ${e.message}`, "error");
   }
 }
 
 // ============================================================
-// ESCAPE KEY (ferme modales)
+// ESCAPE KEY
 // ============================================================
 function handleEscapeKey() {
   try {
@@ -240,33 +236,26 @@ function handleEscapeKey() {
       if (ev.key !== "Escape") return;
 
       const page = document.getElementById("modal-page");
-      const wasPageOpen = page && page.classList.contains("show");
-
-      if (wasPageOpen) {
+      if (page && page.classList.contains("show")) {
         page.classList.remove("show");
         page.setAttribute("aria-hidden", "true");
-        console.log("[app.handleEscapeKey] Modal page closed via Escape");
 
-        // Si 18+ pas accepté, on réouvre la modale
         if (!warnAccepted()) {
           const warn = document.getElementById("modal-warn");
           if (warn) {
             warn.classList.add("show");
             warn.setAttribute("aria-hidden", "false");
-            console.log("[app.handleEscapeKey] Reopening warn modal (18+ not accepted)");
           }
         }
       }
     });
-
-    console.log("[app.handleEscapeKey] Wired");
   } catch (e) {
-    console.error("[app.handleEscapeKey] error:", e);
+    addDebugLog(`Escape key handler error: ${e.message}`, "error");
   }
 }
 
 // ============================================================
-// SETUP NAV BUTTONS (routing des 5 boutons bas)
+// SETUP NAVIGATION
 // ============================================================
 function setupNavigation() {
   try {
@@ -276,94 +265,125 @@ function setupNavigation() {
     const navHabitudes = document.getElementById("nav-habitudes");
     const navParams = document.getElementById("nav-params");
 
-    // Boutons de navigation (routing par hash)
     if (navPrincipal) {
       navPrincipal.addEventListener("click", () => {
         navigateTo("accueil");
-        console.log("[app.nav] Navigating to accueil");
+        addDebugLog("Nav: accueil clicked", "nav");
       });
-    } else {
-      console.warn("[app.setupNavigation] nav-principal not found");
     }
 
     if (navStats) {
       navStats.addEventListener("click", () => {
         navigateTo("stats");
-        console.log("[app.nav] Navigating to stats");
+        addDebugLog("Nav: stats clicked", "nav");
       });
-    } else {
-      console.warn("[app.setupNavigation] nav-stats not found");
     }
 
     if (navCal) {
       navCal.addEventListener("click", () => {
         navigateTo("cal");
-        console.log("[app.nav] Navigating to cal");
+        addDebugLog("Nav: calendrier clicked", "nav");
       });
-    } else {
-      console.warn("[app.setupNavigation] nav-calendrier not found");
     }
 
     if (navHabitudes) {
       navHabitudes.addEventListener("click", () => {
         navigateTo("habitudes");
-        console.log("[app.nav] Navigating to habitudes");
+        addDebugLog("Nav: habitudes clicked", "nav");
       });
-    } else {
-      console.warn("[app.setupNavigation] nav-habitudes not found");
     }
 
-    // Réglages = dispatche event pour que settings.js l'écoute
     if (navParams) {
       navParams.addEventListener("click", () => {
         window.dispatchEvent(new CustomEvent("sa:openSettingsMenu"));
-        console.log("[app.nav] Dispatching sa:openSettingsMenu event");
+        addDebugLog("Nav: params clicked (event dispatched)", "nav");
       });
-    } else {
-      console.warn("[app.setupNavigation] nav-params not found");
     }
 
-    console.log("[app.nav] Navigation setup complete");
+    addDebugLog("Navigation wired", "success");
   } catch (e) {
-    console.error("[app.setupNavigation] error:", e);
+    addDebugLog(`Navigation setup error: ${e.message}`, "error");
   }
+}
+
+// ============================================================
+// IMPORT DYNAMIQUE DES MODULES (sécurisé)
+// ============================================================
+async function loadModulesSafe() {
+  addDebugLog("Starting module loading...", "info");
+
+  // Liste des modules à charger dans l'ordre
+  const moduleList = [
+    { name: "initI18n", file: "i18n.js", critical: false },
+    { name: "initCounters", file: "counters.js", critical: true },
+    { name: "initSettings", file: "settings.js", critical: true },
+    { name: "initImportExport", file: "export.js", critical: false },
+    { name: "initStatsHeader", file: "stats.js", critical: false },
+    { name: "initLimits", file: "limits.js", critical: false },
+    { name: "initCalendar", file: "calendar.js", critical: false },
+    { name: "initEconomy", file: "economy.js", critical: false },
+    { name: "initCharts", file: "charts.js", critical: false },
+  ];
+
+  for (const mod of moduleList) {
+    try {
+      addDebugLog(`Loading ${mod.name} from ${mod.file}...`, "info");
+      
+      const imported = await import(`./${mod.file}`);
+      const initFunc = imported[mod.name];
+      
+      if (!initFunc || typeof initFunc !== "function") {
+        throw new Error(`Export ${mod.name} not found or not a function`);
+      }
+
+      modules[mod.name] = initFunc;
+      addDebugLog(`✓ ${mod.name} loaded`, "success");
+
+      // Initialiser immédiatement si critique
+      if (mod.critical) {
+        initFunc();
+        addDebugLog(`✓ ${mod.name} initialized`, "success");
+      }
+    } catch (e) {
+      const status = mod.critical ? "CRITICAL" : "WARNING";
+      addDebugLog(`✗ ${mod.name}: ${e.message} [${status}]`, "error");
+      
+      if (mod.critical) {
+        addDebugLog(`Cannot continue without ${mod.name}!`, "error");
+        throw new Error(`Critical module failed: ${mod.name}`);
+      }
+    }
+  }
+
+  addDebugLog("Module loading complete!", "success");
 }
 
 // ============================================================
 // BOOT PRINCIPAL (DOMContentLoaded)
 // ============================================================
 document.addEventListener("DOMContentLoaded", async () => {
-  console.log("[app.boot] ============ STARTING APP INITIALIZATION ============");
+  addDebugLog("========== APP BOOT START ==========", "info");
 
   try {
-    // 1) i18n (non-bloquant, optionnel)
+    // 1) Charger tous les modules de manière sécurisée
     try {
-      initI18n?.();
-      console.log("[app.boot] i18n initialized");
+      await loadModulesSafe();
+      addDebugLog("All modules loaded successfully", "success");
     } catch (e) {
-      console.warn("[app.boot] i18n skipped:", e.message);
+      addDebugLog(`Module loading FAILED: ${e.message}`, "error");
+      addDebugLog("App is in a broken state. Please check the errors above.", "error");
+      return; // Stop boot
     }
 
-    // 2) Initialiser tous les modules "légers" (counters, settings, export, stats, limites, calendrier, economie)
-    console.log("[app.boot] Initializing modules...");
-    try { initCounters(); } catch (e) { console.error("[app.boot] initCounters error:", e); }
-    try { initSettings(); } catch (e) { console.error("[app.boot] initSettings error:", e); }
-    try { initImportExport(); } catch (e) { console.error("[app.boot] initImportExport error:", e); }
-    try { initStatsHeader(); } catch (e) { console.error("[app.boot] initStatsHeader error:", e); }
-    try { initLimits(); } catch (e) { console.error("[app.boot] initLimits error:", e); }
-    try { initCalendar(); } catch (e) { console.error("[app.boot] initCalendar error:", e); }
-    try { initEconomy(); } catch (e) { console.error("[app.boot] initEconomy error:", e); }
-    console.log("[app.boot] Modules initialized");
-
-    // 3) Setup navigation (5 boutons bas)
+    // 2) Setup navigation
     setupNavigation();
 
-    // 4) Setup routing par hash (hashchange listener)
+    // 3) Setup routing
     window.addEventListener("hashchange", applyRoute);
-    applyRoute(); // Affiche l'écran initial (accueil par défaut)
-    console.log("[app.boot] Routing setup complete");
+    applyRoute();
+    addDebugLog("Routing setup complete", "success");
 
-    // 5) Charts lazy init (via IntersectionObserver si possible)
+    // 4) Charts lazy init (via IntersectionObserver)
     const statsScreen = document.getElementById("ecran-stats");
     if (statsScreen && "IntersectionObserver" in window) {
       const io = new IntersectionObserver((entries) => {
@@ -371,42 +391,41 @@ document.addEventListener("DOMContentLoaded", async () => {
           if (ent.isIntersecting) {
             ensureCharts();
             io.disconnect();
-            console.log("[app.boot] Charts initialized (via IntersectionObserver)");
+            addDebugLog("Charts lazy-loaded (IntersectionObserver)", "success");
             break;
           }
         }
       }, { threshold: 0.1 });
       io.observe(statsScreen);
-      console.log("[app.boot] IntersectionObserver setup for charts");
     } else {
-      // Fallback : init immédiatement
       ensureCharts();
-      console.log("[app.boot] Charts initialized (fallback)");
     }
 
-    // 6) Modale 18+ (vérif + affichage si nécessaire)
+    // 5) Modale 18+
     checkAndShowWarnIfNeeded();
 
-    // 7) Handlers globaux des modales (page close, escape key)
+    // 6) Global handlers
     handlePageClose();
     handleEscapeKey();
 
-    // 8) Debug toggle (5 taps sur la date)
+    // 7) Debug toggle
     setupDebugToggle();
 
-    // 9) Expose namespace global (pour diag/debug)
+    // 8) Expose namespace global
     window.SA = window.SA || {};
     window.SA.app = {
-      version: "2.4.0-clean",
+      version: "2.4.0-secure",
       navigateTo,
       ensureCharts,
       showScreen,
       ROUTES,
+      modules,
+      debugLogs,
     };
-    console.log("[app.boot] Namespace window.SA.app exposed");
 
-    console.log("[app.boot] ============ APP READY ============");
+    addDebugLog("========== APP READY ✓ ==========", "success");
   } catch (e) {
-    console.error("[app.boot] ============ CRITICAL ERROR ============:", e);
+    addDebugLog(`CRITICAL ERROR: ${e.message}`, "error");
+    addDebugLog("App boot failed. Check debug console.", "error");
   }
 });
