@@ -7,92 +7,80 @@ import { initLimits }       from "./limits.js";
 import { initCharts }       from "./charts.js";
 import { initCalendar }     from "./calendar.js";
 import { initEconomy }      from "./economy.js";
-import { initI18n }         from "./i18n.js"; // i18n (fr/en) si présent
+import { initI18n }         from "./i18n.js";
 
-document.addEventListener("DOMContentLoaded", () => {
-  // ===================== INIT DE BASE =====================
-  try { initI18n?.(); } catch (e) { console.warn("[i18n] init skipped:", e); }
-  initCounters();
-  initSettings();
-  initImportExport();
-  initStatsHeader();
-  initLimits();
-  initCalendar();
-  initEconomy();
+// --- Gestion locale du bandeau 18+ (fail-safe) ---
+function getWarnState() {
+  try {
+    return JSON.parse(localStorage.getItem("app_warn_v23") || "null") || { accepted:false, hideAgain:false };
+  } catch { return { accepted:false, hideAgain:false }; }
+}
+function setWarnState(next) {
+  try { localStorage.setItem("app_warn_v23", JSON.stringify(next)); } catch {}
+}
+function showWarn() {
+  const warn = document.getElementById("modal-warn");
+  if (warn) { warn.classList.add("show"); warn.setAttribute("aria-hidden","false"); }
+}
+function hideWarn() {
+  const warn = document.getElementById("modal-warn");
+  if (warn) { warn.classList.remove("show"); warn.setAttribute("aria-hidden","true"); }
+}
 
-  // ===================== NAVIGATION / ROUTER =====================
-  const SCREENS = {
-    accueil:    "ecran-principal",
-    stats:      "ecran-stats",
-    cal:        "ecran-calendrier",
-    habitudes:  "ecran-habitudes",
-  };
+function wireWarnModal() {
+  const modal = document.getElementById("modal-warn");
+  if (!modal) return;
 
-  const NAV_BTNS = {
-    "ecran-principal":  document.getElementById("nav-principal"),
-    "ecran-stats":      document.getElementById("nav-stats"),
-    "ecran-calendrier": document.getElementById("nav-calendrier"),
-    "ecran-habitudes":  document.getElementById("nav-habitudes"),
-    // "nav-params" est géré par settings.js (ouverture de la page/réglages)
-  };
+  const chk18   = document.getElementById("chk-warn-18");
+  const chkHide = document.getElementById("chk-warn-hide");
+  const btnQuit   = document.getElementById("btn-warn-quit");
+  const btnCancel = document.getElementById("btn-warn-cancel");
+  const btnAccept = document.getElementById("btn-warn-accept");
 
-  function setActiveNav(screenId) {
-    Object.entries(NAV_BTNS).forEach(([sid, btn]) => {
-      if (!btn) return;
-      btn.classList.toggle("actif", sid === screenId);
-    });
-  }
+  // État initial bouton "J'accepte"
+  btnAccept?.setAttribute("disabled","true");
 
-  function showScreen(screenId) {
-    // Masquer toutes les .ecran et n'afficher que celle demandée
-    document.querySelectorAll(".ecran").forEach(el => el.classList.remove("show"));
-    const target = document.getElementById(screenId);
-    if (target) target.classList.add("show");
-    setActiveNav(screenId);
-
-    // Si on arrive sur STATS, on s'assure d'initialiser les charts au besoin
-    if (screenId === "ecran-stats") ensureCharts();
-  }
-
-  // Liens nav bas
-  NAV_BTNS["ecran-principal"]?.addEventListener("click", () => navigateTo("accueil"));
-  NAV_BTNS["ecran-stats"]?.addEventListener("click",     () => navigateTo("stats"));
-  NAV_BTNS["ecran-calendrier"]?.addEventListener("click",() => navigateTo("cal"));
-  NAV_BTNS["ecran-habitudes"]?.addEventListener("click", () => navigateTo("habitudes"));
-  document.getElementById("nav-params")?.addEventListener("click", () => {
-    // Laisse settings.js gérer l’ouverture (page/modale).
-    window.dispatchEvent(new CustomEvent("sa:open:settings"));
+  chk18?.addEventListener("change", () => {
+    if (chk18.checked) btnAccept?.removeAttribute("disabled");
+    else btnAccept?.setAttribute("disabled","true");
   });
 
-  function navigateTo(alias) {
-    const id = SCREENS[alias] || SCREENS.accueil;
-    // Mettre à jour le hash pour deep-linking (#stats, #cal…)
-    const nextHash = `#${alias}`;
-    if (location.hash !== nextHash) {
-      // Déclenchera hashchange -> showScreen
-      location.hash = nextHash;
-    } else {
-      showScreen(id);
-    }
+  btnAccept?.addEventListener("click", () => {
+    if (!chk18?.checked) return;
+    const st = getWarnState();
+    st.accepted = true;
+    st.hideAgain = !!chkHide?.checked;
+    setWarnState(st);
+    hideWarn();
+  });
+
+  btnCancel?.addEventListener("click", () => {
+    // On ne valide rien, on garde l'appli bloquée par la modale
+    showWarn();
+  });
+
+  btnQuit?.addEventListener("click", () => {
+    // Dans un webview / PWA : on masque, mais on laisse l’utilisateur fermer
+    showWarn();
+    alert("Fermez l’application si vous ne souhaitez pas continuer.");
+  });
+
+  // Lien "Ressources" → simplement ouvrir la modale pages (géré ailleurs)
+  document.getElementById("open-ressources-from-warn")?.addEventListener("click", () => {
+    // rien de spécial ici, l'ouverture de la page est gérée par settings / routes
+  });
+}
+
+function maybeOpenWarnOnStart() {
+  const st = getWarnState();
+  // Si jamais on n'a pas accepté / ou pas demandé "ne plus réafficher", on ouvre
+  if (!st.accepted || !st.hideAgain) {
+    showWarn();
   }
+}
 
-  function applyHashRoute() {
-    const raw = (location.hash || "").replace(/^#/, "");
-    const alias = SCREENS[raw] ? raw : (Object.prototype.hasOwnProperty.call(SCREENS, raw) ? raw : null);
-    if (alias && SCREENS[alias]) {
-      showScreen(SCREENS[alias]);
-    } else {
-      // Valeurs acceptées: #accueil #stats #cal #habitudes
-      // Par défaut: accueil
-      showScreen(SCREENS.accueil);
-      if (!location.hash) history.replaceState(null, "", "#accueil");
-    }
-  }
-
-  window.addEventListener("hashchange", applyHashRoute);
-  applyHashRoute();
-
-  // ===================== LAZY INIT DES CHARTS =====================
+// --- Lazy init charts (quand l'écran stats devient visible) ---
+function lazyInitCharts() {
   const statsScreen = document.getElementById("ecran-stats");
   let chartsInitialized = false;
 
@@ -112,89 +100,45 @@ document.addEventListener("DOMContentLoaded", () => {
           break;
         }
       }
-    }, { root: null, threshold: 0.1 });
+    }, { root: null, threshold: 0.12 });
     io.observe(statsScreen);
   } else {
-    // Fallback (si pas d'IO ou pas d'élément) : init direct
     ensureCharts();
   }
+}
 
-  // ===================== MODALE AVERTISSEMENT 18+ =====================
-  function warnAccepted() {
-    try {
-      const v = JSON.parse(localStorage.getItem("app_warn_v23") || "null");
-      return !!(v && v.accepted === true);
-    } catch {
-      return false;
-    }
-  }
+document.addEventListener("DOMContentLoaded", async () => {
+  // i18n non bloquant (ne pas casser le boot si file:// refuse le fetch)
+  try { initI18n?.(); } catch (e) { console.warn("[i18n] init skipped:", e); }
 
-  let warnCameFromModal = false;
+  // Initialisations “légères”
+  try { initCounters();     } catch(e){ console.error("[initCounters] ", e); }
+  try { initSettings();     } catch(e){ console.error("[initSettings] ", e); }
+  try { initImportExport(); } catch(e){ console.error("[initImportExport] ", e); }
+  try { initStatsHeader();  } catch(e){ console.error("[initStatsHeader] ", e); }
+  try { initLimits();       } catch(e){ console.error("[initLimits] ", e); }
+  try { initCalendar();     } catch(e){ console.error("[initCalendar] ", e); }
+  try { initEconomy();      } catch(e){ console.error("[initEconomy] ", e); }
 
-  document.getElementById("open-ressources-from-warn")?.addEventListener("click", () => {
-    warnCameFromModal = true;
-    // L’ouverture de la page “Ressources” est gérée ailleurs (router/modale)
-    window.dispatchEvent(new CustomEvent("sa:open:resources"));
-  });
+  // Bandeau 18+ (fail-safe, indépendant des autres modules)
+  wireWarnModal();
+  maybeOpenWarnOnStart();
 
-  document.getElementById("btn-page-close")?.addEventListener("click", () => {
-    const page = document.getElementById("modal-page");
-    if (page) {
-      page.classList.remove("show");
-      page.setAttribute("aria-hidden", "true");
-    }
-    const mustReopen = !warnAccepted() || warnCameFromModal;
-    warnCameFromModal = false;
-    if (mustReopen) {
-      const warn = document.getElementById("modal-warn");
-      if (warn) {
-        warn.classList.add("show");
-        warn.setAttribute("aria-hidden", "false");
-      }
-    }
-  });
+  // Graphiques en lazy
+  lazyInitCharts();
 
+  // Sécurité clavier (Échap) pour fermeture des “pages” → si 18+ pas accepté, on ré-ouvre
   document.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape") {
-      const page = document.getElementById("modal-page");
-      const wasOpen = !!page && page.classList.contains("show");
-      if (wasOpen) {
-        page.classList.remove("show");
-        page.setAttribute("aria-hidden", "true");
-      }
-      if (wasOpen && (!warnAccepted() || warnCameFromModal)) {
-        warnCameFromModal = false;
-        const warn = document.getElementById("modal-warn");
-        if (warn) {
-          warn.classList.add("show");
-          warn.setAttribute("aria-hidden", "false");
-        }
-      }
+    if (ev.key !== "Escape") return;
+    const page = document.getElementById("modal-page");
+    const wasOpen = !!page && page.classList.contains("show");
+    if (wasOpen) {
+      page.classList.remove("show");
+      page.setAttribute("aria-hidden","true");
+    }
+    const st = getWarnState();
+    if (wasOpen && (!st.accepted || !st.hideAgain)) {
+      showWarn();
     }
   });
-
-  // ===================== PETIT PLUS : CONSOLE DEBUG (5 taps) =====================
-  (function setupDebugToggle() {
-    const dateEl  = document.getElementById("date-actuelle");
-    const dbg     = document.getElementById("debug-console");
-    if (!dateEl || !dbg) return;
-    let taps = 0, tmr = null;
-    dateEl.addEventListener("click", () => {
-      taps++;
-      clearTimeout(tmr);
-      tmr = setTimeout(() => { taps = 0; }, 600);
-      if (taps >= 5) {
-        taps = 0;
-        dbg.classList.toggle("show");
-      }
-    });
-  })();
-
-  // Expose un mini namespace (facultatif, utile pour diag)
-  window.SA = window.SA || {};
-  window.SA.app = {
-    version: "2.4.0-clean",
-    ensureCharts,
-    navigateTo,
-  };
 });
