@@ -171,7 +171,7 @@ export function addEntry(type, qty = 1, date = new Date()) {
   return ok;
 }
 
-// Retire 1 unité pour un type donné sur le jour (par défaut aujourd’hui)
+// Retire 1 unité pour un type donné sur le jour (par défaut aujourd'hui)
 export function removeOneToday(type, date = new Date()) {
   if (!type) return false;
   const key = ymd(date);
@@ -184,8 +184,8 @@ export function removeOneToday(type, date = new Date()) {
     if (day[type] === 0) delete day[type];
   }
 
-  // Optionnel : on pourrait aussi décrémenter l’heure la plus récente > 0,
-  // mais ce n’est pas indispensable pour l’instant.
+  // Optionnel : on pourrait aussi décrémenter l'heure la plus récente > 0,
+  // mais ce n'est pas indispensable pour l'instant.
 
   // Nettoyage si vide
   if (Object.keys(day).filter(k => k !== "hours").length === 0 && (!day.hours || Object.keys(day.hours).length === 0)) {
@@ -309,4 +309,33 @@ export function economiesHint(date = new Date()) {
             + (day.fort?diffA*(p.fort||0):0)
             + (day.liqueur?diffA*(p.liqueur||0):0);
   return Math.round(eur*100)/100;
+}
+
+// ========== FONCTION CRITIQUE MANQUANTE ==========
+// Retourne les totaux du jour (cigs, weed, alcohol, cost)
+// UTILISÉE PAR: counters.js, stats.js, export.js, et autres modules
+// SANS CETTE FONCTION: l'app affiche tout à zéro et les boutons ne fonctionnent pas
+export function getTodayTotals(date = new Date()) {
+  try {
+    const key = ymd(date);
+    const store = getDaily();
+    const today = store[key] || {};
+    
+    const cigs = today.cigs || 0;
+    const weed = today.weed || 0;
+    const alcohol = today.alcohol || 0;
+    const cost = costToday(date);
+
+    console.log("[state.getTodayTotals] date:", key, "cigs:", cigs, "weed:", weed, "alcohol:", alcohol, "cost:", cost);
+    
+    return {
+      cigs,
+      weed,
+      alcohol,
+      cost
+    };
+  } catch (e) {
+    console.error("[state.getTodayTotals] error:", e);
+    return { cigs: 0, weed: 0, alcohol: 0, cost: 0 };
+  }
 }
