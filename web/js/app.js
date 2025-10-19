@@ -1,6 +1,6 @@
 // web/js/app.js
-// FICHIER COMPLET - Copier-coller direct dans GitHub
-// Rôle: Boot de l'app + routing par hash + lazy init charts + modale 18+ (minimal)
+// COMPLET v2.4.0-clean - Boot principal + Routing + Modales + Navigation
+// Rôle: Orchestration centralisée de l'app, gestion du routing et des modales globales
 
 import { initCounters }     from "./counters.js";
 import { initSettings }     from "./settings.js";
@@ -167,7 +167,10 @@ function setupDebugToggle() {
   try {
     const dateEl = document.getElementById("date-actuelle");
     const dbgBox = document.getElementById("debug-console");
-    if (!dateEl || !dbgBox) return;
+    if (!dateEl || !dbgBox) {
+      console.warn("[app.setupDebugToggle] elements not found");
+      return;
+    }
 
     let taps = 0;
     let timer = null;
@@ -185,6 +188,8 @@ function setupDebugToggle() {
         console.log("[app.debug] Debug console toggled");
       }
     });
+
+    console.log("[app.setupDebugToggle] Wired");
   } catch (e) {
     console.error("[app.setupDebugToggle] error:", e);
   }
@@ -196,13 +201,17 @@ function setupDebugToggle() {
 function handlePageClose() {
   try {
     const btnClose = document.getElementById("btn-page-close");
-    if (!btnClose) return;
+    if (!btnClose) {
+      console.warn("[app.handlePageClose] btn-page-close not found");
+      return;
+    }
 
     btnClose.addEventListener("click", () => {
       const modal = document.getElementById("modal-page");
       if (modal) {
         modal.classList.remove("show");
         modal.setAttribute("aria-hidden", "true");
+        console.log("[app.handlePageClose] Modal page closed");
       }
 
       // Si 18+ pas encore accepté, on réouvre la modale
@@ -211,9 +220,12 @@ function handlePageClose() {
         if (warn) {
           warn.classList.add("show");
           warn.setAttribute("aria-hidden", "false");
+          console.log("[app.handlePageClose] Reopening warn modal (18+ not accepted)");
         }
       }
     });
+
+    console.log("[app.handlePageClose] Wired");
   } catch (e) {
     console.error("[app.handlePageClose] error:", e);
   }
@@ -233,6 +245,7 @@ function handleEscapeKey() {
       if (wasPageOpen) {
         page.classList.remove("show");
         page.setAttribute("aria-hidden", "true");
+        console.log("[app.handleEscapeKey] Modal page closed via Escape");
 
         // Si 18+ pas accepté, on réouvre la modale
         if (!warnAccepted()) {
@@ -240,17 +253,20 @@ function handleEscapeKey() {
           if (warn) {
             warn.classList.add("show");
             warn.setAttribute("aria-hidden", "false");
+            console.log("[app.handleEscapeKey] Reopening warn modal (18+ not accepted)");
           }
         }
       }
     });
+
+    console.log("[app.handleEscapeKey] Wired");
   } catch (e) {
     console.error("[app.handleEscapeKey] error:", e);
   }
 }
 
 // ============================================================
-// SETUP NAV BUTTONS (delegué à app, pas settings)
+// SETUP NAV BUTTONS (routing des 5 boutons bas)
 // ============================================================
 function setupNavigation() {
   try {
@@ -260,55 +276,94 @@ function setupNavigation() {
     const navHabitudes = document.getElementById("nav-habitudes");
     const navParams = document.getElementById("nav-params");
 
-    navPrincipal?.addEventListener("click", () => navigateTo("accueil"));
-    navStats?.addEventListener("click", () => navigateTo("stats"));
-    navCal?.addEventListener("click", () => navigateTo("cal"));
-    navHabitudes?.addEventListener("click", () => navigateTo("habitudes"));
+    // Boutons de navigation (routing par hash)
+    if (navPrincipal) {
+      navPrincipal.addEventListener("click", () => {
+        navigateTo("accueil");
+        console.log("[app.nav] Navigating to accueil");
+      });
+    } else {
+      console.warn("[app.setupNavigation] nav-principal not found");
+    }
 
-    // Réglages = open settings menu (délégué à settings.js)
-    navParams?.addEventListener("click", () => {
-      window.dispatchEvent(new CustomEvent("sa:openSettingsMenu"));
-    });
+    if (navStats) {
+      navStats.addEventListener("click", () => {
+        navigateTo("stats");
+        console.log("[app.nav] Navigating to stats");
+      });
+    } else {
+      console.warn("[app.setupNavigation] nav-stats not found");
+    }
 
-    console.log("[app.nav] Navigation wired");
+    if (navCal) {
+      navCal.addEventListener("click", () => {
+        navigateTo("cal");
+        console.log("[app.nav] Navigating to cal");
+      });
+    } else {
+      console.warn("[app.setupNavigation] nav-calendrier not found");
+    }
+
+    if (navHabitudes) {
+      navHabitudes.addEventListener("click", () => {
+        navigateTo("habitudes");
+        console.log("[app.nav] Navigating to habitudes");
+      });
+    } else {
+      console.warn("[app.setupNavigation] nav-habitudes not found");
+    }
+
+    // Réglages = dispatche event pour que settings.js l'écoute
+    if (navParams) {
+      navParams.addEventListener("click", () => {
+        window.dispatchEvent(new CustomEvent("sa:openSettingsMenu"));
+        console.log("[app.nav] Dispatching sa:openSettingsMenu event");
+      });
+    } else {
+      console.warn("[app.setupNavigation] nav-params not found");
+    }
+
+    console.log("[app.nav] Navigation setup complete");
   } catch (e) {
     console.error("[app.setupNavigation] error:", e);
   }
 }
 
 // ============================================================
-// BOOT PRINCIPAL
+// BOOT PRINCIPAL (DOMContentLoaded)
 // ============================================================
 document.addEventListener("DOMContentLoaded", async () => {
-  console.log("[app.boot] Starting app initialization...");
+  console.log("[app.boot] ============ STARTING APP INITIALIZATION ============");
 
   try {
-    // 1) i18n (non-bloquant)
+    // 1) i18n (non-bloquant, optionnel)
     try {
       initI18n?.();
-      console.log("[app] i18n initialized");
+      console.log("[app.boot] i18n initialized");
     } catch (e) {
-      console.warn("[app] i18n skipped:", e.message);
+      console.warn("[app.boot] i18n skipped:", e.message);
     }
 
-    // 2) Modules "légersé"
-    console.log("[app] Initializing modules...");
-    initCounters();
-    initSettings();
-    initImportExport();
-    initStatsHeader();
-    initLimits();
-    initCalendar();
-    initEconomy();
+    // 2) Initialiser tous les modules "légers" (counters, settings, export, stats, limites, calendrier, economie)
+    console.log("[app.boot] Initializing modules...");
+    try { initCounters(); } catch (e) { console.error("[app.boot] initCounters error:", e); }
+    try { initSettings(); } catch (e) { console.error("[app.boot] initSettings error:", e); }
+    try { initImportExport(); } catch (e) { console.error("[app.boot] initImportExport error:", e); }
+    try { initStatsHeader(); } catch (e) { console.error("[app.boot] initStatsHeader error:", e); }
+    try { initLimits(); } catch (e) { console.error("[app.boot] initLimits error:", e); }
+    try { initCalendar(); } catch (e) { console.error("[app.boot] initCalendar error:", e); }
+    try { initEconomy(); } catch (e) { console.error("[app.boot] initEconomy error:", e); }
+    console.log("[app.boot] Modules initialized");
 
-    // 3) Navigation
+    // 3) Setup navigation (5 boutons bas)
     setupNavigation();
 
-    // 4) Routing par hash
+    // 4) Setup routing par hash (hashchange listener)
     window.addEventListener("hashchange", applyRoute);
-    applyRoute();
+    applyRoute(); // Affiche l'écran initial (accueil par défaut)
+    console.log("[app.boot] Routing setup complete");
 
-    // 5) Charts lazy init
+    // 5) Charts lazy init (via IntersectionObserver si possible)
     const statsScreen = document.getElementById("ecran-stats");
     if (statsScreen && "IntersectionObserver" in window) {
       const io = new IntersectionObserver((entries) => {
@@ -316,36 +371,42 @@ document.addEventListener("DOMContentLoaded", async () => {
           if (ent.isIntersecting) {
             ensureCharts();
             io.disconnect();
+            console.log("[app.boot] Charts initialized (via IntersectionObserver)");
             break;
           }
         }
       }, { threshold: 0.1 });
       io.observe(statsScreen);
+      console.log("[app.boot] IntersectionObserver setup for charts");
     } else {
-      // Fallback
+      // Fallback : init immédiatement
       ensureCharts();
+      console.log("[app.boot] Charts initialized (fallback)");
     }
 
-    // 6) Modale 18+
+    // 6) Modale 18+ (vérif + affichage si nécessaire)
     checkAndShowWarnIfNeeded();
 
-    // 7) Handlers modales
+    // 7) Handlers globaux des modales (page close, escape key)
     handlePageClose();
     handleEscapeKey();
 
-    // 8) Debug toggle
+    // 8) Debug toggle (5 taps sur la date)
     setupDebugToggle();
 
-    // 9) Expose namespace
+    // 9) Expose namespace global (pour diag/debug)
     window.SA = window.SA || {};
     window.SA.app = {
       version: "2.4.0-clean",
       navigateTo,
       ensureCharts,
+      showScreen,
+      ROUTES,
     };
+    console.log("[app.boot] Namespace window.SA.app exposed");
 
-    console.log("[app.boot] App ready!");
+    console.log("[app.boot] ============ APP READY ============");
   } catch (e) {
-    console.error("[app.boot] CRITICAL ERROR:", e);
+    console.error("[app.boot] ============ CRITICAL ERROR ============:", e);
   }
 });
