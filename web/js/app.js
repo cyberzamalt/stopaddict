@@ -1,431 +1,179 @@
-// web/js/app.js
-// COMPLET v2.4.0-secure - Boot principal sécurisé avec logging DOM
-// Rôle: Orchestration centralisée + import dynamique de tous les modules
-// Affiche les erreurs directement dans le DOM (bandeau debug en haut)
+// web/js/app.js — Option A "monolithe visuel"
+// 5 écrans plein format (dont #ecran-params), routing simple,
+// init explicite des modules non-critiques (Stats + Calendrier) quand on entre sur l'écran.
+// Emet "sa:screen:changed" à chaque navigation.
 
-// ============================================================
-// LOGGING DANS LE DOM (visible sur téléphone)
-// ============================================================
-const debugLogs = [];
+import { initSettings }   from "./settings.js";
+import { initCounters }   from "./counters.js";
+import { initStatsHeader } from "./stats.js";
+import { initCharts }     from "./charts.js";
+import { initCalendar }   from "./calendar.js";
+import { initEconomy }    from "./economy.js";   // si tu as ce module
+import { initExport }     from "./export.js";    // si tu as ce module
+import { initLimits }     from "./limits.js";    // si tu as ce module
+import { t }              from "./i18n.js";      // si tu as ce module
 
-function addDebugLog(msg, type = "info") {
-  console.log(`[app.debug] [${type}] ${msg}`);
-  debugLogs.push({ msg, type, time: new Date().toLocaleTimeString() });
-  updateDebugUI();
-}
+// ---------------------------------------------------------
+// Sélecteurs utilitaires
+// ---------------------------------------------------------
+const $  = (sel) => document.querySelector(sel);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-function updateDebugUI() {
+// Les 5 écrans cibles (monolithe)
+const SCREENS = [
+  "ecran-principal",
+  "ecran-stats",
+  "ecran-calendrier",
+  "ecran-habitudes",
+  "ecran-params",
+];
+
+// Boutons de la barre de nav
+const NAV_IDS = [
+  "nav-principal",
+  "nav-stats",
+  "nav-calendrier",
+  "nav-habitudes",
+  "nav-params",
+];
+
+// Flags d'initialisation lazy
+let _statsInitialized = false;
+let _calendarInitialized = false;
+
+// ---------------------------------------------------------
+// Navigation (routing plein écran)
+// ---------------------------------------------------------
+function showScreen(screenId) {
   try {
-    const dbgBox = document.getElementById("debug-console");
-    if (!dbgBox) return;
-    
-    dbgBox.innerHTML = debugLogs
-      .map(log => `<div class="debug-line debug-${log.type}">[${log.time}] ${log.msg}</div>`)
-      .join("");
-    
-    dbgBox.scrollTop = dbgBox.scrollHeight;
+    // Masquer tous les écrans
+    SCREENS.forEach(id => {
+      const el = $(`#${id}`);
+      if (el) el.classList.remove("actif", "active", "show");
+    });
+
+    // Activer la cible
+    const target = $(`#${screenId}`);
+    if (target) target.classList.add("actif", "active", "show");
+
+    // Activer l'onglet visuel
+    NAV_IDS.forEach(id => {
+      const b = $(`#${id}`);
+      if (b) b.classList.remove("actif", "active");
+    });
+    const btn = $(`#nav-${screenId.replace("ecran-","")}`);
+    if (btn) btn.classList.add("actif", "active");
+
+    // Lazy init selon l'écran
+    if (screenId === "ecran-stats") ensureStatsInit();
+    if (screenId === "ecran-calendrier") ensureCalendarInit();
+
+    // Notifier
+    window.dispatchEvent(new CustomEvent("sa:screen:changed", { detail: { screen: screenId.replace("ecran-","") }}));
   } catch (e) {
-    console.error("[app.updateDebugUI] error:", e);
+    console.error("[app.showScreen] error:", e);
   }
 }
 
-// ============================================================
-// VARIABLES GLOBALES
-// ============================================================
-let chartsInitialized = false;
-const modules = {};
+function setupNavigation() {
+  const map = {
+    "nav-principal":   "ecran-principal",
+    "nav-stats":       "ecran-stats",
+    "nav-calendrier":  "ecran-calendrier",
+    "nav-habitudes":   "ecran-habitudes",
+    "nav-params":      "ecran-params", // ← monolithe : Réglages en plein écran
+  };
+  NAV_IDS.forEach(id => {
+    const el = $(`#${id}`);
+    if (!el) return;
+    el.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      const target = map[id];
+      if (target) showScreen(target);
+    });
+  });
+}
 
-// ============================================================
-// HELPER: Vérifier si 18+ accepté
-// ============================================================
+// ---------------------------------------------------------
+// Lazy init : Stats & Calendrier (non-critiques au boot)
+// ---------------------------------------------------------
+function ensureStatsInit() {
+  try {
+    if (_statsInitialized) return;
+    // 1) Header/bannière Stats
+    initStatsHeader?.();
+    // 2) Graphiques (charts.js) — dessiner les courbes
+    initCharts?.();
+    _statsInitialized = true;
+  } catch (e) {
+    console.warn("[app.ensureStatsInit] init stats error:", e);
+  }
+}
+
+function ensureCalendarInit() {
+  try {
+    if (_calendarInitialized) return;
+    initCalendar?.();
+    _calendarInitialized = true;
+  } catch (e) {
+    console.warn("[app.ensureCalendarInit] init calendar error:", e);
+  }
+}
+
+// ---------------------------------------------------------
+// Avertissement 18+ : affichage si nécessaire
+// (Le câblage des boutons/checkbox est géré dans settings.js → setupWarnModal())
+// ---------------------------------------------------------
 function warnAccepted() {
   try {
-    const v = JSON.parse(localStorage.getItem("app_warn_v23") || "null");
-    return !!(v && v.accepted === true);
+    const raw = localStorage.getItem("app_warn_v23");
+    if (!raw) return false;
+    const v = JSON.parse(raw);
+    return !!(v && v.accepted);
   } catch {
     return false;
   }
 }
 
-// ============================================================
-// ROUTING / NAVIGATION
-// ============================================================
-const ROUTES = {
-  accueil:    "ecran-principal",
-  stats:      "ecran-stats",
-  cal:        "ecran-calendrier",
-  habitudes:  "ecran-habitudes",
-};
-
-function showScreen(screenId) {
-  try {
-    document.querySelectorAll(".ecran").forEach(el => {
-      el.classList.remove("show");
-    });
-
-    const target = document.getElementById(screenId);
-    if (target) {
-      target.classList.add("show");
-      addDebugLog(`Screen shown: ${screenId}`, "nav");
-    } else {
-      addDebugLog(`Screen NOT found: ${screenId}`, "warn");
-    }
-
-    updateNavButtons(screenId);
-
-    if (screenId === "ecran-stats") {
-      ensureCharts();
-    }
-  } catch (e) {
-    addDebugLog(`showScreen error: ${e.message}`, "error");
-  }
-}
-
-function updateNavButtons(screenId) {
-  try {
-    const map = {
-      "ecran-principal":  "nav-principal",
-      "ecran-stats":      "nav-stats",
-      "ecran-calendrier": "nav-calendrier",
-      "ecran-habitudes":  "nav-habitudes",
-    };
-
-    document.querySelectorAll(".nav button").forEach(btn => {
-      btn.classList.remove("actif");
-    });
-
-    const activeBtn = document.getElementById(map[screenId]);
-    if (activeBtn) {
-      activeBtn.classList.add("actif");
-    }
-  } catch (e) {
-    addDebugLog(`updateNavButtons error: ${e.message}`, "error");
-  }
-}
-
-function navigateTo(routeAlias) {
-  try {
-    const screenId = ROUTES[routeAlias];
-    if (!screenId) {
-      addDebugLog(`Unknown route: ${routeAlias}`, "warn");
-      return;
-    }
-
-    const newHash = `#${routeAlias}`;
-    if (window.location.hash !== newHash) {
-      window.location.hash = newHash;
-    } else {
-      showScreen(screenId);
-    }
-  } catch (e) {
-    addDebugLog(`navigateTo error: ${e.message}`, "error");
-  }
-}
-
-function applyRoute() {
-  try {
-    const hash = (window.location.hash || "").replace(/^#/, "");
-    const screenId = ROUTES[hash] || ROUTES.accueil;
-    showScreen(screenId);
-  } catch (e) {
-    addDebugLog(`applyRoute error: ${e.message}`, "error");
-  }
-}
-
-// ============================================================
-// CHARTS LAZY INIT
-// ============================================================
-function ensureCharts() {
-  if (chartsInitialized) return;
-
-  chartsInitialized = true;
-  try {
-    if (modules.initCharts) {
-      addDebugLog("Initializing charts...", "info");
-      modules.initCharts();
-    } else {
-      addDebugLog("initCharts NOT loaded", "warn");
-    }
-  } catch (e) {
-    addDebugLog(`Charts init failed: ${e.message}`, "error");
-  }
-}
-
-// ============================================================
-// MODALE 18+
-// ============================================================
 function checkAndShowWarnIfNeeded() {
   try {
-    const accepted = warnAccepted();
-    if (!accepted) {
-      const modal = document.getElementById("modal-warn");
-      if (modal) {
-        modal.classList.add("show");
-        modal.setAttribute("aria-hidden", "false");
-        addDebugLog("18+ warning shown", "info");
-      }
-    }
+    if (warnAccepted()) return;
+    const modal = $("#modal-warn");
+    if (!modal) return;
+    modal.classList.add("show");
+    modal.setAttribute("aria-hidden","false");
   } catch (e) {
-    addDebugLog(`Warn check error: ${e.message}`, "error");
+    console.warn("[app.warn] show error:", e);
   }
 }
 
-// ============================================================
-// DEBUG CONSOLE TOGGLE
-// ============================================================
-function setupDebugToggle() {
+// ---------------------------------------------------------
+// Boot
+// ---------------------------------------------------------
+function boot() {
   try {
-    const dateEl = document.getElementById("date-actuelle");
-    const dbgBox = document.getElementById("debug-console");
-    if (!dateEl || !dbgBox) return;
+    // Démarrage des modules "toujours actifs"
+    initSettings?.();   // horloge, toggles modules, modale 18+ câblée
+    initCounters?.();   // accueil (boutons ± → state → bandeau)
 
-    let taps = 0;
-    let timer = null;
+    // (facultatifs)
+    initEconomy?.();
+    initExport?.();
+    initLimits?.();
 
-    dateEl.addEventListener("click", () => {
-      taps++;
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        taps = 0;
-      }, 600);
-
-      if (taps >= 5) {
-        taps = 0;
-        dbgBox.classList.toggle("show");
-      }
-    });
-  } catch (e) {
-    addDebugLog(`Debug toggle setup error: ${e.message}`, "error");
-  }
-}
-
-// ============================================================
-// PAGE CLOSE
-// ============================================================
-function handlePageClose() {
-  try {
-    const btnClose = document.getElementById("btn-page-close");
-    if (!btnClose) return;
-
-    btnClose.addEventListener("click", () => {
-      const modal = document.getElementById("modal-page");
-      if (modal) {
-        modal.classList.remove("show");
-        modal.setAttribute("aria-hidden", "true");
-      }
-
-      if (!warnAccepted()) {
-        const warn = document.getElementById("modal-warn");
-        if (warn) {
-          warn.classList.add("show");
-          warn.setAttribute("aria-hidden", "false");
-        }
-      }
-    });
-  } catch (e) {
-    addDebugLog(`Page close handler error: ${e.message}`, "error");
-  }
-}
-
-// ============================================================
-// ESCAPE KEY
-// ============================================================
-function handleEscapeKey() {
-  try {
-    document.addEventListener("keydown", (ev) => {
-      if (ev.key !== "Escape") return;
-
-      const page = document.getElementById("modal-page");
-      if (page && page.classList.contains("show")) {
-        page.classList.remove("show");
-        page.setAttribute("aria-hidden", "true");
-
-        if (!warnAccepted()) {
-          const warn = document.getElementById("modal-warn");
-          if (warn) {
-            warn.classList.add("show");
-            warn.setAttribute("aria-hidden", "false");
-          }
-        }
-      }
-    });
-  } catch (e) {
-    addDebugLog(`Escape key handler error: ${e.message}`, "error");
-  }
-}
-
-// ============================================================
-// SETUP NAVIGATION
-// ============================================================
-function setupNavigation() {
-  try {
-    const navPrincipal = document.getElementById("nav-principal");
-    const navStats = document.getElementById("nav-stats");
-    const navCal = document.getElementById("nav-calendrier");
-    const navHabitudes = document.getElementById("nav-habitudes");
-    const navParams = document.getElementById("nav-params");
-
-    if (navPrincipal) {
-      navPrincipal.addEventListener("click", () => {
-        navigateTo("accueil");
-        addDebugLog("Nav: accueil clicked", "nav");
-      });
-    }
-
-    if (navStats) {
-      navStats.addEventListener("click", () => {
-        navigateTo("stats");
-        addDebugLog("Nav: stats clicked", "nav");
-      });
-    }
-
-    if (navCal) {
-      navCal.addEventListener("click", () => {
-        navigateTo("cal");
-        addDebugLog("Nav: calendrier clicked", "nav");
-      });
-    }
-
-    if (navHabitudes) {
-      navHabitudes.addEventListener("click", () => {
-        navigateTo("habitudes");
-        addDebugLog("Nav: habitudes clicked", "nav");
-      });
-    }
-
-    if (navParams) {
-      navParams.addEventListener("click", () => {
-        window.dispatchEvent(new CustomEvent("sa:openSettingsMenu"));
-        addDebugLog("Nav: params clicked (event dispatched)", "nav");
-      });
-    }
-
-    addDebugLog("Navigation wired", "success");
-  } catch (e) {
-    addDebugLog(`Navigation setup error: ${e.message}`, "error");
-  }
-}
-
-// ============================================================
-// IMPORT DYNAMIQUE DES MODULES (sécurisé)
-// ============================================================
-async function loadModulesSafe() {
-  addDebugLog("Starting module loading...", "info");
-
-  // Liste des modules à charger dans l'ordre
-  const moduleList = [
-    { name: "initI18n", file: "i18n.js", critical: false },
-    { name: "initCounters", file: "counters.js", critical: true },
-    { name: "initSettings", file: "settings.js", critical: true },
-    { name: "initImportExport", file: "export.js", critical: false },
-    { name: "initStatsHeader", file: "stats.js", critical: false },
-    { name: "initLimits", file: "limits.js", critical: false },
-    { name: "initCalendar", file: "calendar.js", critical: false },
-    { name: "initEconomy", file: "economy.js", critical: false },
-    { name: "initCharts", file: "charts.js", critical: false },
-  ];
-
-  for (const mod of moduleList) {
-    try {
-      addDebugLog(`Loading ${mod.name} from ${mod.file}...`, "info");
-      
-      const imported = await import(`./${mod.file}`);
-      const initFunc = imported[mod.name];
-      
-      if (!initFunc || typeof initFunc !== "function") {
-        throw new Error(`Export ${mod.name} not found or not a function`);
-      }
-
-      modules[mod.name] = initFunc;
-      addDebugLog(`✓ ${mod.name} loaded`, "success");
-
-      // Initialiser immédiatement si critique
-      if (mod.critical) {
-        initFunc();
-        addDebugLog(`✓ ${mod.name} initialized`, "success");
-      }
-    } catch (e) {
-      const status = mod.critical ? "CRITICAL" : "WARNING";
-      addDebugLog(`✗ ${mod.name}: ${e.message} [${status}]`, "error");
-      
-      if (mod.critical) {
-        addDebugLog(`Cannot continue without ${mod.name}!`, "error");
-        throw new Error(`Critical module failed: ${mod.name}`);
-      }
-    }
-  }
-
-  addDebugLog("Module loading complete!", "success");
-}
-
-// ============================================================
-// BOOT PRINCIPAL (DOMContentLoaded)
-// ============================================================
-document.addEventListener("DOMContentLoaded", async () => {
-  addDebugLog("========== APP BOOT START ==========", "info");
-
-  try {
-    // 1) Charger tous les modules de manière sécurisée
-    try {
-      await loadModulesSafe();
-      addDebugLog("All modules loaded successfully", "success");
-    } catch (e) {
-      addDebugLog(`Module loading FAILED: ${e.message}`, "error");
-      addDebugLog("App is in a broken state. Please check the errors above.", "error");
-      return; // Stop boot
-    }
-
-    // 2) Setup navigation
     setupNavigation();
 
-    // 3) Setup routing
-    window.addEventListener("hashchange", applyRoute);
-    applyRoute();
-    addDebugLog("Routing setup complete", "success");
+    // Afficher l'écran par défaut (Accueil)
+    showScreen("ecran-principal");
 
-    // 4) Charts lazy init (via IntersectionObserver)
-    const statsScreen = document.getElementById("ecran-stats");
-    if (statsScreen && "IntersectionObserver" in window) {
-      const io = new IntersectionObserver((entries) => {
-        for (const ent of entries) {
-          if (ent.isIntersecting) {
-            ensureCharts();
-            io.disconnect();
-            addDebugLog("Charts lazy-loaded (IntersectionObserver)", "success");
-            break;
-          }
-        }
-      }, { threshold: 0.1 });
-      io.observe(statsScreen);
-    } else {
-      ensureCharts();
-    }
-
-    // 5) Modale 18+
+    // Vérifier l'avertissement 18+
     checkAndShowWarnIfNeeded();
 
-    // 6) Global handlers
-    handlePageClose();
-    handleEscapeKey();
-
-    // 7) Debug toggle
-    setupDebugToggle();
-
-    // 8) Expose namespace global
-    window.SA = window.SA || {};
-    window.SA.app = {
-      version: "2.4.0-secure",
-      navigateTo,
-      ensureCharts,
-      showScreen,
-      ROUTES,
-      modules,
-      debugLogs,
-    };
-
-    addDebugLog("========== APP READY ✓ ==========", "success");
+    console.log("[app] Ready");
   } catch (e) {
-    addDebugLog(`CRITICAL ERROR: ${e.message}`, "error");
-    addDebugLog("App boot failed. Check debug console.", "error");
+    console.error("[app.boot] fatal:", e);
   }
-});
+}
+
+// Lancer au DOM ready
+document.addEventListener("DOMContentLoaded", boot);
