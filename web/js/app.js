@@ -1,17 +1,17 @@
-// web/js/app.js — Option A "monolithe visuel"
-// 5 écrans plein format (dont #ecran-params), routing simple,
-// init explicite des modules non-critiques (Stats + Calendrier) quand on entre sur l'écran.
-// Emet "sa:screen:changed" à chaque navigation.
+// web/js/app.js — v2.4.3 HYBRIDE FINAL
+// 5 écrans plein format, boot fiable, lazy init Stats + Calendrier,
+// modale 18+ respectée, horloge fallback, logs détaillés pour debug smartphone.
 
 import { initSettings }   from "./settings.js";
 import { initCounters }   from "./counters.js";
 import { initStatsHeader } from "./stats.js";
 import { initCharts }     from "./charts.js";
 import { initCalendar }   from "./calendar.js";
-import { initEconomy }    from "./economy.js";   // si tu as ce module
-import { initExport }     from "./export.js";    // si tu as ce module
-import { initLimits }     from "./limits.js";    // si tu as ce module
-import { t }              from "./i18n.js";      // si tu as ce module
+// CORRECTION #1 : Commenter les 4 imports fragiles pour sécuriser le boot
+// import { initEconomy }    from "./economy.js";   // ⚠️ DÉSACTIVÉ temporairement
+// import { initExport }     from "./export.js";    // ⚠️ DÉSACTIVÉ temporairement
+// import { initLimits }     from "./limits.js";    // ⚠️ DÉSACTIVÉ temporairement
+// import { t }              from "./i18n.js";      // ⚠️ DÉSACTIVÉ temporairement
 
 // ---------------------------------------------------------
 // Sélecteurs utilitaires
@@ -42,6 +42,36 @@ let _statsInitialized = false;
 let _calendarInitialized = false;
 
 // ---------------------------------------------------------
+// Horloge (fallback + robustesse)
+// ---------------------------------------------------------
+function startHeaderClock() {
+  try {
+    const elDate  = $("#date-actuelle");
+    const elHeure = $("#heure-actuelle");
+    if (!elDate && !elHeure) return;
+
+    const fmtDate = () =>
+      new Date().toLocaleDateString("fr-FR", {
+        weekday: "long", day: "2-digit", month: "long", year: "numeric",
+      });
+
+    const fmtHeure = () =>
+      new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+
+    const tick = () => {
+      if (elDate)  elDate.textContent  = fmtDate();
+      if (elHeure) elHeure.textContent = fmtHeure();
+    };
+
+    tick();
+    setInterval(tick, 1000);
+    console.log("[app.clock] Started ✓");
+  } catch (e) {
+    console.warn("[app.clock] error:", e);
+  }
+}
+
+// ---------------------------------------------------------
 // Navigation (routing plein écran)
 // ---------------------------------------------------------
 function showScreen(screenId) {
@@ -70,28 +100,40 @@ function showScreen(screenId) {
 
     // Notifier
     window.dispatchEvent(new CustomEvent("sa:screen:changed", { detail: { screen: screenId.replace("ecran-","") }}));
+    
+    console.log("[app.showScreen] Navigated to: " + screenId);
   } catch (e) {
     console.error("[app.showScreen] error:", e);
   }
 }
 
 function setupNavigation() {
-  const map = {
-    "nav-principal":   "ecran-principal",
-    "nav-stats":       "ecran-stats",
-    "nav-calendrier":  "ecran-calendrier",
-    "nav-habitudes":   "ecran-habitudes",
-    "nav-params":      "ecran-params", // ← monolithe : Réglages en plein écran
-  };
-  NAV_IDS.forEach(id => {
-    const el = $(`#${id}`);
-    if (!el) return;
-    el.addEventListener("click", (ev) => {
-      ev.preventDefault();
-      const target = map[id];
-      if (target) showScreen(target);
+  try {
+    const map = {
+      "nav-principal":   "ecran-principal",
+      "nav-stats":       "ecran-stats",
+      "nav-calendrier":  "ecran-calendrier",
+      "nav-habitudes":   "ecran-habitudes",
+      "nav-params":      "ecran-params",
+    };
+    
+    NAV_IDS.forEach(id => {
+      const el = $(`#${id}`);
+      if (!el) {
+        console.warn("[app.setupNavigation] Nav button not found: " + id);
+        return;
+      }
+      el.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        const target = map[id];
+        if (target) showScreen(target);
+      });
     });
-  });
+    
+    console.log("[app.setupNavigation] Navigation wired ✓");
+  } catch (e) {
+    console.error("[app.setupNavigation] error:", e);
+  }
 }
 
 // ---------------------------------------------------------
@@ -100,10 +142,24 @@ function setupNavigation() {
 function ensureStatsInit() {
   try {
     if (_statsInitialized) return;
+    console.log("[app.ensureStatsInit] Initializing stats...");
+    
     // 1) Header/bannière Stats
-    initStatsHeader?.();
+    if (typeof initStatsHeader === "function") {
+      initStatsHeader();
+      console.log("[app.ensureStatsInit] Stats header initialized ✓");
+    } else {
+      console.warn("[app.ensureStatsInit] initStatsHeader not found");
+    }
+    
     // 2) Graphiques (charts.js) — dessiner les courbes
-    initCharts?.();
+    if (typeof initCharts === "function") {
+      initCharts();
+      console.log("[app.ensureStatsInit] Charts initialized ✓");
+    } else {
+      console.warn("[app.ensureStatsInit] initCharts not found");
+    }
+    
     _statsInitialized = true;
   } catch (e) {
     console.warn("[app.ensureStatsInit] init stats error:", e);
@@ -113,7 +169,15 @@ function ensureStatsInit() {
 function ensureCalendarInit() {
   try {
     if (_calendarInitialized) return;
-    initCalendar?.();
+    console.log("[app.ensureCalendarInit] Initializing calendar...");
+    
+    if (typeof initCalendar === "function") {
+      initCalendar();
+      console.log("[app.ensureCalendarInit] Calendar initialized ✓");
+    } else {
+      console.warn("[app.ensureCalendarInit] initCalendar not found");
+    }
+    
     _calendarInitialized = true;
   } catch (e) {
     console.warn("[app.ensureCalendarInit] init calendar error:", e);
@@ -130,20 +194,59 @@ function warnAccepted() {
     if (!raw) return false;
     const v = JSON.parse(raw);
     return !!(v && v.accepted);
-  } catch {
+  } catch (e) {
+    console.warn("[app.warnAccepted] parse error:", e);
     return false;
   }
 }
 
 function checkAndShowWarnIfNeeded() {
   try {
-    if (warnAccepted()) return;
+    if (warnAccepted()) {
+      console.log("[app] Warning already accepted, skipping modal");
+      return;
+    }
+    
     const modal = $("#modal-warn");
-    if (!modal) return;
+    if (!modal) {
+      console.warn("[app] Modal #modal-warn not found");
+      return;
+    }
+    
     modal.classList.add("show");
     modal.setAttribute("aria-hidden","false");
+    console.log("[app] Warning modal shown ✓");
   } catch (e) {
-    console.warn("[app.warn] show error:", e);
+    console.warn("[app.checkAndShowWarnIfNeeded] show error:", e);
+  }
+}
+
+// ---------------------------------------------------------
+// Global error handler (debug console)
+// ---------------------------------------------------------
+function setupGlobalErrorHandler() {
+  try {
+    window.addEventListener("error", (e) => {
+      const dc = $("#debug-console");
+      if (!dc) return;
+      const line = `[${new Date().toLocaleTimeString()}] ERROR: ${e.message}`;
+      dc.insertAdjacentHTML("beforeend", `${line}<br>`);
+      dc.classList.add("show");
+      console.error("[app.global] Uncaught error:", e);
+    });
+    
+    window.addEventListener("unhandledrejection", (e) => {
+      const dc = $("#debug-console");
+      if (!dc) return;
+      const line = `[${new Date().toLocaleTimeString()}] REJECT: ${e.reason}`;
+      dc.insertAdjacentHTML("beforeend", `${line}<br>`);
+      dc.classList.add("show");
+      console.error("[app.global] Unhandled rejection:", e.reason);
+    });
+    
+    console.log("[app.globalErrorHandler] Installed ✓");
+  } catch (e) {
+    console.warn("[app.globalErrorHandler] error:", e);
   }
 }
 
@@ -152,14 +255,29 @@ function checkAndShowWarnIfNeeded() {
 // ---------------------------------------------------------
 function boot() {
   try {
+    console.log("[app.boot] ========== STARTING StopAddict v2.4.3 ==========");
+    
     // Démarrage des modules "toujours actifs"
-    initSettings?.();   // horloge, toggles modules, modale 18+ câblée
-    initCounters?.();   // accueil (boutons ± → state → bandeau)
+    console.log("[app.boot] Initializing core modules...");
+    
+    if (typeof initSettings === "function") {
+      initSettings();
+      console.log("[app.boot] Settings initialized ✓");
+    } else {
+      console.error("[app.boot] initSettings not found ❌");
+    }
+    
+    if (typeof initCounters === "function") {
+      initCounters();
+      console.log("[app.boot] Counters initialized ✓");
+    } else {
+      console.error("[app.boot] initCounters not found ❌");
+    }
 
-    // (facultatifs)
-    initEconomy?.();
-    initExport?.();
-    initLimits?.();
+    // Les modules optionnels restent désactivés (Correction #1)
+    // initEconomy?.();
+    // initExport?.();
+    // initLimits?.();
 
     setupNavigation();
 
@@ -169,11 +287,23 @@ function boot() {
     // Vérifier l'avertissement 18+
     checkAndShowWarnIfNeeded();
 
-    console.log("[app] Ready");
+    // Horloge (robustesse supplémentaire)
+    startHeaderClock();
+
+    // Setup global error handler pour debug
+    setupGlobalErrorHandler();
+
+    console.log("[app] ========== READY ✓ ==========");
+    console.log("[app] Expected: clock ticking, buttons responsive, modal if needed");
   } catch (e) {
-    console.error("[app.boot] fatal:", e);
+    console.error("[app.boot] FATAL ERROR:", e);
+    console.error("[app] Stack:", e.stack);
   }
 }
 
 // Lancer au DOM ready
-document.addEventListener("DOMContentLoaded", boot);
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", boot);
+} else {
+  boot();
+}
