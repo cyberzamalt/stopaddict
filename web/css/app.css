@@ -1,100 +1,21 @@
-/* ===== Reset & base ===== */
-:root{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;line-height:1.45;color:#0f172a}
-*{box-sizing:border-box}
-html,body{height:100%}
-body{margin:0;background:#f8fafc}
-main{max-width:980px;margin:0 auto;padding:1rem 1rem 4rem}
+/* app.css — v2.4.3 */
 
-/* ===== Typo & util ===== */
-h1{font-size:1.6rem;margin:.5rem 0 1rem}
-h2{font-size:1.15rem;margin:0 0 .75rem}
-h3{font-size:1rem;margin:.35rem 0}
-.muted{color:#475569}
-.small{font-size:.9rem}
-.hide{display:none !important}
-.pill{display:inline-block;min-width:2rem;text-align:center;padding:.1rem .5rem;border-radius:999px;background:#e2e8f0;color:#0f172a;margin-left:.5rem}
-.limit{font-size:.9rem;color:#475569;margin:.4rem 0 0}
-.alert{margin:.4rem 0 0;padding:.4rem .6rem;border-radius:.45rem;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa}
-
-/* Accessibilité */
-.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-.skip{position:absolute;left:-9999px;top:-9999px;background:#0ea5e9;color:#fff;padding:.6rem .8rem;border-radius:.5rem}
-.skip:focus{left:1rem;top:1rem;z-index:10}
-
-/* ===== Cards ===== */
-.card{background:#fff;border:1px solid #e5e7eb;border-radius:.9rem;padding:1rem;margin:1rem 0}
-.row{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
-@media (max-width:800px){.grid2{grid-template-columns:1fr}}
-.header-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem}
-.header-stats>div{background:#fff;border:1px solid #e5e7eb;border-radius:.7rem;padding:.6rem .7rem;display:flex;justify-content:space-between;align-items:center}
-@media (max-width:700px){.header-stats{grid-template-columns:repeat(2,1fr)}}
-
-/* ===== Buttons ===== */
-.btn{padding:.7rem 1rem;cursor:pointer;border-radius:.6rem;border:1px solid #e5e7eb;background:#f3f4f6}
-.btn:hover{background:#e5e7eb}
-.btn:focus-visible{outline:3px solid #0ea5e9;outline-offset:2px}
-.btn.primary{background:#0ea5e9;border-color:#0ea5e9;color:#fff}
-.btn.pill{border-radius:999px}
-.btn.pill.active{background:#0ea5e9;color:#fff;border-color:#0ea5e9}
-
-/* Plus/Minus touch-friendly */
-.btn.plus,.btn.minus{min-width:3.2rem;font-weight:700}
-@media (pointer:coarse){
-  .btn{padding:1rem 1.1rem}
-  .btn.plus,.btn.minus{min-width:3.6rem}
+/* 1) Masquer la zone résumé/date/calcul du bas (on garde le bandeau du haut) */
+#bandeau-resume,
+.footer-summary,
+.summary-footer,
+.calc-footer {
+  display: none !important;
 }
 
-/* kbd hint */
-.kbd{display:inline-block;border:1px solid #cbd5e1;border-bottom-width:2px;border-radius:.4rem;padding:.05rem .35rem;font-family:ui-monospace, SFMono-Regular, Menlo, monospace;background:#f8fafc;font-size:.85em}
-
-/* ===== Feedback ===== */
-.feedback{margin:.6rem 0 0;padding:.5rem .75rem;border-radius:.6rem}
-.feedback.info{background:#f1f5f9;color:#0f172a}
-.feedback.ok{background:#ecfdf5;color:#065f46}
-.feedback.error{background:#fef2f2;color:#991b1b}
-
-/* ===== Code block ===== */
-pre{background:#0b1020;color:#e5e7eb;padding:1rem;border-radius:.6rem;overflow:auto;max-height:45vh}
-
-/* ===== Calendrier ===== */
-.cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem}
-#calTitle{font-weight:700}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:.35rem}
-.cal-weekdays{color:#475569;font-size:.9rem;margin-bottom:.35rem}
-.cal-weekdays>div{text-align:center}
-.cal-days .cal-cell{background:#fff;border:1px solid #e5e7eb;border-radius:.6rem;min-height:72px;padding:.35rem .45rem;cursor:pointer;position:relative}
-.cal-days .cal-cell .d{position:absolute;top:.35rem;left:.45rem;font-weight:600;font-size:.9rem}
-.cal-days .cal-cell .v{position:absolute;bottom:.45rem;right:.5rem;background:#0ea5e9;color:#fff;border-radius:999px;padding:.05rem .45rem;font-size:.85rem}
-.cal-days .cal-cell.out{opacity:.45}
-.cal-days .cal-cell.today{outline:2px solid #0ea5e9;outline-offset:1px}
-.cal-editor{margin-top:1rem;border:1px dashed #e5e7eb;border-radius:.6rem;padding:.8rem;background:#fafafa}
-.cal-editor-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem}
-
-/* ===== Graph ===== */
-.chart-wrap{position:relative;overflow:hidden;border:1px solid #e5e7eb;border-radius:.8rem;background:#fff}
-#chartCanvas{display:block;width:100%;height:auto}
-
-/* ===== States for limits ===== */
-.warn{box-shadow:0 0 0 2px #fde68a inset}
-.over{box-shadow:0 0 0 2px #fca5a5 inset}
-
-/* ===== Dark mode ===== */
-@media (prefers-color-scheme:dark){
-  body{background:#0b1020;color:#e6edf3}
-  .card,.header-stats>div{background:#0f172a;border-color:#1f2937}
-  .btn{background:#111827;border-color:#1f2937;color:#e6edf3}
-  .btn:hover{background:#1f2937}
-  .pill{background:#1f2937;color:#e6edf3}
-  .chart-wrap{background:#0f172a;border-color:#1f2937}
-  .feedback.info{background:#0f172a;color:#e6edf3}
-  .cal-days .cal-cell{background:#0f172a;border-color:#1f2937}
+/* 2) Désenchevêtrer les boutons d’export en bas des Stats */
+.stats-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
 }
-/* Details/summary (À propos) */
-details{margin:.5rem 0}
-details>summary{cursor:pointer; list-style: none;}
-details>summary::marker{display:none}
-details>summary::-webkit-details-marker{display:none}
-details>summary{padding:.4rem .6rem;border-radius:.5rem;background:#f1f5f9}
-details[open]>summary{background:#e2e8f0}
-details .muted{margin:.5rem 0 0 0}
+.stats-actions .btn {
+  display: inline-block;
+  margin: .25rem 0;
+}
