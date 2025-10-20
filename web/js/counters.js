@@ -1,28 +1,35 @@
-// web/js/counters.js — v2.4.3
-// Aligne l'accueil sur le monolithe : met à jour aussi les petits compteurs val-*.
+// web/js/counters.js — v2.4.3 CORRIGÉ
+// Alimente le bandeau d'accueil (#bar-clopes, #bar-joints, #bar-alcool) avec les chiffres du jour.
+// Pas de petits compteurs val-*, un seul flux de vérité visuelle.
 
 import { on, totalsHeader } from "./state.js";
 
-export function initCounters(){
-  const valCigs = document.getElementById("val-clopes");
-  const valWeed = document.getElementById("val-joints");
-  const valAlc  = document.getElementById("val-alcool");
+export function initCounters() {
+  // Récupérer les éléments du bandeau (les trois barres numériques du jour)
+  const barCigs = document.getElementById("bar-clopes");
+  const barWeed = document.getElementById("bar-joints");
+  const barAlc  = document.getElementById("bar-alcool");
 
-  function refreshSmallCounters(){
+  // Fonction pour rafraîchir l'affichage des chiffres du jour
+  function refreshBannerCounters() {
     try {
       const t = totalsHeader(new Date()) || {};
       const d = t.day || {};
-      if (valCigs) valCigs.textContent = String(Number(d.cigs||0));
-      if (valWeed) valWeed.textContent = String(Number(d.weed||0));
-      if (valAlc)  valAlc.textContent  = String(Number(d.alcohol||0));
-    } catch(e) {
-      console.warn("[counters.refreshSmallCounters]", e);
+      
+      // Afficher juste les chiffres bruts (ex: "5", "2", "1")
+      if (barCigs) barCigs.textContent = String(Number(d.cigs || 0));
+      if (barWeed) barWeed.textContent = String(Number(d.weed || 0));
+      if (barAlc)  barAlc.textContent  = String(Number(d.alcohol || 0));
+    } catch (e) {
+      console.warn("[counters.refreshBannerCounters] error:", e);
     }
   }
 
-  // initial + à chaque changement d’état (les boutons +/- déclenchent déjà ce changement)
-  refreshSmallCounters();
-  on("state:changed", refreshSmallCounters);
+  // Initialisation immédiate
+  refreshBannerCounters();
+
+  // Rafraîchir chaque fois que l'état change (boutons +/-, etc.)
+  on("state:changed", refreshBannerCounters);
 
   console.log("[counters.init] Ready");
 }
