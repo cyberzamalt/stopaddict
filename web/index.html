@@ -178,15 +178,15 @@
   <!-- Stats rapides (jour) -->
   <div class="stats-rapides">
     <div class="stat-item">
-      <div class="stat-val" id="stat-clopes-jr">0</div>
+      <div class="stat-val" id="bar-clopes">0</div>
       <div class="stat-lbl">Clopes</div>
     </div>
     <div class="stat-item">
-      <div class="stat-val" id="stat-joints-jr">0</div>
+      <div class="stat-val" id="bar-joints">0</div>
       <div class="stat-lbl">Joints</div>
     </div>
     <div class="stat-item">
-      <div class="stat-val" id="stat-alcool-jr">0</div>
+      <div class="stat-val" id="bar-alcool">0</div>
       <div class="stat-lbl">Alcool</div>
     </div>
     <div class="stat-item">
@@ -208,11 +208,11 @@
     <!-- ======================= ÉCRAN PRINCIPAL ======================= -->
     <div class="ecran show" id="ecran-principal" aria-label="SA:ECRAN:ACCUEIL" data-sa="screen-home">
       <!-- Clopes -->
-      <div class="card bar-left">
+      <div id="card-cigs" class="card bar-left">
         <div class="line">
           <span class="lbl">🚬 Cigarettes</span>
           <label class="mini-toggle"><input type="checkbox" id="toggle-cigs" checked aria-label="Activer module"></label>
-          <span class="val" id="val-clopes">0</span>
+          <span class="val">0</span>
         </div>
         <div class="segment" id="seg-clopes"></div>
         <div class="pm" aria-label="Actions cigarettes">
@@ -222,11 +222,11 @@
       </div>
 
       <!-- Joints -->
-      <div class="card bar-left green">
+      <div id="card-weed" class="card bar-left green">
         <div class="line">
           <span class="lbl">🌿 Joints</span>
           <label class="mini-toggle"><input type="checkbox" id="toggle-weed" checked aria-label="Activer module"></label>
-          <span class="val" id="val-joints">0</span>
+          <span class="val">0</span>
         </div>
         <div class="pm" aria-label="Actions joints">
           <button class="btn-round btn-minus" id="j-moins" type="button">−1</button>
@@ -235,11 +235,11 @@
       </div>
 
       <!-- Alcool -->
-      <div class="card bar-left orange">
+      <div id="card-alcool" class="card bar-left orange">
         <div class="line">
           <span class="lbl">🍺 Alcool</span>
           <label class="mini-toggle"><input type="checkbox" id="toggle-alcool" checked aria-label="Activer module"></label>
-          <span class="val" id="val-alcool">0</span>
+          <span class="val">0</span>
         </div>
         <div class="segment" id="seg-alcool"></div>
         <div class="pm" aria-label="Actions alcool">
@@ -248,17 +248,7 @@
         </div>
       </div>
 
-      <!-- Bandeau résumé -->
-      <div class="banner green" id="bandeau-resume">
-        <div class="banner-title" id="bandeau-titre">—</div>
-        <div class="line"><span class="lbl">Cigarettes</span><span class="val" id="bandeau-clopes">0</span></div>
-        <div class="line"><span class="lbl">Joints</span><span class="val" id="bandeau-joints">0</span></div>
-        <div class="line" id="bandeau-alcool-line" style="display:none">
-          <span class="lbl">Alcool</span><span class="val" id="bandeau-alcool">0</span>
-        </div>
-      </div>
-
-      <!-- Conseil du jour -->
+<!-- Conseil du jour -->
       <div class="conseil" id="conseil-card">
         <div id="conseil-texte">—</div>
         <div class="adv-ctl">
@@ -295,7 +285,7 @@
           <!-- Canvas unique attendu par web/js/charts.js -->
           <div class="chart-block">
             <div class="chart-caption">Consommations (unités) / Coût</div>
-            <canvas id="chartCanvas" width="960" height="260"></canvas>
+            <canvas id="chart-consommations" width="960" height="260"></canvas>
           </div>
 
           <div class="chart-actions" id="chart-actions">
