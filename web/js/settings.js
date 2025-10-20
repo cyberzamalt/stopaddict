@@ -1,7 +1,6 @@
 // web/js/settings.js
-// COMPLET v2.4.1 - Réglages, Modales Pages, Toggles Modules
-// NOTE: La NAVIGATION (routing, showScreen) est entièrement gérée par app.js
-// NOTE: Le DEBUG TOGGLE (5 taps) est entièrement géré par app.js
+// COMPLET v2.4.1 - Réglages, Modales Pages, Toggles Modules, Warn 18+
+// NOTE: La navigation (routing, showScreen) est gérée par app.js.
 
 const LS_SETTINGS = "app_settings_v23";
 
@@ -12,93 +11,48 @@ function startClock() {
   try {
     const elDate = document.getElementById("date-actuelle");
     const elHeure = document.getElementById("heure-actuelle");
-    
+
     function tick() {
-      if (elDate) {
-        try {
-          elDate.textContent = new Date().toLocaleDateString(undefined, {
-            weekday: "long",
-            day: "2-digit",
-            month: "long",
-            year: "numeric"
-          });
-        } catch (e) {
-          console.warn("[settings.clock] date format error:", e);
-        }
-      }
-      if (elHeure) {
-        try {
-          elHeure.textContent = new Date().toLocaleTimeString(undefined, {
-            hour: "2-digit",
-            minute: "2-digit"
-          });
-        } catch (e) {
-          console.warn("[settings.clock] time format error:", e);
-        }
+      try {
+        const now = new Date();
+        const optsDate = { weekday: "long", day: "2-digit", month: "long" };
+        const optsHeure = { hour: "2-digit", minute: "2-digit" };
+        if (elDate) elDate.textContent = now.toLocaleDateString("fr-FR", optsDate);
+        if (elHeure) elHeure.textContent = now.toLocaleTimeString("fr-FR", optsHeure);
+      } catch (e) {
+        console.warn("[settings.tick] date render error:", e);
       }
     }
-    
     tick();
-    setInterval(tick, 1000);
-    console.log("[settings.clock] Started");
+    setInterval(tick, 60_000);
   } catch (e) {
-    console.error("[settings.clock] init error:", e);
+    console.error("[settings.startClock] error:", e);
   }
 }
 
 // ============================================================
-// TOGGLES MODULES (cigs/weed/alcool) SUR L'ACCUEIL
+// SETTINGS (modules visibles Accueil)
 // ============================================================
-function loadSettings() {
-  try {
-    const v = JSON.parse(localStorage.getItem(LS_SETTINGS) || "null");
-    if (v && typeof v === "object") return v;
-  } catch (e) {
-    console.warn("[settings.loadSettings] parse error:", e);
-  }
-  return {
-    enabled: { cigs: true, weed: true, alcohol: true }
-  };
+function readSettingsSafe() {
+  try { return JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}"); }
+  catch { return {}; }
 }
-
-function saveSettings(s) {
-  try {
-    localStorage.setItem(LS_SETTINGS, JSON.stringify(s));
-    window.dispatchEvent(new Event("sa:settings:changed"));
-    console.log("[settings.saveSettings] Saved");
-    return true;
-  } catch (e) {
-    console.error("[settings.saveSettings] error:", e);
-    return false;
-  }
+function saveSettingsSafe(obj) {
+  try { localStorage.setItem(LS_SETTINGS, JSON.stringify(obj || {})); }
+  catch (e) { console.warn("[settings.saveSettingsSafe]", e); }
 }
 
 function applyModuleToggles() {
   try {
-    const st = loadSettings();
-    
-    // Cherche les cartes de l'accueil (3 cartes pour cigs/weed/alcohol)
-    const cards = document.querySelectorAll("#ecran-principal .card");
-    if (cards.length === 0) {
-      console.warn("[settings.applyModuleToggles] no cards found");
-      return;
-    }
-    
-    let cardIdx = 0;
-    if (cardIdx < cards.length) {
-      cards[cardIdx].style.display = st.enabled.cigs ? "" : "none";
-      cardIdx++;
-    }
-    if (cardIdx < cards.length) {
-      cards[cardIdx].style.display = st.enabled.weed ? "" : "none";
-      cardIdx++;
-    }
-    if (cardIdx < cards.length) {
-      cards[cardIdx].style.display = st.enabled.alcohol ? "" : "none";
-      cardIdx++;
-    }
-    
-    console.log("[settings.applyModuleToggles] Applied:", st.enabled);
+    const s = readSettingsSafe();
+    const mods = s.modules || {};
+    const cardC = document.getElementById("card-cigs");   // Cigarettes
+    const cardW = document.getElementById("card-weed");   // Joints
+    const cardA = document.getElementById("card-alcool"); // Alcool
+
+    if (cardC) cardC.style.display = (mods.cigs    === false) ? "none" : "";
+    if (cardW) cardW.style.display = (mods.weed    === false) ? "none" : "";
+    if (cardA) cardA.style.display = (mods.alcohol === false) ? "none" : "";
   } catch (e) {
     console.error("[settings.applyModuleToggles] error:", e);
   }
@@ -106,311 +60,241 @@ function applyModuleToggles() {
 
 function wireHomeToggles() {
   try {
-    const st = loadSettings();
+    const s = readSettingsSafe();
+    s.modules = s.modules || {};
+    const mods = s.modules;
 
-    const cC = document.getElementById("toggle-cigs");
-    const cW = document.getElementById("toggle-weed");
-    const cA = document.getElementById("toggle-alcool");
+    const chkC = document.getElementById("toggle-cigs");
+    const chkW = document.getElementById("toggle-weed");
+    const chkA = document.getElementById("toggle-alcool");
 
-    if (cC) {
-      cC.checked = !!st.enabled.cigs;
-      cC.addEventListener("change", () => {
-        try {
-          st.enabled.cigs = !!cC.checked;
-          saveSettings(st);
-          applyModuleToggles();
-          console.log("[settings.wireHomeToggles] cigs toggled:", st.enabled.cigs);
-        } catch (e) {
-          console.error("[settings.wireHomeToggles] cigs error:", e);
-        }
-      });
-    } else {
-      console.warn("[settings.wireHomeToggles] toggle-cigs not found");
+    if (chkC) chkC.checked = !(mods.cigs === false);
+    if (chkW) chkW.checked = !(mods.weed === false);
+    if (chkA) chkA.checked = !(mods.alcohol === false);
+
+    function persist() {
+      try {
+        s.modules = {
+          cigs:    chkC ? !!chkC.checked : true,
+          weed:    chkW ? !!chkW.checked : true,
+          alcohol: chkA ? !!chkA.checked : true
+        };
+        saveSettingsSafe(s);
+        applyModuleToggles();
+      } catch (e) {
+        console.error("[settings.persist toggles] error:", e);
+      }
     }
 
-    if (cW) {
-      cW.checked = !!st.enabled.weed;
-      cW.addEventListener("change", () => {
-        try {
-          st.enabled.weed = !!cW.checked;
-          saveSettings(st);
-          applyModuleToggles();
-          console.log("[settings.wireHomeToggles] weed toggled:", st.enabled.weed);
-        } catch (e) {
-          console.error("[settings.wireHomeToggles] weed error:", e);
-        }
-      });
-    } else {
-      console.warn("[settings.wireHomeToggles] toggle-weed not found");
-    }
-
-    if (cA) {
-      cA.checked = !!st.enabled.alcohol;
-      cA.addEventListener("change", () => {
-        try {
-          st.enabled.alcohol = !!cA.checked;
-          saveSettings(st);
-          applyModuleToggles();
-          console.log("[settings.wireHomeToggles] alcohol toggled:", st.enabled.alcohol);
-        } catch (e) {
-          console.error("[settings.wireHomeToggles] alcohol error:", e);
-        }
-      });
-    } else {
-      console.warn("[settings.wireHomeToggles] toggle-alcool not found");
-    }
-
+    chkC?.addEventListener("change", persist);
+    chkW?.addEventListener("change", persist);
+    chkA?.addEventListener("change", persist);
     applyModuleToggles();
-    console.log("[settings.wireHomeToggles] Wired");
   } catch (e) {
     console.error("[settings.wireHomeToggles] error:", e);
   }
 }
 
 // ============================================================
-// MODALE PAGES (Manuel, CGU, Mentions, Ressources)
+// PAGES MODALES (Manuel / Ressources / Mentions / CGU)
 // ============================================================
 function openPageModal(title, html) {
   try {
     const modal = document.getElementById("modal-page");
-    const ttl = document.getElementById("page-title");
-    const body = document.getElementById("page-content");
-    
-    if (!modal || !ttl || !body) {
-      console.warn("[settings.openPageModal] modal elements not found");
-      return;
-    }
-    
-    ttl.textContent = title;
-    body.innerHTML = html;
+    const h3    = document.getElementById("page-title");
+    const body  = document.getElementById("page-content");
+    if (!modal || !h3 || !body) return;
+
+    h3.textContent = title || "—";
+    body.innerHTML = html || "";
     modal.classList.add("show");
     modal.setAttribute("aria-hidden", "false");
-    
-    console.log("[settings.openPageModal] Opened:", title);
+
+    const btnClose = document.getElementById("btn-page-close");
+    btnClose?.addEventListener("click", () => closePageModal(), { once: true });
   } catch (e) {
     console.error("[settings.openPageModal] error:", e);
   }
 }
-
 function closePageModal() {
   try {
     const modal = document.getElementById("modal-page");
-    if (!modal) {
-      console.warn("[settings.closePageModal] modal not found");
-      return;
-    }
+    if (!modal) return;
     modal.classList.remove("show");
     modal.setAttribute("aria-hidden", "true");
-    console.log("[settings.closePageModal] Closed");
   } catch (e) {
     console.error("[settings.closePageModal] error:", e);
   }
 }
 
-// ============================================================
-// CONTENUS PAGES
-// ============================================================
-function contentRessources() {
+function contentManual() {
   return `
     <div>
-      <p>Besoin d'aide ? Voici quelques ressources utiles en France :</p>
-      <ul>
-        <li><strong>Tabac Info Service</strong> – 39 89 (appel non surtaxé)</li>
-        <li><strong>Alcool Info Service</strong> – 0 980 980 930</li>
-        <li><strong>Drogues Info Service</strong> – 0 800 23 13 13</li>
-        <li>Urgence : <strong>15</strong> (SAMU) / <strong>112</strong></li>
-      </ul>
-      <p>Ces services offrent écoute, information et orientation vers des professionnels.</p>
-    </div>
-  `;
-}
-
-function contentManuel() {
-  return `
-    <div>
-      <p><strong>StopAddict – Manuel rapide</strong></p>
+      <p><strong>Bienvenue dans StopAddict</strong>.</p>
       <ol>
-        <li>Sur l'écran Accueil, utilisez +/− pour enregistrer vos consommations.</li>
-        <li>Les onglets en bas permettent d'accéder aux Stats, au Calendrier et aux Habitudes.</li>
-        <li>Dans <em>Habitudes</em>, définissez vos limites et dates clés (réduction/arrêt/objectif).</li>
-        <li>Dans <em>Stats</em>, changez l'échelle (Jour/Semaine/Mois) et exportez vos données.</li>
-        <li>Dans <em>Réglages</em>, importez/exportez vos données (changement de téléphone, sauvegarde).</li>
+        <li><em>Accueil</em> : utilisez les boutons ± pour enregistrer.</li>
+        <li><em>Habitudes</em> : fixez limites et objectifs.</li>
+        <li><em>Stats</em> : changez l'échelle (Jour/Semaine/Mois) et exportez.</li>
+        <li><em>Réglages</em> : import/export des données locales.</li>
       </ol>
     </div>
   `;
 }
-
 function contentCgvCgu() {
   return `
     <div>
-      <p><strong>Conditions d'utilisation</strong> : cette application fournit un auto-suivi à visée d'aide
-      à la réduction/arrêt. Elle ne remplace pas un suivi médical. Vous devez être majeur(e).</p>
-      <p>En utilisant l'application, vous acceptez que les données soient stockées localement sur votre appareil.</p>
+      <p><strong>Conditions d'utilisation</strong> : auto-suivi d’aide à la réduction/arrêt. Ne remplace pas un suivi médical.</p>
+      <p>Les données restent <em>localement</em> sur l’appareil (localStorage).</p>
     </div>
   `;
 }
-
 function contentMentions() {
   return `
     <div>
-      <p><strong>Mentions légales</strong> : Application locale, sans envoi de données vers des serveurs tiers.
-      Les données restent sur votre appareil (localStorage).</p>
+      <p>Éditeur : Projet personnel • Licence MIT • Aucune collecte externe.</p>
+    </div>
+  `;
+}
+function contentRessources() {
+  return `
+    <div>
+      <ul>
+        <li><strong>Tabac info service</strong> : 39 89</li>
+        <li><strong>Alcool info service</strong> : 0&nbsp;980&nbsp;980&nbsp;930</li>
+        <li><strong>Drogues info service</strong> : 0&nbsp;800&nbsp;23&nbsp;13&nbsp;13</li>
+      </ul>
     </div>
   `;
 }
 
-// ============================================================
-// MENU RÉGLAGES (modale pages)
-// ============================================================
+// Menu “Réglages” (ouvert via event depuis app.js)
 function openSettingsMenu() {
   try {
-    const hasExport = !!window?.SA?.exporting;
     const html = `
-      <div>
-        <div class="section-title">Réglages</div>
-        <div class="grid-2">
-          <button class="btn" id="set-open-manuel" type="button">📘 Manuel</button>
-          <button class="btn" id="set-open-ress" type="button">🆘 Ressources utiles</button>
-          <button class="btn" id="set-open-cgv" type="button">📄 CGU/CGV</button>
-          <button class="btn" id="set-open-mentions" type="button">ℹ️ Mentions</button>
-          ${hasExport ? `
-            <button class="btn" id="set-export-json" type="button">💾 Export JSON</button>
-            <button class="btn" id="set-export-csv" type="button">💾 Export CSV</button>
-            <button class="btn" id="set-export-view" type="button">💾 Export vue Stats</button>
-            <button class="btn" id="set-import" type="button">📥 Importer (JSON/CSV)</button>
-          ` : ``}
+      <div class="settings-menu">
+        <h4>Réglages</h4>
+        <div class="grid">
+          <button class="btn" id="btn-open-manuel">Manuel d'utilisation</button>
+          <button class="btn" id="btn-open-ressources">Ressources utiles</button>
+          <button class="btn" id="btn-open-mentions">Mentions légales</button>
+          <button class="btn" id="btn-open-cgv">Conditions d'utilisation</button>
+        </div>
+        <hr/>
+        <h4>Import / Export</h4>
+        <div class="grid">
+          <button class="btn" id="btn-trigger-export">Exporter mes données</button>
+          <button class="btn" id="btn-trigger-import">Importer des données</button>
         </div>
       </div>
     `;
     openPageModal("Réglages", html);
 
-    // Sous-pages
-    document.getElementById("set-open-manuel")?.addEventListener("click", () => {
-      openPageModal("Manuel", contentManuel());
-    });
-    document.getElementById("set-open-ress")?.addEventListener("click", () => {
-      openPageModal("Ressources utiles", contentRessources());
-    });
-    document.getElementById("set-open-cgv")?.addEventListener("click", () => {
-      openPageModal("CGU / CGV", contentCgvCgu());
-    });
-    document.getElementById("set-open-mentions")?.addEventListener("click", () => {
-      openPageModal("Mentions légales", contentMentions());
-    });
+    document.getElementById("btn-open-manuel")   ?.addEventListener("click", ()=> openPageModal("Manuel", contentManual()));
+    document.getElementById("btn-open-ressources")?.addEventListener("click", ()=> openPageModal("Ressources utiles", contentRessources()));
+    document.getElementById("btn-open-mentions") ?.addEventListener("click", ()=> openPageModal("Mentions légales", contentMentions()));
+    document.getElementById("btn-open-cgv")      ?.addEventListener("click", ()=> openPageModal("Conditions d'utilisation", contentCgvCgu()));
 
-    // Import/Export
-    if (window?.SA?.exporting) {
-      document.getElementById("set-export-json")?.addEventListener("click", () => {
-        try {
-          window.SA.exporting.exportJSON();
-          console.log("[settings.openSettingsMenu] Export JSON triggered");
-        } catch (e) {
-          console.error("[settings.openSettingsMenu] exportJSON error:", e);
-        }
-      });
-      document.getElementById("set-export-csv")?.addEventListener("click", () => {
-        try {
-          window.SA.exporting.exportCSV();
-          console.log("[settings.openSettingsMenu] Export CSV triggered");
-        } catch (e) {
-          console.error("[settings.openSettingsMenu] exportCSV error:", e);
-        }
-      });
-      document.getElementById("set-export-view")?.addEventListener("click", () => {
-        try {
-          window.SA.exporting.exportView();
-          console.log("[settings.openSettingsMenu] Export View triggered");
-        } catch (e) {
-          console.error("[settings.openSettingsMenu] exportView error:", e);
-        }
-      });
-      document.getElementById("set-import")?.addEventListener("click", () => {
-        try {
-          window.SA.exporting.triggerImport();
-          console.log("[settings.openSettingsMenu] Import triggered");
-        } catch (e) {
-          console.error("[settings.openSettingsMenu] triggerImport error:", e);
-        }
-      });
-    }
-
-    console.log("[settings.openSettingsMenu] Menu opened");
+    document.getElementById("btn-trigger-export")?.addEventListener("click", ()=> {
+      try { window.dispatchEvent(new CustomEvent("sa:export")); } catch(e){ console.error(e); }
+    });
+    document.getElementById("btn-trigger-import")?.addEventListener("click", ()=> {
+      try { window.dispatchEvent(new CustomEvent("sa:import")); } catch(e){ console.error(e); }
+    });
   } catch (e) {
     console.error("[settings.openSettingsMenu] error:", e);
   }
 }
 
-// ============================================================
-// RESSOURCES DEPUIS LA MODALE 18+ 
-// ============================================================
+// Lien “Ressources” depuis la modale 18+
 function wireWarnShortcut() {
   try {
     const link = document.getElementById("open-ressources-from-warn");
-    if (!link) {
-      console.warn("[settings.wireWarnShortcut] link not found, skip");
-      return;
-    }
-
+    if (!link) return;
     link.addEventListener("click", (e) => {
       e.preventDefault();
       openPageModal("Ressources utiles", contentRessources());
-      console.log("[settings.wireWarnShortcut] Resources opened from warn modal");
     });
-
-    console.log("[settings.wireWarnShortcut] Wired");
   } catch (e) {
     console.error("[settings.wireWarnShortcut] error:", e);
   }
 }
 
-// ============================================================
-// EVENT BUS: Écouter l'événement openSettingsMenu depuis app.js
-// ============================================================
+// Bus d’événements (ouverture du menu Réglages)
 function wireEventBus() {
   try {
-    window.addEventListener("sa:openSettingsMenu", () => {
-      openSettingsMenu();
-      console.log("[settings.wireEventBus] openSettingsMenu called");
-    });
-
-    console.log("[settings.wireEventBus] Event listener attached for sa:openSettingsMenu");
+    window.addEventListener("sa:openSettingsMenu", () => openSettingsMenu());
   } catch (e) {
     console.error("[settings.wireEventBus] error:", e);
   }
 }
 
 // ============================================================
-// INITIALISATION PUBLIQUE
+// AVERTISSEMENT 18+ — câblage complet (validation/fermeture)
+// ============================================================
+function setupWarnModal(){
+  try{
+    const $ = (id)=>document.getElementById(id);
+    const modal   = $("modal-warn");
+    const chk18   = $("chk-warn-18");
+    const chkHide = $("chk-warn-hide");
+    const btnOK   = $("btn-warn-accept");
+    const btnQuit = $("btn-warn-quit");
+    const btnCanc = $("btn-warn-cancel");
+
+    if (!modal) return;
+
+    // État initial du bouton
+    if (btnOK) btnOK.disabled = !(chk18 && chk18.checked);
+
+    // Activation/désactivation au tick
+    chk18?.addEventListener("change", ()=>{ if(btnOK) btnOK.disabled = !chk18.checked; });
+
+    // Valider → enregistrer + fermer
+    btnOK?.addEventListener("click", ()=>{
+      try {
+        const payload = { accepted:true, hide: !!chkHide?.checked, ts: Date.now() };
+        localStorage.setItem("app_warn_v23", JSON.stringify(payload));
+      } catch(e) {
+        console.warn("[settings.setupWarnModal] persist warn error:", e);
+      }
+      modal.classList.remove("show");
+      modal.setAttribute("aria-hidden", "true");
+    });
+
+    // Annuler → réinitialiser cases + désactiver bouton
+    btnCanc?.addEventListener("click", ()=>{
+      if (chk18) chk18.checked = false;
+      if (chkHide) chkHide.checked = false;
+      if (btnOK) btnOK.disabled = true;
+    });
+
+    // Quitter → info
+    btnQuit?.addEventListener("click", ()=>{
+      alert("Vous pouvez fermer l’application maintenant.");
+    });
+  }catch(e){
+    console.error("[settings.setupWarnModal] error:", e);
+  }
+}
+
+// ============================================================
+// INIT PUBLIC
 // ============================================================
 export function initSettings() {
-  console.log("[settings.init] Starting...");
-  
   try {
     startClock();
     wireHomeToggles();
     wireWarnShortcut();
+    setupWarnModal();
     wireEventBus();
 
-    // Expose helpers
+    // Helpers exposés
     window.SA = window.SA || {};
-    window.SA.pages = {
-      open: openPageModal,
-      close: closePageModal,
-      openSettings: openSettingsMenu
-    };
+    window.SA.pages = { open: openPageModal, close: closePageModal, openSettings: openSettingsMenu };
 
-    // Écouter les changements de settings depuis state.js (si besoin de reappliquer toggles)
-    try {
-      window.addEventListener("sa:settings:changed", () => {
-        applyModuleToggles();
-        console.log("[settings.init] Settings changed, reapplying visibility");
-      });
-    } catch (e) {
-      console.warn("[settings.init] event listener error:", e);
-    }
-
-    console.log("[settings.init] Done ✅");
+    // Re-appliquer l’affichage des modules au changement de settings
+    window.addEventListener("sa:settings:changed", applyModuleToggles);
   } catch (e) {
-    console.error("[settings.init] CRITICAL ERROR:", e);
+    console.error("[settings.init] CRITICAL:", e);
   }
 }
