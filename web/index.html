@@ -43,7 +43,15 @@
   .date{font-weight:800; font-size:18px}
   .heure{opacity:.95; font-size:13px; margin-top:2px}
 
-  .debug-console{position:fixed; top:0; left:0; right:0; background:rgba(0,0,0,.95); color:#b5f7b7; font:12px/1.35 ui-monospace, Menlo, monospace; padding:6px 8px; max-height:40vh; overflow:auto; z-index:9999; border-bottom:2px solid #34d399; display:none}
+  /* Console debug (rendue VISIBLE ET LISIBLE) */
+  .debug-console{
+    position:fixed; left:0; right:0; top:64px; /* s’affiche SOUS le header */
+    background:rgba(0,0,0,.95); color:#b5f7b7;
+    font:14px/1.45 ui-monospace, Menlo, monospace; /* plus lisible */
+    padding:10px 12px; max-height:60vh; overflow:auto;
+    z-index:9999; border-bottom:2px solid #34d399; display:none;
+    white-space:pre-wrap; word-break:break-word;
+  }
   .debug-console.show{display:block}
 
   /* Stats rapides (jour courant) */
@@ -116,7 +124,7 @@
   .nav button.actif{color:#3b82f6; background:rgba(59,130,246,.06)}
   .nav .ico{font-size:18px}
 
-  .snackbar{position:fixed; left:50%; transform:translateX(-50%) translateY(20px); bottom:76px; background:#111827; color:#fff; padding:10px 14px; border-radius:999px; font-size:13px; display:none; gap:10px; align-items:center; z-index:60}
+  .snackbar{position:fixed; left:50%; transform:translateX(-50%) translateY(20px); bottom:76px; background:#111827; color:#fff; padding:10px 14px; border-radius:999px; font-size:13px; display:none; gap:10px; align-items:center; z-index:20}
   .snackbar.show{display:flex; animation:fadeUp .2s ease}
   .snackbar a{color:#34d399; font-weight:900; text-decoration:none}
   @keyframes fadeUp{from{opacity:0; transform:translateX(-50%) translateY(40px)} to{opacity:1; transform:translateX(-50%) translateY(20px)}}
@@ -131,98 +139,101 @@
   .btn:disabled{opacity:.5; cursor:not-allowed; transform:none !important}
 
   .modal{position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; align-items:flex-end; justify-content:center; z-index:50}
-  .modal.show{display:flex; animation:slideUp .2s ease}
-  @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
-  .sheet{background:#fff; border-radius:20px 20px 0 0; padding:20px; max-height:80vh; overflow-y:auto; width:100%; max-width:460px}
-  .sheet h3{margin:0 0 12px; font-size:16px; color:#111827}
+  .modal.show{display:flex; animation:fadeIn .2s ease}
+  .sheet{background:#fff; width:100%; max-width:460px; border-radius:16px 16px 0 0; padding:16px; max-height:80vh; overflow-y:auto}
+  .sheet h3{margin:0 0 12px; font-size:18px; color:#111827}
 
-  .warn-box{padding:12px; background:#fef3c7; border-left:4px solid #f59e0b; border-radius:8px; margin:10px 0}
-  .warn-title{color:#d97706}
-  .warn-list{margin:8px 0; padding-left:20px}
-  .warn-list li{margin:4px 0; font-size:13px}
-  .warn-note{font-size:12px; color:#6b7280}
-  .warn-actions{display:flex; justify-content:space-between; align-items:flex-end; gap:8px; margin-top:12px}
-  .warn-actions .right{display:flex; gap:8px}
+  .cal-grid{display:grid; grid-template-columns:repeat(7, 1fr); gap:6px; margin-top:10px}
+  .cal-cell{background:#fff; border:1px solid var(--divider); border-radius:8px; padding:6px; min-height:56px; position:relative; cursor:pointer; font-size:12px; transition:all .15s ease}
+  .cal-cell:hover{background:#f9fafb; transform:scale(1.05)}
+  .cal-cell.today{border-color:#3b82f6; border-width:2px}
+  .cal-cell.has-data{background:#ecfdf5}
+  .cal-num{color:var(--muted); font-weight:800}
+  .dot{width:8px; height:8px; border-radius:50%; display:inline-block; margin:2px}
+  .dot.c{background:var(--info)}
+  .dot.j{background:var(--ok)}
+  .dot.a{background:var(--warn)}
 
-  .pages-title{color:#111827}
-  .page-content{font-size:13px; line-height:1.6; color:#374151}
-  .page-content strong{color:#111827}
-  .page-content a{color:#3b82f6; text-decoration:none}
-  .page-content a:hover{text-decoration:underline}
+  /* Zone charts (compatible web/js/charts.js) */
+  #chartRange { display:flex; gap:8px; margin:10px 0; }
+  #chartRange .btn.pill { flex:1; background:#e6fffa; border:2px solid #b2f5ea; color:#0f766e; border-radius:999px; padding:8px; font-weight:800; font-size:13px; text-align:center; cursor:pointer; }
+  #chartRange .btn.pill.active { background:#3b82f6; border-color:#3b82f6; color:#fff; }
+  canvas#chart-consommations, canvas#chart-cout-eco { width:100%; height:240px; display:block; }
 
-  /* Chart containers */
-  #chart-consommations, #chart-cout-eco {
-    max-height: 300px;
-    min-height: 250px;
-  }
-
-  /* Export buttons layout */
-  #chart-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 10px;
-  }
-  #chart-actions .btn {
-    width: 100%;
+  @media (max-width: 460px){
+    .container{margin:0; max-width:100%}
+    .card, .banner{margin:6px; padding:12px}
+    .grid-2{grid-template-columns:1fr}
   }
 </style>
 </head>
 <body>
+
 <div class="container">
   <!-- ======================= HEADER ======================= -->
   <div class="header">
     <div class="brand">
-      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%2322c55e' width='100' height='100' rx='20'/%3E%3Ctext x='50' y='65' font-size='50' font-weight='bold' fill='white' text-anchor='middle'%3E🛑%3C/text%3E%3C/svg%3E" alt="StopAddict">
-      <span class="brand-name">StopAddict</span>
-      <span class="brand-ver">v2.4.4</span>
+      <span class="brand-name">🚭 StopAddict</span>
+      <span class="brand-ver">v2.4.0 CLEAN</span>
     </div>
     <div class="date" id="date-actuelle">—</div>
     <div class="heure" id="heure-actuelle">—</div>
   </div>
 
-  <!-- ======================= DEBUG CONSOLE ======================= -->
+  <!-- Console debug -->
   <div class="debug-console" id="debug-console"></div>
 
-  <!-- ======================= CONTENU PRINCIPAL ======================= -->
-  <div class="content">
-    <!-- ÉCRAN ACCUEIL -->
-    <div id="ecran-principal" class="ecran show">
-      <!-- Stats rapides (jour courant) -->
-      <div class="stats-rapides">
-        <div class="stat-item">
-          <div class="stat-val" id="bar-clopes">0</div>
-          <div class="stat-lbl">Clopes</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-val" id="bar-joints">0</div>
-          <div class="stat-lbl">Joints</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-val" id="bar-alcool">0</div>
-          <div class="stat-lbl">Alcool</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-val">0€</div>
-          <div class="stat-lbl">Coût</div>
-        </div>
-      </div>
+  <!-- Stats rapides (jour) -->
+  <div class="stats-rapides">
+    <div class="stat-item">
+      <div class="stat-val" id="bar-clopes">0</div>
+      <div class="stat-lbl">Clopes</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-val" id="bar-joints">0</div>
+      <div class="stat-lbl">Joints</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-val" id="bar-alcool">0</div>
+      <div class="stat-lbl">Alcool</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-val" id="stat-cout-jr">0€</div>
+      <div class="stat-lbl">Coût</div>
+    </div>
+  </div>
 
-      <!-- Cartes des compteurs individuels -->
-      <div class="card bar-left green" id="card-cigs">
+  <!-- KPIs header (utilisé par web/js/stats.js) -->
+  <div class="stats-header" id="stats-header">
+    <div class="kpi"><div class="kpi-val" id="todayTotal">0</div><div class="kpi-lbl">Total jour</div></div>
+    <div class="kpi"><div class="kpi-val" id="weekTotal">0</div><div class="kpi-lbl">Total semaine</div></div>
+    <div class="kpi"><div class="kpi-val" id="monthTotal">0</div><div class="kpi-lbl">Total mois</div></div>
+    <div class="kpi"><div class="kpi-val" id="todayCost">0 €</div><div class="kpi-lbl">Coût jour</div></div>
+    <div class="kpi"><div class="kpi-val" id="economies-amount">0 €</div><div class="kpi-lbl">Économies</div></div>
+  </div>
+
+  <div class="content">
+    <!-- ======================= ÉCRAN PRINCIPAL ======================= -->
+    <div class="ecran show" id="ecran-principal" aria-label="SA:ECRAN:ACCUEIL" data-sa="screen-home">
+      <!-- Clopes -->
+      <div id="card-cigs" class="card bar-left">
         <div class="line">
           <span class="lbl">🚬 Cigarettes</span>
+          <label class="mini-toggle"><input type="checkbox" id="toggle-cigs" checked aria-label="Activer module"></label>
           <span class="val">0</span>
         </div>
+        <div class="segment" id="seg-clopes"></div>
         <div class="pm" aria-label="Actions cigarettes">
           <button class="btn-round btn-minus" id="cl-moins" type="button">−1</button>
           <button class="btn-round btn-plus" id="cl-plus" type="button">+1</button>
         </div>
       </div>
 
-      <div class="card bar-left green" id="card-weed">
+      <!-- Joints -->
+      <div id="card-weed" class="card bar-left green">
         <div class="line">
-          <span class="lbl">🍃 Joints</span>
+          <span class="lbl">🌿 Joints</span>
+          <label class="mini-toggle"><input type="checkbox" id="toggle-weed" checked aria-label="Activer module"></label>
           <span class="val">0</span>
         </div>
         <div class="pm" aria-label="Actions joints">
@@ -231,113 +242,114 @@
         </div>
       </div>
 
-      <div class="card bar-left green" id="card-alcool">
+      <!-- Alcool -->
+      <div id="card-alcool" class="card bar-left orange">
         <div class="line">
           <span class="lbl">🍺 Alcool</span>
+          <label class="mini-toggle"><input type="checkbox" id="toggle-alcool" checked aria-label="Activer module"></label>
           <span class="val">0</span>
         </div>
+        <div class="segment" id="seg-alcool"></div>
         <div class="pm" aria-label="Actions alcool">
           <button class="btn-round btn-minus" id="a-moins" type="button">−1</button>
           <button class="btn-round btn-plus" id="a-plus" type="button">+1</button>
         </div>
       </div>
 
-      <div class="conseil">
-        <strong>💡 Conseil du jour</strong><br>
-        Chaque jour sans, c'est un pas vers ta meilleure version. Reste motivé(e) !
-      </div>
-    </div>
-
-    <!-- ÉCRAN STATS -->
-    <div id="ecran-stats" class="ecran" style="display:none;">
-      <!-- Bannière Stats (Aujourd'hui / Semaine / Mois / Année) -->
-      <div class="stats-header">
-        <div class="kpi">
-          <div class="kpi-val" id="stats-clopes">0</div>
-          <div class="kpi-lbl">Clopes</div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-val" id="stats-joints">0</div>
-          <div class="kpi-lbl">Joints</div>
-        </div>
-        <div class="kpi" id="stats-alcool-line">
-          <div class="kpi-val" id="stats-alcool">0</div>
-          <div class="kpi-lbl">Alcool</div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-val">0€</div>
-          <div class="kpi-lbl">Coût</div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-val">0€</div>
-          <div class="kpi-lbl">Économies</div>
-        </div>
-      </div>
-
-      <!-- Titre Stats -->
-      <div style="padding:10px; text-align:center; font-weight:900; font-size:16px; color:#111827;">
-        <span id="stats-titre">Aujourd'hui</span>
-      </div>
-
-      <!-- Onglets Range (jour/semaine/mois/année) -->
-      <div class="tabs" id="chartRange">
-        <button class="tab active" data-range="day" type="button">Jour</button>
-        <button class="tab" data-range="week" type="button">Semaine</button>
-        <button class="tab" data-range="month" type="button">Mois</button>
-        <button class="tab" data-range="year" type="button">Année</button>
-      </div>
-
-      <!-- Graphique Consommations -->
-      <div class="card">
-        <div style="font-weight:900; margin-bottom:8px;">Consommations (unités)</div>
-        <canvas id="chart-consommations" width="400" height="300"></canvas>
-      </div>
-
-      <!-- Graphique Coût/Économies -->
-      <div class="card">
-        <div style="font-weight:900; margin-bottom:8px;">Coût / Économies</div>
-        <canvas id="chart-cout-eco" width="400" height="300"></canvas>
-      </div>
-
-      <!-- Boutons d'export -->
-      <div id="chart-actions" style="display:flex; flex-direction:column; gap:8px; padding:10px;">
-        <button class="btn" type="button">Exporter historique complet (Excel)</button>
-        <button class="btn alt" type="button">Exporter la vue actuelle</button>
-        <button class="btn alt" type="button">Importer (CSV/JSON)</button>
-      </div>
-    </div>
-
-    <!-- ÉCRAN CALENDRIER -->
-    <div id="ecran-calendrier" class="ecran" style="display:none;">
-      <div style="padding:20px; text-align:center; color:#999;">
-        <div style="font-weight:900; margin-bottom:10px;">Calendrier</div>
-        <div id="cal-grid" style="margin-top:10px;">
-          <!-- Grille calendrier à venir (PHASE 3) -->
-          <div style="color:#ccc;">Grille calendrier — à venir</div>
+      <!-- Conseil du jour -->
+      <div class="conseil" id="conseil-card">
+        <div id="conseil-texte">—</div>
+        <div class="adv-ctl">
+          <button class="ctl" id="adv-prev" type="button">◀</button>
+          <button class="ctl" id="adv-pause" type="button">⏸</button>
+          <span class="dots">• • •</span>
         </div>
       </div>
     </div>
 
-    <!-- ÉCRAN HABITUDES -->
-    <div id="ecran-habitudes" class="ecran" style="display:none;">
+    <!-- ======================= ÉCRAN STATS ======================= -->
+    <div class="ecran" id="ecran-stats" aria-label="SA:ECRAN:STATS" data-sa="screen-stats">
+      <!-- ✅ wrapper requis par app.js pour le lazy-init -->
+      <div id="screen-stats">
+        <div class="card">
+          <!-- Boutons d’échelle attendus par web/js/charts.js -->
+          <div class="tabs" role="tablist" id="chartRange">
+            <button class="btn pill active" data-range="day" type="button">Jour</button>
+            <button class="btn pill" data-range="week" type="button">Semaine</button>
+            <button class="btn pill" data-range="month" type="button">Mois</button>
+            <button class="btn pill" data-range="year" type="button">Année</button>
+          </div>
+
+          <div class="banner green">
+            <div class="banner-title" id="stats-titre">—</div>
+            <div class="line"><span class="lbl">Cigarettes</span><span class="val" id="stats-clopes">0</span></div>
+            <div class="line"><span class="lbl">Joints</span><span class="val" id="stats-joints">0</span></div>
+            <div class="line" id="stats-alcool-line" style="display:none">
+              <span class="lbl">Alcool</span><span class="val" id="stats-alcool">0</span>
+            </div>
+          </div>
+
+          <!-- Canvas uniques attendus par stats.js -->
+          <div class="chart-block">
+            <div class="chart-caption">Consommations (unités)</div>
+            <canvas id="chart-consommations" width="960" height="260"></canvas>
+            <div class="chart-caption" style="margin-top:8px">Coût / Économies</div>
+            <canvas id="chart-cout-eco" width="960" height="220"></canvas>
+          </div>
+
+          <div class="chart-actions" id="chart-actions" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px">
+            <button class="btn" id="btn-export-csv" type="button">Exporter historique complet (Excel)</button>
+            <button class="btn" id="btn-export-stats" type="button">Exporter la vue actuelle</button>
+            <button class="btn alt" id="btn-import" type="button">Importer (CSV/JSON)</button>
+            <input type="file" id="input-import" accept=".csv,.json" style="display:none">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======================= ÉCRAN CALENDRIER ======================= -->
+    <div class="ecran" id="ecran-calendrier" aria-label="SA:ECRAN:CALENDRIER" data-sa="screen-cal">
       <div class="card">
-        <div class="section-title">⚙️ Habitudes & Consommations type</div>
+        <div style="display:flex; gap:8px; margin-bottom:10px; align-items:center; justify-content:space-between">
+          <button class="btn small" id="cal-prev" type="button">◀</button>
+          <div style="font-weight:900; flex:1; text-align:center" id="cal-titre">—</div>
+          <button class="btn small" id="cal-next" type="button">▶</button>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
+      </div>
+    </div>
+
+    <!-- ======================= ÉCRAN HABITUDES ======================= -->
+    <div class="ecran" id="ecran-habitudes">
+      <div class="card">
+        <div class="section-title">⚙️ Limites Consommation/Jour</div>
         <div class="grid-2">
-          <div class="param"><label>Cigarettes par jour</label><input type="number" min="0" id="hab-clopes-jour" value="0"></div>
-          <div class="param"><label>Joints par jour</label><input type="number" min="0" id="hab-joints-jour" value="0"></div>
-          <div class="param"><label>Bières par semaine</label><input type="number" min="0" id="hab-biere-sem" value="0"></div>
-          <div class="param"><label>Alcool fort (doses)</label><input type="number" min="0" id="hab-alcool-fort" value="0"></div>
-          <div class="param hint">Utilisées pour estimer les économies.</div>
+          <div class="param"><label>Cigarettes (max/jour)</label><input type="number" min="0" id="limite-clopes" value="20"></div>
+          <div class="param"><label>Joints (max/jour)</label><input type="number" min="0" id="limite-joints" value="3"></div>
+          <div class="param"><label>Bière (max/jour)</label><input type="number" min="0" id="limite-biere" value="2"></div>
+          <div class="param"><label>Alcool fort (max/jour)</label><input type="number" min="0" id="limite-fort" value="1"></div>
+          <div class="param"><label>Liqueur (max/jour)</label><input type="number" min="0" id="limite-liqueur" value="1"></div>
+          <div class="param hint">Les limites apparaissent en orange quand approchées, rouge quand dépassées.</div>
         </div>
       </div>
 
       <div class="card">
-        <div class="section-title">💰 Prix Unitaires (optionnel)</div>
+        <div class="section-title">📊 Habitudes Antérieures (Baseline)</div>
         <div class="grid-2">
-          <div class="param"><label>Prix 1 paquet clopes (€)</label><input type="number" min="0" step="0.1" id="price-clopes" value="7.00"></div>
-          <div class="param"><label>Prix 1 joint (€)</label><input type="number" min="0" step="0.1" id="price-joint" value="5.00"></div>
-          <div class="param"><label>Prix 1 bière (€)</label><input type="number" min="0" step="0.1" id="price-biere" value="2.00"></div>
-          <div class="param"><label>Prix 1 alcool fort (€)</label><input type="number" min="0" step="0.1" id="price-fort" value="10.00"></div>
+          <div class="param"><label>Clopes classiques (min)</label><input type="number" min="0" id="hab-min-cl-class" value="0"></div>
+          <div class="param"><label>Clopes classiques (max)</label><input type="number" min="0" id="hab-max-cl-class" value="20"></div>
+          <div class="param"><label>Clopes roulées (min)</label><input type="number" min="0" id="hab-min-cl-roul" value="0"></div>
+          <div class="param"><label>Clopes roulées (max)</label><input type="number" min="0" id="hab-max-cl-roul" value="20"></div>
+          <div class="param"><label>Clopes tubes (min)</label><input type="number" min="0" id="hab-min-cl-tube" value="0"></div>
+          <div class="param"><label>Clopes tubes (max)</label><input type="number" min="0" id="hab-max-cl-tube" value="20"></div>
+          <div class="param"><label>Joints (min)</label><input type="number" min="0" id="hab-min-joint" value="0"></div>
+          <div class="param"><label>Joints (max)</label><input type="number" min="0" id="hab-max-joint" value="5"></div>
+          <div class="param"><label>Bière (min)</label><input type="number" min="0" id="hab-min-biere" value="0"></div>
+          <div class="param"><label>Bière (max)</label><input type="number" min="0" id="hab-max-biere" value="3"></div>
+          <div class="param"><label>Alcool fort (min)</label><input type="number" min="0" id="hab-min-fort" value="0"></div>
+          <div class="param"><label>Alcool fort (max)</label><input type="number" min="0" id="hab-max-fort" value="2"></div>
+          <div class="param"><label>Liqueur (min)</label><input type="number" min="0" id="hab-min-liqueur" value="0"></div>
+          <div class="param"><label>Liqueur (max)</label><input type="number" min="0" id="hab-max-liqueur" value="2"></div>
           <div class="param hint">Utilisées pour calculer les économies estimées. Tout est optionnel.</div>
         </div>
         <button class="btn small" id="btn-save-hab" type="button" style="margin-top:10px">Enregistrer</button>
@@ -360,7 +372,7 @@
       </div>
     </div>
 
-    <!-- ÉCRAN RÉGLAGES -->
+    <!-- ======================= ÉCRAN RÉGLAGES (placeholder PHASE 3) ======================= -->
     <div id="ecran-params" class="ecran" style="display:none;">
       <p style="padding: 20px; text-align: center; color: #999;">Réglages</p>
     </div>
@@ -456,10 +468,9 @@
   </div>
 </div>
 
-<!-- ======================= SCRIPTS ======================= -->
-<!-- Charger Chart.js AVANT app.js (PHASE 2 Option B) -->
+<!-- Vendor (Chart.js ou fallback local) -->
 <script src="./js/vendor/chart.umd.min.js"></script>
-<!-- App.js importe et initialise le reste -->
+<!-- App -->
 <script type="module" src="./js/app.js"></script>
 </body>
 </html>
