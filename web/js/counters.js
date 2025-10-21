@@ -1,30 +1,32 @@
-// web/js/counters.js — v2.4.3 HYBRIDE FINAL
-// Alimente le bandeau d'accueil (#bar-clopes, #bar-joints, #bar-alcool) avec les chiffres du jour.
-// Câble les 6 boutons ± pour que les clics modifient l'état via state.js.
-// Fallback robuste : si state.js indisponible, essaie d'autres APIs ou met à jour visuellement.
+// ============================================================
+// counters.js — v2.4.4 PHASE 2
+// Alimente le bandeau d'accueil (#bar-clopes, #bar-joints, #bar-alcool)
+// Câble les 6 boutons ± avec logique de fallback robuste
+// ============================================================
 
-import { on, addEntry, removeOneToday, totalsHeader } from "./state.js";
+import { on, addEntry, removeOneToday, totalsHeader, emit } from "./state.js";
+
+console.log("[counters.js] Module loaded");
 
 export function initCounters() {
   try {
     console.log("[counters.init] ========== STARTING ==========");
     
-    // Récupérer les éléments du bandeau (les trois barres numériques du jour)
+    // Récupérer les éléments du bandeau
     const barCigs = document.getElementById("bar-clopes");
     const barWeed = document.getElementById("bar-joints");
     const barAlc  = document.getElementById("bar-alcool");
 
-    if (!barCigs) console.warn("[counters.init] ⚠️ Element #bar-clopes not found");
-    if (!barWeed) console.warn("[counters.init] ⚠️ Element #bar-joints not found");
-    if (!barAlc)  console.warn("[counters.init] ⚠️ Element #bar-alcool not found");
+    if (!barCigs) console.warn("[counters.init] ⚠️ #bar-clopes not found");
+    if (!barWeed) console.warn("[counters.init] ⚠️ #bar-joints not found");
+    if (!barAlc)  console.warn("[counters.init] ⚠️ #bar-alcool not found");
 
-    // Fonction pour rafraîchir l'affichage des chiffres du jour
+    // Rafraîchir l'affichage des chiffres du jour
     function refreshBannerCounters() {
       try {
         const t = totalsHeader(new Date()) || {};
         const d = t.day || {};
         
-        // Afficher juste les chiffres bruts (ex: "5", "2", "1")
         if (barCigs) {
           const cigsVal = String(Number(d.cigs || 0));
           barCigs.textContent = cigsVal;
@@ -45,23 +47,18 @@ export function initCounters() {
       }
     }
 
-    // Initialisation immédiate
+    // Init immédiate + écouter state:changed (émis par state.js)
     refreshBannerCounters();
-
-    // Rafraîchir chaque fois que l'état change (boutons +/-, etc.)
     on("state:changed", refreshBannerCounters);
     console.log("[counters.init] Subscribed to state:changed ✓");
 
     // ========================================================================
-    // CORRECTION #2 : CÂBLER LES 6 BOUTONS ± (avec fallback robuste)
+    // CÂBLER LES 6 BOUTONS ± (FALLBACK ROBUSTE)
     // ========================================================================
     
-    console.log("[counters.init] Wiring buttons...");
-    
-    // Fallback : si state.js n'existe pas, cherche une autre API
     function tryApplyDelta(type, delta) {
       try {
-        // 1) Espace de noms SA.state (fréquent dans les monolithes)
+        // Espace SA.state (fallback)
         if (window.SA?.state) {
           if (typeof window.SA.state.applyDelta === "function") {
             window.SA.state.applyDelta(type, delta);
@@ -71,38 +68,29 @@ export function initCounters() {
             window.SA.state.add(type, delta);
             return true;
           }
-          if (typeof window.SA.state.increment === "function") {
-            window.SA.state.increment(type, delta);
-            return true;
-          }
         }
-        // 2) Fonctions globales possibles
+        // Fonctions globales
         if (typeof window.applyDelta === "function") {
           window.applyDelta(type, delta);
           return true;
         }
-        if (typeof window.addCount === "function") {
-          window.addCount(type, delta);
-          return true;
-        }
       } catch (e) {
-        console.warn("[counters.tryApplyDelta] API error:", e);
+        console.warn("[counters.tryApplyDelta] error:", e);
       }
       return false;
     }
 
-    // Fallback local : si pas d'API du tout, fait au moins bouger l'affichage
     function localBump(el, delta) {
       if (!el) return;
       const cur = Number(el.textContent || "0") || 0;
       const next = Math.max(0, cur + delta);
       el.textContent = String(next);
-      console.log("[counters.localBump] Updated visually to " + next);
+      console.log("[counters.localBump] Updated visually: " + next);
     }
 
     let buttonCount = 0;
 
-    // Boutons CIGARETTES
+    // ---- CIGARETTES ----
     const btnClPlus = document.getElementById("cl-plus");
     const btnClMoins = document.getElementById("cl-moins");
     
@@ -110,42 +98,41 @@ export function initCounters() {
       btnClPlus.addEventListener("click", () => {
         try {
           console.log("[counters.click] +1 Cigarettes");
-          // Essayer state.js d'abord
-          addEntry("cigs", 1);
-          // Si ça échoue, tryApplyDelta en fallback
-          if (!addEntry) tryApplyDelta("cigs", 1);
-          // Si rien n'a marché, au moins faire bouger le DOM
-          localBump(barCigs, 1);
+          const ok = addEntry("cigs", 1);
+          if (!ok) {
+            const fallbackOk = tryApplyDelta("cigs", 1);
+            if (!fallbackOk) localBump(barCigs, 1);
+          }
         } catch (e) {
-          console.error("[counters.click] Error on cl-plus:", e);
+          console.error("[counters] Error cl-plus:", e);
           localBump(barCigs, 1);
         }
       });
       console.log("[counters.init] ✓ #cl-plus wired");
       buttonCount++;
     } else {
-      console.warn("[counters.init] ⚠️ Button #cl-plus not found");
+      console.warn("[counters.init] ⚠️ #cl-plus not found");
     }
     
     if (btnClMoins) {
       btnClMoins.addEventListener("click", () => {
         try {
           console.log("[counters.click] -1 Cigarettes");
-          removeOneToday("cigs");
-          if (!removeOneToday) tryApplyDelta("cigs", -1);
-          localBump(barCigs, -1);
+          const ok = removeOneToday("cigs");
+          if (!ok) {
+            const fallbackOk = tryApplyDelta("cigs", -1);
+            if (!fallbackOk) localBump(barCigs, -1);
+          }
         } catch (e) {
-          console.error("[counters.click] Error on cl-moins:", e);
+          console.error("[counters] Error cl-moins:", e);
           localBump(barCigs, -1);
         }
       });
       console.log("[counters.init] ✓ #cl-moins wired");
       buttonCount++;
-    } else {
-      console.warn("[counters.init] ⚠️ Button #cl-moins not found");
     }
 
-    // Boutons JOINTS
+    // ---- JOINTS ----
     const btnJPlus = document.getElementById("j-plus");
     const btnJMoins = document.getElementById("j-moins");
     
@@ -153,39 +140,39 @@ export function initCounters() {
       btnJPlus.addEventListener("click", () => {
         try {
           console.log("[counters.click] +1 Joints");
-          addEntry("weed", 1);
-          if (!addEntry) tryApplyDelta("weed", 1);
-          localBump(barWeed, 1);
+          const ok = addEntry("weed", 1);
+          if (!ok) {
+            const fallbackOk = tryApplyDelta("weed", 1);
+            if (!fallbackOk) localBump(barWeed, 1);
+          }
         } catch (e) {
-          console.error("[counters.click] Error on j-plus:", e);
+          console.error("[counters] Error j-plus:", e);
           localBump(barWeed, 1);
         }
       });
       console.log("[counters.init] ✓ #j-plus wired");
       buttonCount++;
-    } else {
-      console.warn("[counters.init] ⚠️ Button #j-plus not found");
     }
     
     if (btnJMoins) {
       btnJMoins.addEventListener("click", () => {
         try {
           console.log("[counters.click] -1 Joints");
-          removeOneToday("weed");
-          if (!removeOneToday) tryApplyDelta("weed", -1);
-          localBump(barWeed, -1);
+          const ok = removeOneToday("weed");
+          if (!ok) {
+            const fallbackOk = tryApplyDelta("weed", -1);
+            if (!fallbackOk) localBump(barWeed, -1);
+          }
         } catch (e) {
-          console.error("[counters.click] Error on j-moins:", e);
+          console.error("[counters] Error j-moins:", e);
           localBump(barWeed, -1);
         }
       });
       console.log("[counters.init] ✓ #j-moins wired");
       buttonCount++;
-    } else {
-      console.warn("[counters.init] ⚠️ Button #j-moins not found");
     }
 
-    // Boutons ALCOOL
+    // ---- ALCOOL ----
     const btnAPlus = document.getElementById("a-plus");
     const btnAMoins = document.getElementById("a-moins");
     
@@ -193,54 +180,42 @@ export function initCounters() {
       btnAPlus.addEventListener("click", () => {
         try {
           console.log("[counters.click] +1 Alcool");
-          addEntry("alcohol", 1);
-          if (!addEntry) tryApplyDelta("alcohol", 1);
-          localBump(barAlc, 1);
+          const ok = addEntry("alcohol", 1);
+          if (!ok) {
+            const fallbackOk = tryApplyDelta("alcohol", 1);
+            if (!fallbackOk) localBump(barAlc, 1);
+          }
         } catch (e) {
-          console.error("[counters.click] Error on a-plus:", e);
+          console.error("[counters] Error a-plus:", e);
           localBump(barAlc, 1);
         }
       });
       console.log("[counters.init] ✓ #a-plus wired");
       buttonCount++;
-    } else {
-      console.warn("[counters.init] ⚠️ Button #a-plus not found");
     }
     
     if (btnAMoins) {
       btnAMoins.addEventListener("click", () => {
         try {
           console.log("[counters.click] -1 Alcool");
-          removeOneToday("alcohol");
-          if (!removeOneToday) tryApplyDelta("alcohol", -1);
-          localBump(barAlc, -1);
+          const ok = removeOneToday("alcohol");
+          if (!ok) {
+            const fallbackOk = tryApplyDelta("alcohol", -1);
+            if (!fallbackOk) localBump(barAlc, -1);
+          }
         } catch (e) {
-          console.error("[counters.click] Error on a-moins:", e);
+          console.error("[counters] Error a-moins:", e);
           localBump(barAlc, -1);
         }
       });
       console.log("[counters.init] ✓ #a-moins wired");
       buttonCount++;
-    } else {
-      console.warn("[counters.init] ⚠️ Button #a-moins not found");
-    }
-
-    // Toujours émettre state:changed après un clic (pour que les autres modules se mettent à jour)
-    function emitStateChanged(type, delta) {
-      try {
-        window.dispatchEvent(new CustomEvent("state:changed", {
-          detail: { type, delta }
-        }));
-      } catch (e) {
-        console.warn("[counters] Failed to emit state:changed:", e);
-      }
     }
 
     console.log("[counters.init] ========== READY ✓ ==========");
-    console.log("[counters.init] " + buttonCount + "/6 buttons wired successfully");
+    console.log("[counters.init] " + buttonCount + "/6 buttons wired");
     
   } catch (e) {
-    console.error("[counters.init] FATAL ERROR:", e);
-    console.error("[counters.init] Stack:", e.stack);
+    console.error("[counters.init] FATAL:", e);
   }
 }
