@@ -3,6 +3,10 @@
 // ============================================================
 
 import { initModals } from "./modals.js";
+// import { initCounters } from "./counters.js";   // PHASE 2
+// import { initStats } from "./stats.js";         // PHASE 2
+// import { initSettingsScreen } from "./settings.js"; // PHASE 3
+// import { initPages } from "./pages.js";         // PHASE 3
 
 console.log("[app.js] Module loaded");
 
