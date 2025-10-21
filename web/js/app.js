@@ -1,309 +1,209 @@
-// web/js/app.js — v2.4.3 HYBRIDE FINAL
-// 5 écrans plein format, boot fiable, lazy init Stats + Calendrier,
-// modale 18+ respectée, horloge fallback, logs détaillés pour debug smartphone.
+// ============================================================
+// app.js — Boot, Routing, Lazy Init (PHASE 1)
+// ============================================================
 
-import { initSettings }   from "./settings.js";
-import { initCounters }   from "./counters.js";
-import { initStatsHeader } from "./stats.js";
-import { initCharts }     from "./charts.js";
-import { initCalendar }   from "./calendar.js";
-// CORRECTION #1 : Commenter les 4 imports fragiles pour sécuriser le boot
-// import { initEconomy }    from "./economy.js";   // ⚠️ DÉSACTIVÉ temporairement
-// import { initExport }     from "./export.js";    // ⚠️ DÉSACTIVÉ temporairement
-// import { initLimits }     from "./limits.js";    // ⚠️ DÉSACTIVÉ temporairement
-// import { t }              from "./i18n.js";      // ⚠️ DÉSACTIVÉ temporairement
+import { initModals } from "./modals.js";
 
-// ---------------------------------------------------------
-// Sélecteurs utilitaires
-// ---------------------------------------------------------
-const $  = (sel) => document.querySelector(sel);
-const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+console.log("[app.js] Module loaded");
 
-// Les 5 écrans cibles (monolithe)
-const SCREENS = [
+// ============================================================
+// ROUTING — Basculer entre écrans
+// ============================================================
+
+const ECRANS = [
   "ecran-principal",
   "ecran-stats",
   "ecran-calendrier",
   "ecran-habitudes",
-  "ecran-params",
+  "ecran-params"
 ];
 
-// Boutons de la barre de nav
-const NAV_IDS = [
+const NAV_BUTTONS = [
   "nav-principal",
   "nav-stats",
   "nav-calendrier",
   "nav-habitudes",
-  "nav-params",
+  "nav-params"
 ];
 
-// Flags d'initialisation lazy
-let _statsInitialized = false;
-let _calendarInitialized = false;
-
-// ---------------------------------------------------------
-// Horloge (fallback + robustesse)
-// ---------------------------------------------------------
-function startHeaderClock() {
+function switchTo(ecranId) {
   try {
-    const elDate  = $("#date-actuelle");
-    const elHeure = $("#heure-actuelle");
-    if (!elDate && !elHeure) return;
+    if (!ECRANS.includes(ecranId)) {
+      console.warn(`[app.switchTo] Écran inconnu: ${ecranId}`);
+      return;
+    }
 
-    const fmtDate = () =>
-      new Date().toLocaleDateString("fr-FR", {
-        weekday: "long", day: "2-digit", month: "long", year: "numeric",
-      });
-
-    const fmtHeure = () =>
-      new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-
-    const tick = () => {
-      if (elDate)  elDate.textContent  = fmtDate();
-      if (elHeure) elHeure.textContent = fmtHeure();
-    };
-
-    tick();
-    setInterval(tick, 1000);
-    console.log("[app.clock] Started ✓");
-  } catch (e) {
-    console.warn("[app.clock] error:", e);
-  }
-}
-
-// ---------------------------------------------------------
-// Navigation (routing plein écran)
-// ---------------------------------------------------------
-function showScreen(screenId) {
-  try {
     // Masquer tous les écrans
-    SCREENS.forEach(id => {
-      const el = $(`#${id}`);
-      if (el) el.classList.remove("actif", "active", "show");
+    ECRANS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.classList.remove("show");
+        el.style.display = "none";
+      }
     });
 
-    // Activer la cible
-    const target = $(`#${screenId}`);
-    if (target) target.classList.add("actif", "active", "show");
+    // Afficher l'écran cible
+    const target = document.getElementById(ecranId);
+    if (target) {
+      target.classList.add("show");
+      target.style.display = "block";
+      console.log(`[app.switchTo] Écran actif: ${ecranId}`);
+    }
 
-    // Activer l'onglet visuel
-    NAV_IDS.forEach(id => {
-      const b = $(`#${id}`);
-      if (b) b.classList.remove("actif", "active");
+    // Mettre à jour état des boutons nav
+    NAV_BUTTONS.forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) {
+        const correspondingScreen = id.replace("nav-", "ecran-");
+        if (correspondingScreen === ecranId) {
+          btn.classList.add("actif");
+        } else {
+          btn.classList.remove("actif");
+        }
+      }
     });
-    const btn = $(`#nav-${screenId.replace("ecran-","")}`);
-    if (btn) btn.classList.add("actif", "active");
 
-    // Lazy init selon l'écran
-    if (screenId === "ecran-stats") ensureStatsInit();
-    if (screenId === "ecran-calendrier") ensureCalendarInit();
+    // Émettre événement
+    window.dispatchEvent(new CustomEvent("sa:screen:changed", {
+      detail: { screen: ecranId }
+    }));
 
-    // Notifier
-    window.dispatchEvent(new CustomEvent("sa:screen:changed", { detail: { screen: screenId.replace("ecran-","") }}));
-    
-    console.log("[app.showScreen] Navigated to: " + screenId);
   } catch (e) {
-    console.error("[app.showScreen] error:", e);
+    console.error("[app.switchTo] error:", e);
   }
 }
+
+// ============================================================
+// SETUP NAVIGATION
+// ============================================================
 
 function setupNavigation() {
   try {
-    const map = {
-      "nav-principal":   "ecran-principal",
-      "nav-stats":       "ecran-stats",
-      "nav-calendrier":  "ecran-calendrier",
-      "nav-habitudes":   "ecran-habitudes",
-      "nav-params":      "ecran-params",
-    };
-    
-    NAV_IDS.forEach(id => {
-      const el = $(`#${id}`);
-      if (!el) {
-        console.warn("[app.setupNavigation] Nav button not found: " + id);
-        return;
-      }
-      el.addEventListener("click", (ev) => {
-        ev.preventDefault();
-        const target = map[id];
-        if (target) showScreen(target);
-      });
-    });
-    
-    console.log("[app.setupNavigation] Navigation wired ✓");
+    const navPrincipal = document.getElementById("nav-principal");
+    const navStats = document.getElementById("nav-stats");
+    const navCalendrier = document.getElementById("nav-calendrier");
+    const navHabitudes = document.getElementById("nav-habitudes");
+    const navParams = document.getElementById("nav-params");
+
+    if (navPrincipal) navPrincipal.addEventListener("click", () => switchTo("ecran-principal"));
+    if (navStats) navStats.addEventListener("click", () => switchTo("ecran-stats"));
+    if (navCalendrier) navCalendrier.addEventListener("click", () => switchTo("ecran-calendrier"));
+    if (navHabitudes) navHabitudes.addEventListener("click", () => switchTo("ecran-habitudes"));
+    if (navParams) navParams.addEventListener("click", () => switchTo("ecran-params"));
+
+    console.log("[app.setupNavigation] Navigation câblée");
   } catch (e) {
     console.error("[app.setupNavigation] error:", e);
   }
 }
 
-// ---------------------------------------------------------
-// Lazy init : Stats & Calendrier (non-critiques au boot)
-// ---------------------------------------------------------
+// ============================================================
+// LAZY INIT ÉCRANS (placeholder pour PHASE 2+)
+// ============================================================
+
+let _statsInitialized = false;
+let _calendarInitialized = false;
+
 function ensureStatsInit() {
+  if (_statsInitialized) return;
   try {
-    if (_statsInitialized) return;
-    console.log("[app.ensureStatsInit] Initializing stats...");
-    
-    // 1) Header/bannière Stats
-    if (typeof initStatsHeader === "function") {
-      initStatsHeader();
-      console.log("[app.ensureStatsInit] Stats header initialized ✓");
-    } else {
-      console.warn("[app.ensureStatsInit] initStatsHeader not found");
-    }
-    
-    // 2) Graphiques (charts.js) — dessiner les courbes
-    if (typeof initCharts === "function") {
-      initCharts();
-      console.log("[app.ensureStatsInit] Charts initialized ✓");
-    } else {
-      console.warn("[app.ensureStatsInit] initCharts not found");
-    }
-    
+    console.log("[app.ensureStatsInit] Initialisation Stats...");
+    // TODO: PHASE 2 — appeler initStatsHeader() et initCharts()
     _statsInitialized = true;
   } catch (e) {
-    console.warn("[app.ensureStatsInit] init stats error:", e);
+    console.error("[app.ensureStatsInit] error:", e);
   }
 }
 
 function ensureCalendarInit() {
+  if (_calendarInitialized) return;
   try {
-    if (_calendarInitialized) return;
-    console.log("[app.ensureCalendarInit] Initializing calendar...");
-    
-    if (typeof initCalendar === "function") {
-      initCalendar();
-      console.log("[app.ensureCalendarInit] Calendar initialized ✓");
-    } else {
-      console.warn("[app.ensureCalendarInit] initCalendar not found");
-    }
-    
+    console.log("[app.ensureCalendarInit] Initialisation Calendrier...");
+    // TODO: PHASE 2 — appeler initCalendar()
     _calendarInitialized = true;
   } catch (e) {
-    console.warn("[app.ensureCalendarInit] init calendar error:", e);
+    console.error("[app.ensureCalendarInit] error:", e);
   }
 }
 
-// ---------------------------------------------------------
-// Avertissement 18+ : affichage si nécessaire
-// (Le câblage des boutons/checkbox est géré dans settings.js → setupWarnModal())
-// ---------------------------------------------------------
-function warnAccepted() {
-  try {
-    const raw = localStorage.getItem("app_warn_v23");
-    if (!raw) return false;
-    const v = JSON.parse(raw);
-    return !!(v && v.accepted);
-  } catch (e) {
-    console.warn("[app.warnAccepted] parse error:", e);
-    return false;
-  }
-}
+// ============================================================
+// LISTENERS ÉCRANS (pour lazy init)
+// ============================================================
 
-function checkAndShowWarnIfNeeded() {
+function setupScreenListeners() {
   try {
-    if (warnAccepted()) {
-      console.log("[app] Warning already accepted, skipping modal");
-      return;
-    }
-    
-    const modal = $("#modal-warn");
-    if (!modal) {
-      console.warn("[app] Modal #modal-warn not found");
-      return;
-    }
-    
-    modal.classList.add("show");
-    modal.setAttribute("aria-hidden","false");
-    console.log("[app] Warning modal shown ✓");
-  } catch (e) {
-    console.warn("[app.checkAndShowWarnIfNeeded] show error:", e);
-  }
-}
+    window.addEventListener("sa:screen:changed", (event) => {
+      const screen = event.detail.screen;
+      console.log(`[app] Écran changé: ${screen}`);
+      
+      // Lazy init Stats
+      if (screen === "ecran-stats") {
+        ensureStatsInit();
+      }
 
-// ---------------------------------------------------------
-// Global error handler (debug console)
-// ---------------------------------------------------------
-function setupGlobalErrorHandler() {
-  try {
-    window.addEventListener("error", (e) => {
-      const dc = $("#debug-console");
-      if (!dc) return;
-      const line = `[${new Date().toLocaleTimeString()}] ERROR: ${e.message}`;
-      dc.insertAdjacentHTML("beforeend", `${line}<br>`);
-      dc.classList.add("show");
-      console.error("[app.global] Uncaught error:", e);
+      // Lazy init Calendrier
+      if (screen === "ecran-calendrier") {
+        ensureCalendarInit();
+      }
     });
-    
-    window.addEventListener("unhandledrejection", (e) => {
-      const dc = $("#debug-console");
-      if (!dc) return;
-      const line = `[${new Date().toLocaleTimeString()}] REJECT: ${e.reason}`;
-      dc.insertAdjacentHTML("beforeend", `${line}<br>`);
-      dc.classList.add("show");
-      console.error("[app.global] Unhandled rejection:", e.reason);
-    });
-    
-    console.log("[app.globalErrorHandler] Installed ✓");
   } catch (e) {
-    console.warn("[app.globalErrorHandler] error:", e);
+    console.error("[app.setupScreenListeners] error:", e);
   }
 }
 
-// ---------------------------------------------------------
-// Boot
-// ---------------------------------------------------------
+// ============================================================
+// BOOT
+// ============================================================
+
 function boot() {
   try {
-    console.log("[app.boot] ========== STARTING StopAddict v2.4.3 ==========");
-    
-    // Démarrage des modules "toujours actifs"
-    console.log("[app.boot] Initializing core modules...");
-    
-    if (typeof initSettings === "function") {
-      initSettings();
-      console.log("[app.boot] Settings initialized ✓");
-    } else {
-      console.error("[app.boot] initSettings not found ❌");
-    }
-    
-    if (typeof initCounters === "function") {
-      initCounters();
-      console.log("[app.boot] Counters initialized ✓");
-    } else {
-      console.error("[app.boot] initCounters not found ❌");
-    }
+    console.log("[app.boot] Démarrage...");
 
-    // Les modules optionnels restent désactivés (Correction #1)
-    // initEconomy?.();
-    // initExport?.();
-    // initLimits?.();
-
+    // 1. Setup navigation (menu bas)
     setupNavigation();
 
-    // Afficher l'écran par défaut (Accueil)
-    showScreen("ecran-principal");
+    // 2. Setup screen change listeners (lazy init)
+    setupScreenListeners();
 
-    // Vérifier l'avertissement 18+
-    checkAndShowWarnIfNeeded();
+    // 3. Initialiser modales (18+)
+    initModals();
 
-    // Horloge (robustesse supplémentaire)
-    startHeaderClock();
+    // 4. Afficher écran par défaut (Accueil)
+    switchTo("ecran-principal");
 
-    // Setup global error handler pour debug
-    setupGlobalErrorHandler();
+    // 5. Global error handler (debug)
+    window.addEventListener("error", (e) => {
+      console.error("[app.globalErrorHandler]", e);
+    });
 
-    console.log("[app] ========== READY ✓ ==========");
-    console.log("[app] Expected: clock ticking, buttons responsive, modal if needed");
+    console.log("[app.boot] ✓ Prêt");
   } catch (e) {
-    console.error("[app.boot] FATAL ERROR:", e);
-    console.error("[app] Stack:", e.stack);
+    console.error("[app.boot] error:", e);
+    console.error("[app.boot] Tentative fallback...");
+    
+    // Fallback minimal
+    try {
+      switchTo("ecran-principal");
+      initModals();
+    } catch (e2) {
+      console.error("[app.boot] Fallback échoué:", e2);
+    }
   }
 }
 
-// Lancer au DOM ready
+// ============================================================
+// Lancer boot au chargement DOM
+// ============================================================
+
+document.addEventListener("DOMContentLoaded", () => {
+  console.log("[app] DOMContentLoaded triggered");
+  boot();
+});
+
+// Fallback si DOM déjà chargé
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", boot);
+  console.log("[app] DOM en cours de chargement, écouteur attaché");
 } else {
+  console.log("[app] DOM déjà chargé, boot direct");
   boot();
 }
