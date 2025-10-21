@@ -1,105 +1,134 @@
 // ============================================================
-// counters.js — Accueil: +/− & synchro bandeau / cartes (PHASE 2)
+// counters.js — Compteurs Accueil (PHASE 2)
+// - Persistance localStorage (par jour)
+// - Boutons +/- (clopes / joints / alcool)
+// - Refresh barres haut + cartes droites
+// - Broadcast événement 'sa:counts-updated'
 // ============================================================
+
 console.log("[counters.js] Module loaded");
 
-const LS_TODAY = "sa:today:v1";
+// ------------------------------
+// Storage helpers
+// ------------------------------
+const LS_PREFIX = "sa:counts:";
 
-function todayKey() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = `${d.getMonth()+1}`.padStart(2, "0");
-  const day = `${d.getDate()}`.padStart(2, "0");
-  return `${y}-${m}-${day}`;
+function dateKey(d = new Date()) {
+  return `${LS_PREFIX}${d.toISOString().slice(0, 10)}`; // "YYYY-MM-DD"
 }
 
-function readToday() {
+function readDay(key = dateKey()) {
   try {
-    const raw = localStorage.getItem(LS_TODAY);
-    const t = raw ? JSON.parse(raw) : null;
-    if (!t || t.date !== todayKey()) {
-      return { date: todayKey(), c: 0, j: 0, a: 0 };
-    }
-    return { date: t.date, c: t.c|0, j: t.j|0, a: t.a|0 };
-  } catch {
-    return { date: todayKey(), c: 0, j: 0, a: 0 };
+    const raw = localStorage.getItem(key);
+    if (!raw) return { c: 0, j: 0, a: 0 }; // clopes, joints, alcool
+    const parsed = JSON.parse(raw);
+    return {
+      c: Number(parsed.c) || 0,
+      j: Number(parsed.j) || 0,
+      a: Number(parsed.a) || 0,
+    };
+  } catch (e) {
+    console.error("[counters] readDay error:", e);
+    return { c: 0, j: 0, a: 0 };
   }
 }
 
-function writeToday(state) {
-  localStorage.setItem(LS_TODAY, JSON.stringify(state));
+function writeDay(val, key = dateKey()) {
+  try {
+    const safe = { c: Math.max(0, val.c|0), j: Math.max(0, val.j|0), a: Math.max(0, val.a|0) };
+    localStorage.setItem(key, JSON.stringify(safe));
+  } catch (e) {
+    console.error("[counters] writeDay error:", e);
+  }
 }
 
+// ------------------------------
+// UI refresh
+// ------------------------------
+function refreshBars(counts) {
+  const elC = document.getElementById("bar-clopes");
+  const elJ = document.getElementById("bar-joints");
+  const elA = document.getElementById("bar-alcool");
+  if (elC) elC.textContent = String(counts.c);
+  if (elJ) elJ.textContent = String(counts.j);
+  if (elA) elA.textContent = String(counts.a);
+}
+
+function refreshCards(counts) {
+  // Cigarettes
+  const cardC = document.getElementById("card-cigs");
+  if (cardC) {
+    const v = cardC.querySelector(".val");
+    if (v) v.textContent = String(counts.c);
+  }
+  // Joints
+  const cardJ = document.getElementById("card-weed");
+  if (cardJ) {
+    const v = cardJ.querySelector(".val");
+    if (v) v.textContent = String(counts.j);
+  }
+  // Alcool
+  const cardA = document.getElementById("card-alcool");
+  if (cardA) {
+    const v = cardA.querySelector(".val");
+    if (v) v.textContent = String(counts.a);
+  }
+}
+
+function broadcast(counts) {
+  window.dispatchEvent(new CustomEvent("sa:counts-updated", { detail: { date: new Date(), counts } }));
+}
+
+// ------------------------------
+// Actions +/-
+// ------------------------------
 function clamp(n) { return n < 0 ? 0 : n; }
 
-// UI helpers (pas de dépendance à d'autres modules)
-const $ = (sel, root = document) => root.querySelector(sel);
+function setupButtons() {
+  const key = dateKey();
+  let counts = readDay(key);
 
-function updateBars(state) {
-  const { c, j, a } = state;
-  const barC = $("#bar-clopes");
-  const barJ = $("#bar-joints");
-  const barA = $("#bar-alcool");
-  if (barC) barC.textContent = String(c);
-  if (barJ) barJ.textContent = String(j);
-  if (barA) barA.textContent = String(a);
+  const apply = () => {
+    writeDay(counts, key);
+    refreshBars(counts);
+    refreshCards(counts);
+    broadcast(counts);
+  };
 
-  // Total jour dans le header KPIs (si présent)
-  const todayTotal = $("#todayTotal");
-  if (todayTotal) todayTotal.textContent = String(c + j + a);
+  const btns = [
+    ["cl-moins",  () => counts.c = clamp(counts.c - 1)],
+    ["cl-plus",   () => counts.c = clamp(counts.c + 1)],
+    ["j-moins",   () => counts.j = clamp(counts.j - 1)],
+    ["j-plus",    () => counts.j = clamp(counts.j + 1)],
+    ["a-moins",   () => counts.a = clamp(counts.a - 1)],
+    ["a-plus",    () => counts.a = clamp(counts.a + 1)],
+  ];
+
+  btns.forEach(([id, fn]) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("click", () => {
+      fn();
+      apply();
+    });
+  });
+
+  // Premier rendu UI
+  apply();
 }
 
-function updateCards(state) {
-  const { c, j, a } = state;
-  const cardC = $("#card-cigs .val");
-  const cardJ = $("#card-weed .val");
-  const cardA = $("#card-alcool .val");
-  if (cardC) cardC.textContent = String(c);
-  if (cardJ) cardJ.textContent = String(j);
-  if (cardA) cardA.textContent = String(a);
-}
-
-function broadcast(state) {
-  document.dispatchEvent(new CustomEvent("sa:counts-updated", { detail: { today: state }}));
-}
-
-function bindButtons(state) {
-  // Cigarettes
-  const btnCm = $("#cl-moins");
-  const btnCp = $("#cl-plus");
-  if (btnCm) btnCm.addEventListener("click", () => {
-    state.c = clamp(state.c - 1); writeToday(state); updateBars(state); updateCards(state); broadcast(state);
-  });
-  if (btnCp) btnCp.addEventListener("click", () => {
-    state.c = clamp(state.c + 1); writeToday(state); updateBars(state); updateCards(state); broadcast(state);
-  });
-
-  // Joints
-  const btnJm = $("#j-moins");
-  const btnJp = $("#j-plus");
-  if (btnJm) btnJm.addEventListener("click", () => {
-    state.j = clamp(state.j - 1); writeToday(state); updateBars(state); updateCards(state); broadcast(state);
-  });
-  if (btnJp) btnJp.addEventListener("click", () => {
-    state.j = clamp(state.j + 1); writeToday(state); updateBars(state); updateCards(state); broadcast(state);
-  });
-
-  // Alcool
-  const btnAm = $("#a-moins");
-  const btnAp = $("#a-plus");
-  if (btnAm) btnAm.addEventListener("click", () => {
-    state.a = clamp(state.a - 1); writeToday(state); updateBars(state); updateCards(state); broadcast(state);
-  });
-  if (btnAp) btnAp.addEventListener("click", () => {
-    state.a = clamp(state.a + 1); writeToday(state); updateBars(state); updateCards(state); broadcast(state);
-  });
+// ------------------------------
+// API
+// ------------------------------
+export function getTodayCounts() {
+  return readDay(dateKey());
 }
 
 export function initCounters() {
-  const state = readToday();
-  updateBars(state);
-  updateCards(state);
-  bindButtons(state);
-  broadcast(state); // synchro initiale avec Stats
-  console.log("[counters.init] ✓ prêt");
+  console.log("[counters] init…");
+  try {
+    setupButtons();
+    console.log("[counters] ✓ prêt");
+  } catch (e) {
+    console.error("[counters] init error:", e);
+  }
 }
