@@ -5,19 +5,48 @@
 
 console.log("[modals.js] Module loaded");
 
+// ------------------------------------------------------------
+// Constantes de stockage
+// ------------------------------------------------------------
+const STORAGE_KEY = "app_warn_v23";
+
+// ------------------------------------------------------------
+// Helpers stockage
+// ------------------------------------------------------------
+function getWarnState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    console.error("[modals] getWarnState error:", e);
+    return {};
+  }
+}
+
+function setWarnState(patch) {
+  try {
+    const prev = getWarnState();
+    const next = { ...prev, ...patch };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    return next;
+  } catch (e) {
+    console.error("[modals] setWarnState error:", e);
+    return patch;
+  }
+}
+
 // ============================================================
 // Utilitaires — Ouverture / Fermeture modales
 // ============================================================
-
 function openModal(modalId) {
   try {
     const modal = document.getElementById(modalId);
     if (modal) {
       modal.setAttribute("aria-hidden", "false");
       modal.style.display = "flex";
-      console.log(`[modals] Modale ouvert: ${modalId}`);
+      console.log(`[modals] Modale ouverte: ${modalId}`);
     } else {
-      console.warn(`[modals] Modale intro trouvé: ${modalId}`);
+      console.warn(`[modals] Modale introuvable: ${modalId}`);
     }
   } catch (e) {
     console.error("[modals] openModal error:", e);
@@ -30,7 +59,7 @@ function closeModal(modalId) {
     if (modal) {
       modal.setAttribute("aria-hidden", "true");
       modal.style.display = "none";
-      console.log(`[modals] Modale fermé: ${modalId}`);
+      console.log(`[modals] Modale fermée: ${modalId}`);
     }
   } catch (e) {
     console.error("[modals] closeModal error:", e);
@@ -53,18 +82,14 @@ function neutralizeOverlay18() {
 // ============================================================
 // Toast (feedback utilisateur)
 // ============================================================
-
 function showToast(message, duration = 3000) {
   try {
     const snackbar = document.getElementById("snackbar");
     if (snackbar) {
       snackbar.textContent = message;
       snackbar.classList.add("show");
-      console.log(`[modals] Toast affiché: ${message}`);
-      
-      setTimeout(() => {
-        snackbar.classList.remove("show");
-      }, duration);
+      console.log(`[modals] Toast: ${message}`);
+      setTimeout(() => snackbar.classList.remove("show"), duration);
     }
   } catch (e) {
     console.error("[modals] showToast error:", e);
@@ -74,38 +99,47 @@ function showToast(message, duration = 3000) {
 // ============================================================
 // Handlers modale 18+
 // ============================================================
-
 function setupWarnModal() {
   try {
-    const chkWarn18 = document.getElementById("chk-warn-18");
-    const chkWarnHide = document.getElementById("chk-warn-hide");
+    const chkWarn18     = document.getElementById("chk-warn-18");
+    const chkWarnHide   = document.getElementById("chk-warn-hide");
     const btnWarnAccept = document.getElementById("btn-warn-accept");
     const btnWarnCancel = document.getElementById("btn-warn-cancel");
-    const btnWarnQuit = document.getElementById("btn-warn-quit");
-    const linkRessources = document.getElementById("open-ressources-from-warn");
+    const btnWarnQuit   = document.getElementById("btn-warn-quit");
+    const linkResources = document.getElementById("open-ressources-from-warn");
 
-    // Checkbox "J'ai 18 ans" → active bouton Accept
-    if (chkWarn18) {
-      chkWarn18.addEventListener("change", () => {
-        const checked = chkWarn18.checked && (chkWarnHide ? chkWarnHide.checked : false);
-        if (btnWarnAccept) {
-          btnWarnAccept.disabled = !checked;
-          console.log(`[modals] Bouton Accept: ${checked ? "activé" : "désactivé"}`);
-        }
+    // --- Hydrater l'état depuis localStorage
+    const st = getWarnState();
+    if (chkWarnHide && typeof st.hide === "boolean") {
+      chkWarnHide.checked = !!st.hide;
+    }
+
+    // --- Activer/désactiver le bouton Accept en fonction de "J'ai 18 ans"
+    if (chkWarn18 && btnWarnAccept) {
+      const syncAccept = () => { btnWarnAccept.disabled = !chkWarn18.checked; };
+      chkWarn18.addEventListener("change", syncAccept);
+      // Initialiser l'état au chargement (BUGFIX)
+      syncAccept();
+    }
+
+    // --- Persister "Ne plus réafficher" indépendamment
+    if (chkWarnHide) {
+      chkWarnHide.addEventListener("change", () => {
+        setWarnState({ hide: chkWarnHide.checked });
+        console.log(`[modals] Pref hide=${chkWarnHide.checked ? "1" : "0"} enregistrée`);
       });
     }
 
-    // Bouton "J'accepte et continuer"
+    // --- Bouton "J'accepte et continuer"
     if (btnWarnAccept) {
       btnWarnAccept.addEventListener("click", () => {
         try {
-          localStorage.setItem("app_warn_v23", JSON.stringify({
+          const state = setWarnState({
             accepted: true,
-            hide: chkWarnHide ? chkWarnHide.checked : false,
+            hide: chkWarnHide ? !!chkWarnHide.checked : getWarnState().hide === true,
             timestamp: new Date().toISOString()
-          }));
-          console.log("[modals] Acceptation sauvegardée");
-          
+          });
+          console.log("[modals] Acceptation sauvegardée:", state);
           closeModal("modal-warn");
           neutralizeOverlay18();
           showToast("Avertissement accepté ✓");
@@ -115,7 +149,7 @@ function setupWarnModal() {
       });
     }
 
-    // Bouton "Annuler"
+    // --- Bouton "Annuler"
     if (btnWarnCancel) {
       btnWarnCancel.addEventListener("click", () => {
         closeModal("modal-warn");
@@ -123,20 +157,20 @@ function setupWarnModal() {
       });
     }
 
-    // Bouton "Quitter"
+    // --- Bouton "Quitter"
     if (btnWarnQuit) {
       btnWarnQuit.addEventListener("click", () => {
-        console.log("[modals] Quitter demandé (no-op pour PHASE 1)");
-        showToast("Quitter: à implémenter en PHASE 2");
+        console.log("[modals] Quitter (no-op PHASE 1)");
+        showToast("Quitter : à implémenter plus tard");
       });
     }
 
-    // Lien "Ressources utiles" — NO-OP pour PHASE 1
-    if (linkRessources) {
-      linkRessources.addEventListener("click", (e) => {
+    // --- Lien "Ressources et numéros utiles" (toast Phase 1)
+    if (linkResources) {
+      linkResources.addEventListener("click", (e) => {
         e.preventDefault();
-        console.log("[modals] Ressources cliqué (no-op PHASE 1)");
-        showToast("📖 Cette section sera disponible bientôt (PHASE 3)");
+        console.log("[modals] Ressources cliqué (PHASE 1 → toast)");
+        showToast("📖 Cette section sera disponible prochainement (PHASE 3)");
       });
     }
 
@@ -149,16 +183,13 @@ function setupWarnModal() {
 // ============================================================
 // Check & affichage modale 18+ au boot
 // ============================================================
-
 function checkAndShowWarn() {
   try {
-    const raw = localStorage.getItem("app_warn_v23");
-    const parsed = raw ? JSON.parse(raw) : null;
-    
-    const warnAccepted = parsed && parsed.accepted;
-    const warnHide = parsed && parsed.hide;
+    const st = getWarnState();
+    const warnAccepted = !!st.accepted;
+    const warnHide     = !!st.hide;
 
-    console.log(`[modals] Avertissement accepté: ${warnAccepted}, masquer: ${warnHide}`);
+    console.log(`[modals] accepted=${warnAccepted} hide=${warnHide}`);
 
     if (!warnAccepted && !warnHide) {
       openModal("modal-warn");
@@ -169,16 +200,15 @@ function checkAndShowWarn() {
     }
   } catch (e) {
     console.error("[modals] checkAndShowWarn error:", e);
-    openModal("modal-warn"); // Fallback: afficher si erreur
+    openModal("modal-warn"); // fallback
   }
 }
 
 // ============================================================
 // Export
 // ============================================================
-
 export function initModals() {
-  console.log("[modals.initModals] Initialisation...");
+  console.log("[modals.initModals] Initialisation…");
   try {
     setupWarnModal();
     checkAndShowWarn();
