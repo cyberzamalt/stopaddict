@@ -1,213 +1,173 @@
 // ============================================================
-// app.js — Boot, Routing, Lazy Init (PHASE 1)
+// app.js — v2.4.4 PHASE 2
+// Routing + Modals 18+ + Init PHASE 2 (counters, stats)
 // ============================================================
 
 import { initModals } from "./modals.js";
-// import { initCounters } from "./counters.js";   // PHASE 2
-// import { initStats } from "./stats.js";         // PHASE 2
-// import { initSettingsScreen } from "./settings.js"; // PHASE 3
-// import { initPages } from "./pages.js";         // PHASE 3
+import { initCounters } from "./counters.js";
+import { initStatsHeader } from "./stats.js";
+// import { initCharts } from "./charts.js"; // PHASE 2 optionnel (lazy init possible)
 
 console.log("[app.js] Module loaded");
 
-// ============================================================
-// ROUTING — Basculer entre écrans
-// ============================================================
+// ===== DOM Helpers
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+const on = (el, ev, cb) => { if (el) el.addEventListener(ev, cb); };
 
+// ===== Sélecteurs écrans/nav
 const ECRANS = [
   "ecran-principal",
   "ecran-stats",
   "ecran-calendrier",
   "ecran-habitudes",
-  "ecran-params"
+  "ecran-params",
 ];
 
 const NAV_BUTTONS = [
-  "nav-principal",
-  "nav-stats",
-  "nav-calendrier",
-  "nav-habitudes",
-  "nav-params"
+  ["nav-principal",   "ecran-principal"],
+  ["nav-stats",       "ecran-stats"],
+  ["nav-calendrier",  "ecran-calendrier"],
+  ["nav-habitudes",   "ecran-habitudes"],
+  ["nav-params",      "ecran-params"],
 ];
 
+// ===== Toast
+function showToast(message, duration = 2000) {
+  const bar = $("#snackbar");
+  if (!bar) return;
+  bar.innerHTML = `${message}`;
+  bar.classList.add("show");
+  const hide = () => bar.classList.remove("show");
+  setTimeout(hide, duration);
+}
+
+// ===== Debug console toggle (5 taps header)
+(function setupDebugConsoleToggle() {
+  const header = $(".header");
+  const dbg = $("#debug-console");
+  if (!header || !dbg) return;
+
+  let tapCount = 0;
+  let lastTap = 0;
+
+  on(header, "click", () => {
+    const now = Date.now();
+    if (now - lastTap < 800) {
+      tapCount += 1;
+    } else {
+      tapCount = 1;
+    }
+    lastTap = now;
+
+    if (tapCount >= 5) {
+      dbg.classList.toggle("show");
+      showToast(dbg.classList.contains("show") ? "Debug visible" : "Debug masqué");
+      tapCount = 0;
+    }
+  });
+})();
+
+// ===== Routing
 function switchTo(ecranId) {
-  try {
-    if (!ECRANS.includes(ecranId)) {
-      console.warn(`[app.switchTo] Écran inconnu: ${ecranId}`);
-      return;
+  const target = document.getElementById(ecranId);
+  if (!target) {
+    console.warn("[switchTo] Écran introuvable:", ecranId);
+    showToast("Écran non disponible.");
+    return;
+  }
+
+  // Masquer tous, afficher cible
+  for (const id of ECRANS) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    if (id === ecranId) {
+      el.classList.add("show");
+      el.style.display = "";
+    } else {
+      el.classList.remove("show");
+      el.style.display = "none";
     }
+  }
 
-    // Masquer tous les écrans
-    ECRANS.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) {
-        el.classList.remove("show");
-        el.style.display = "none";
-      }
-    });
+  // Marquer bouton nav actif
+  for (const [btnId, mapsTo] of NAV_BUTTONS) {
+    const btn = document.getElementById(btnId);
+    if (!btn) continue;
+    if (mapsTo === ecranId) btn.classList.add("actif");
+    else btn.classList.remove("actif");
+  }
 
-    // Afficher l'écran cible
-    const target = document.getElementById(ecranId);
-    if (target) {
-      target.classList.add("show");
-      target.style.display = "block";
-      console.log(`[app.switchTo] Écran actif: ${ecranId}`);
-    }
+  // Émettre événement
+  window.dispatchEvent(new CustomEvent("sa:screen:changed", {
+    detail: { screen: ecranId }
+  }));
+}
 
-    // Mettre à jour état des boutons nav
-    NAV_BUTTONS.forEach(id => {
-      const btn = document.getElementById(id);
-      if (btn) {
-        const correspondingScreen = id.replace("nav-", "ecran-");
-        if (correspondingScreen === ecranId) {
-          btn.classList.add("actif");
-        } else {
-          btn.classList.remove("actif");
-        }
-      }
-    });
-
-    // Émettre événement
-    window.dispatchEvent(new CustomEvent("sa:screen:changed", {
-      detail: { screen: ecranId }
-    }));
-
-  } catch (e) {
-    console.error("[app.switchTo] error:", e);
+// ===== Navigation binding
+function bindNav() {
+  for (const [btnId, screenId] of NAV_BUTTONS) {
+    const btn = document.getElementById(btnId);
+    if (!btn) continue;
+    on(btn, "click", () => switchTo(screenId));
   }
 }
 
-// ============================================================
-// SETUP NAVIGATION
-// ============================================================
-
-function setupNavigation() {
-  try {
-    const navPrincipal = document.getElementById("nav-principal");
-    const navStats = document.getElementById("nav-stats");
-    const navCalendrier = document.getElementById("nav-calendrier");
-    const navHabitudes = document.getElementById("nav-habitudes");
-    const navParams = document.getElementById("nav-params");
-
-    if (navPrincipal) navPrincipal.addEventListener("click", () => switchTo("ecran-principal"));
-    if (navStats) navStats.addEventListener("click", () => switchTo("ecran-stats"));
-    if (navCalendrier) navCalendrier.addEventListener("click", () => switchTo("ecran-calendrier"));
-    if (navHabitudes) navHabitudes.addEventListener("click", () => switchTo("ecran-habitudes"));
-    if (navParams) navParams.addEventListener("click", () => switchTo("ecran-params"));
-
-    console.log("[app.setupNavigation] Navigation câblée");
-  } catch (e) {
-    console.error("[app.setupNavigation] error:", e);
-  }
-}
-
-// ============================================================
-// LAZY INIT ÉCRANS (placeholder pour PHASE 2+)
-// ============================================================
-
-let _statsInitialized = false;
-let _calendarInitialized = false;
-
-function ensureStatsInit() {
-  if (_statsInitialized) return;
-  try {
-    console.log("[app.ensureStatsInit] Initialisation Stats...");
-    // TODO: PHASE 2 — appeler initStatsHeader() et initCharts()
-    _statsInitialized = true;
-  } catch (e) {
-    console.error("[app.ensureStatsInit] error:", e);
-  }
-}
-
-function ensureCalendarInit() {
-  if (_calendarInitialized) return;
-  try {
-    console.log("[app.ensureCalendarInit] Initialisation Calendrier...");
-    // TODO: PHASE 2 — appeler initCalendar()
-    _calendarInitialized = true;
-  } catch (e) {
-    console.error("[app.ensureCalendarInit] error:", e);
-  }
-}
-
-// ============================================================
-// LISTENERS ÉCRANS (pour lazy init)
-// ============================================================
-
-function setupScreenListeners() {
-  try {
-    window.addEventListener("sa:screen:changed", (event) => {
-      const screen = event.detail.screen;
-      console.log(`[app] Écran changé: ${screen}`);
-      
-      // Lazy init Stats
-      if (screen === "ecran-stats") {
-        ensureStatsInit();
-      }
-
-      // Lazy init Calendrier
-      if (screen === "ecran-calendrier") {
-        ensureCalendarInit();
-      }
-    });
-  } catch (e) {
-    console.error("[app.setupScreenListeners] error:", e);
-  }
-}
-
-// ============================================================
-// BOOT
-// ============================================================
-
+// ===== Boot (PHASE 1 + PHASE 2)
 function boot() {
+  console.log("[app.boot] Starting...");
+  
+  // Navigation
+  bindNav();
+  console.log("[app.boot] Navigation câblée");
+
+  // PHASE 1: Modale 18+
+  initModals({
+    onOpenResources: () => {},
+    showToast,
+  });
+  console.log("[app.boot] Modale 18+ initialisée");
+
+  // PHASE 2: Counters et Stats
   try {
-    console.log("[app.boot] Démarrage...");
-
-    // 1. Setup navigation (menu bas)
-    setupNavigation();
-
-    // 2. Setup screen change listeners (lazy init)
-    setupScreenListeners();
-
-    // 3. Initialiser modales (18+)
-    initModals();
-
-    // 4. Afficher écran par défaut (Accueil)
-    switchTo("ecran-principal");
-
-    // 5. Global error handler (debug)
-    window.addEventListener("error", (e) => {
-      console.error("[app.globalErrorHandler]", e);
-    });
-
-    console.log("[app.boot] ✓ Prêt");
+    initCounters();
+    console.log("[app.boot] Counters initialisés");
   } catch (e) {
-    console.error("[app.boot] error:", e);
-    console.error("[app.boot] Tentative fallback...");
-    
-    // Fallback minimal
-    try {
-      switchTo("ecran-principal");
-      initModals();
-    } catch (e2) {
-      console.error("[app.boot] Fallback échoué:", e2);
-    }
+    console.error("[app.boot] initCounters error:", e);
   }
+
+  try {
+    initStatsHeader();
+    console.log("[app.boot] Stats header initialisé");
+  } catch (e) {
+    console.error("[app.boot] initStatsHeader error:", e);
+  }
+
+  // PHASE 2 optionnel: Charts lazy init (si tu veux)
+  // Décommenter si charts.js est prêt:
+  // try {
+  //   initCharts();
+  //   console.log("[app.boot] Charts initialisés");
+  // } catch (e) {
+  //   console.error("[app.boot] initCharts error:", e);
+  // }
+
+  // Afficher écran par défaut
+  switchTo("ecran-principal");
+  console.log("[app.boot] ✓ Accueil affiché");
+
+  // Debug logs
+  const dbg = $("#debug-console");
+  if (dbg) {
+    const log = (msg) => { dbg.insertAdjacentHTML("beforeend", `<div>• ${msg}</div>`); };
+    log("App PHASE 1+2 initialisée");
+    log("Routing OK");
+    log("Counters OK");
+    log("Stats OK");
+  }
+
+  console.log("[app.boot] ========== READY ✓ ==========");
 }
 
-// ============================================================
-// Lancer boot au chargement DOM
-// ============================================================
-
-document.addEventListener("DOMContentLoaded", () => {
-  console.log("[app] DOMContentLoaded triggered");
-  boot();
-});
-
-// Fallback si DOM déjà chargé
-if (document.readyState === "loading") {
-  console.log("[app] DOM en cours de chargement, écouteur attaché");
-} else {
-  console.log("[app] DOM déjà chargé, boot direct");
-  boot();
-}
+// Démarrage
+document.addEventListener("DOMContentLoaded", boot);
