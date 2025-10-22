@@ -43,15 +43,10 @@
   .date{font-weight:800; font-size:18px}
   .heure{opacity:.95; font-size:13px; margin-top:2px}
 
-  /* Console debug (rendue VISIBLE ET LISIBLE) */
-  .debug-console{
-    position:fixed; left:0; right:0; top:64px; /* s’affiche SOUS le header */
-    background:rgba(0,0,0,.95); color:#b5f7b7;
-    font:14px/1.45 ui-monospace, Menlo, monospace; /* plus lisible */
-    padding:10px 12px; max-height:60vh; overflow:auto;
-    z-index:9999; border-bottom:2px solid #34d399; display:none;
-    white-space:pre-wrap; word-break:break-word;
-  }
+  /* Debug console — rendu lisible et au-dessus du header */
+  .debug-console{position:fixed; top:64px; left:0; right:0; background:rgba(0,0,0,.95); color:#b5f7b7; 
+    font:14px/1.45 ui-monospace, Menlo, monospace; padding:10px 12px; max-height:60vh; overflow:auto; 
+    z-index:9999; border-bottom:2px solid #34d399; display:none}
   .debug-console.show{display:block}
 
   /* Stats rapides (jour courant) */
@@ -60,7 +55,7 @@
   .stat-val{font-weight:900; font-size:20px; color:var(--ink)}
   .stat-lbl{font-size:11px; color:#6b7280; margin-top:2px}
 
-  /* Bandeau KPIs (totaux & économies) utilisé par stats.js */
+  /* Bandeau KPIs */
   .stats-header{background:#fff; display:grid; grid-template-columns:repeat(5,1fr); gap:8px; padding:8px 10px; border-bottom:1px solid var(--divider)}
   .kpi{background:#f9fafb; border:1px solid var(--divider); border-radius:10px; padding:6px; text-align:center}
   .kpi .kpi-val{font-weight:900; font-size:16px; color:#111827}
@@ -154,11 +149,13 @@
   .dot.j{background:var(--ok)}
   .dot.a{background:var(--warn)}
 
-  /* Zone charts (compatible web/js/charts.js) */
+  /* Charts */
   #chartRange { display:flex; gap:8px; margin:10px 0; }
   #chartRange .btn.pill { flex:1; background:#e6fffa; border:2px solid #b2f5ea; color:#0f766e; border-radius:999px; padding:8px; font-weight:800; font-size:13px; text-align:center; cursor:pointer; }
   #chartRange .btn.pill.active { background:#3b82f6; border-color:#3b82f6; color:#fff; }
-  canvas#chart-consommations, canvas#chart-cout-eco { width:100%; height:240px; display:block; }
+  .chart-block { display:flex; flex-direction:column; gap:12px; }
+  canvas#chart-consommations { width:100%; height:260px; display:block; }
+  canvas#chart-cout-eco       { width:100%; height:220px; display:block; }
 
   @media (max-width: 460px){
     .container{margin:0; max-width:100%}
@@ -203,7 +200,7 @@
     </div>
   </div>
 
-  <!-- KPIs header (utilisé par web/js/stats.js) -->
+  <!-- KPIs header -->
   <div class="stats-header" id="stats-header">
     <div class="kpi"><div class="kpi-val" id="todayTotal">0</div><div class="kpi-lbl">Total jour</div></div>
     <div class="kpi"><div class="kpi-val" id="weekTotal">0</div><div class="kpi-lbl">Total semaine</div></div>
@@ -269,10 +266,8 @@
 
     <!-- ======================= ÉCRAN STATS ======================= -->
     <div class="ecran" id="ecran-stats" aria-label="SA:ECRAN:STATS" data-sa="screen-stats">
-      <!-- ✅ wrapper requis par app.js pour le lazy-init -->
       <div id="screen-stats">
         <div class="card">
-          <!-- Boutons d’échelle attendus par web/js/charts.js -->
           <div class="tabs" role="tablist" id="chartRange">
             <button class="btn pill active" data-range="day" type="button">Jour</button>
             <button class="btn pill" data-range="week" type="button">Semaine</button>
@@ -284,20 +279,18 @@
             <div class="banner-title" id="stats-titre">—</div>
             <div class="line"><span class="lbl">Cigarettes</span><span class="val" id="stats-clopes">0</span></div>
             <div class="line"><span class="lbl">Joints</span><span class="val" id="stats-joints">0</span></div>
-            <div class="line" id="stats-alcool-line" style="display:none">
+            <div class="line" id="stats-alcool-line">
               <span class="lbl">Alcool</span><span class="val" id="stats-alcool">0</span>
             </div>
           </div>
 
-          <!-- Canvas uniques attendus par stats.js -->
           <div class="chart-block">
-            <div class="chart-caption">Consommations (unités)</div>
+            <div class="chart-caption">Consommations (unités) / Coût</div>
             <canvas id="chart-consommations" width="960" height="260"></canvas>
-            <div class="chart-caption" style="margin-top:8px">Coût / Économies</div>
             <canvas id="chart-cout-eco" width="960" height="220"></canvas>
           </div>
 
-          <div class="chart-actions" id="chart-actions" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px">
+          <div class="chart-actions" id="chart-actions">
             <button class="btn" id="btn-export-csv" type="button">Exporter historique complet (Excel)</button>
             <button class="btn" id="btn-export-stats" type="button">Exporter la vue actuelle</button>
             <button class="btn alt" id="btn-import" type="button">Importer (CSV/JSON)</button>
@@ -372,7 +365,6 @@
       </div>
     </div>
 
-    <!-- ======================= ÉCRAN RÉGLAGES (placeholder PHASE 3) ======================= -->
     <div id="ecran-params" class="ecran" style="display:none;">
       <p style="padding: 20px; text-align: center; color: #999;">Réglages</p>
     </div>
@@ -455,20 +447,18 @@
   </div>
 </div>
 
-<!-- ======================= MODALE PAGES (Manuel / CGV / Mentions / Ressources) ======================= -->
+<!-- ======================= MODALE PAGES ======================= -->
 <div class="modal" id="modal-page" aria-hidden="true">
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="page-title">
     <h3 class="pages-title" id="page-title">—</h3>
-    <div class="page-content" id="page-content">
-      <!-- Contenu injecté par JS -->
-    </div>
+    <div class="page-content" id="page-content"></div>
     <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px">
       <button class="btn alt" id="btn-page-close" type="button">Fermer</button>
     </div>
   </div>
 </div>
 
-<!-- Vendor (Chart.js ou fallback local) -->
+<!-- Vendor (Chart.js UMD) -->
 <script src="./js/vendor/chart.umd.min.js"></script>
 <!-- App -->
 <script type="module" src="./js/app.js"></script>
