@@ -1,57 +1,26 @@
 // ============================================================
 // counters.js — Compteurs Accueil (PHASE 2)
-// - Persistance localStorage (par jour)
-// - Boutons +/- (clopes / joints / alcool)
-// - Refresh barres haut + cartes droites
-// - Broadcast événement 'sa:counts-updated'
 // ============================================================
+// ADAPTÉE : utilise state.js pour tout (localStorage + events)
+// ============================================================
+
+import { addEntry, removeEntry, getDaily, on, emit } from "./state.js";
 
 console.log("[counters.js] Module loaded");
 
-// ------------------------------
-// Storage helpers
-// ------------------------------
-const LS_PREFIX = "sa:counts:";
-
-function dateKey(d = new Date()) {
-  return `${LS_PREFIX}${d.toISOString().slice(0, 10)}`; // "YYYY-MM-DD"
-}
-
-function readDay(key = dateKey()) {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return { c: 0, j: 0, a: 0 }; // clopes, joints, alcool
-    const parsed = JSON.parse(raw);
-    return {
-      c: Number(parsed.c) || 0,
-      j: Number(parsed.j) || 0,
-      a: Number(parsed.a) || 0,
-    };
-  } catch (e) {
-    console.error("[counters] readDay error:", e);
-    return { c: 0, j: 0, a: 0 };
-  }
-}
-
-function writeDay(val, key = dateKey()) {
-  try {
-    const safe = { c: Math.max(0, val.c|0), j: Math.max(0, val.j|0), a: Math.max(0, val.a|0) };
-    localStorage.setItem(key, JSON.stringify(safe));
-  } catch (e) {
-    console.error("[counters] writeDay error:", e);
-  }
-}
-
-// ------------------------------
-// UI refresh
-// ------------------------------
+// ============================================================
+// UI Refresh
+// ============================================================
 function refreshBars(counts) {
   const elC = document.getElementById("bar-clopes");
   const elJ = document.getElementById("bar-joints");
   const elA = document.getElementById("bar-alcool");
-  if (elC) elC.textContent = String(counts.c);
-  if (elJ) elJ.textContent = String(counts.j);
-  if (elA) elA.textContent = String(counts.a);
+  
+  if (elC) elC.textContent = String(counts.cigs || 0);
+  if (elJ) elJ.textContent = String(counts.weed || 0);
+  if (elA) elA.textContent = String(counts.alcohol || 0);
+  
+  console.log("[counters.refreshBars]", counts);
 }
 
 function refreshCards(counts) {
@@ -59,76 +28,113 @@ function refreshCards(counts) {
   const cardC = document.getElementById("card-cigs");
   if (cardC) {
     const v = cardC.querySelector(".val");
-    if (v) v.textContent = String(counts.c);
+    if (v) v.textContent = String(counts.cigs || 0);
   }
+  
   // Joints
   const cardJ = document.getElementById("card-weed");
   if (cardJ) {
     const v = cardJ.querySelector(".val");
-    if (v) v.textContent = String(counts.j);
+    if (v) v.textContent = String(counts.weed || 0);
   }
+  
   // Alcool
   const cardA = document.getElementById("card-alcool");
   if (cardA) {
     const v = cardA.querySelector(".val");
-    if (v) v.textContent = String(counts.a);
+    if (v) v.textContent = String(counts.alcohol || 0);
   }
+  
+  console.log("[counters.refreshCards]", counts);
 }
 
-function broadcast(counts) {
-  window.dispatchEvent(new CustomEvent("sa:counts-updated", { detail: { date: new Date(), counts } }));
-}
-
-// ------------------------------
-// Actions +/-
-// ------------------------------
-function clamp(n) { return n < 0 ? 0 : n; }
-
+// ============================================================
+// Buttons Setup
+// ============================================================
 function setupButtons() {
-  const key = dateKey();
-  let counts = readDay(key);
-
-  const apply = () => {
-    writeDay(counts, key);
-    refreshBars(counts);
-    refreshCards(counts);
-    broadcast(counts);
-  };
+  console.log("[counters.setupButtons] Wiring buttons...");
 
   const btns = [
-    ["cl-moins",  () => counts.c = clamp(counts.c - 1)],
-    ["cl-plus",   () => counts.c = clamp(counts.c + 1)],
-    ["j-moins",   () => counts.j = clamp(counts.j - 1)],
-    ["j-plus",    () => counts.j = clamp(counts.j + 1)],
-    ["a-moins",   () => counts.a = clamp(counts.a - 1)],
-    ["a-plus",    () => counts.a = clamp(counts.a + 1)],
+    ["cl-moins", "cigs", -1],
+    ["cl-plus", "cigs", 1],
+    ["j-moins", "weed", -1],
+    ["j-plus", "weed", 1],
+    ["a-moins", "alcohol", -1],
+    ["a-plus", "alcohol", 1],
   ];
 
-  btns.forEach(([id, fn]) => {
+  btns.forEach(([id, type, delta]) => {
     const el = document.getElementById(id);
-    if (el) el.addEventListener("click", () => {
-      fn();
-      apply();
+    if (!el) {
+      console.warn(`[counters] Button #${id} not found`);
+      return;
+    }
+
+    el.addEventListener("click", () => {
+      try {
+        if (delta > 0) {
+          addEntry(type, Math.abs(delta));
+        } else {
+          removeEntry(type, Math.abs(delta));
+        }
+        // state.js émettra sa:counts-updated, qu'on va écouter
+      } catch (e) {
+        console.error(`[counters] Button click error for ${id}:`, e);
+      }
     });
   });
 
-  // Premier rendu UI
-  apply();
+  console.log("[counters.setupButtons] ✓ Buttons wired");
 }
 
-// ------------------------------
-// API
-// ------------------------------
+// ============================================================
+// Event Listener (écoute state.js)
+// ============================================================
+function setupStateListener() {
+  console.log("[counters.setupStateListener] Subscribing to sa:counts-updated...");
+
+  on("sa:counts-updated", (e) => {
+    try {
+      const counts = e.detail?.counts || getDaily();
+      refreshBars(counts);
+      refreshCards(counts);
+    } catch (err) {
+      console.error("[counters.setupStateListener] error:", err);
+    }
+  });
+
+  console.log("[counters.setupStateListener] ✓ Listener attached");
+}
+
+// ============================================================
+// Initial Render
+// ============================================================
+function renderInitial() {
+  try {
+    const counts = getDaily();
+    refreshBars(counts);
+    refreshCards(counts);
+    console.log("[counters.renderInitial] ✓ Initial render done", counts);
+  } catch (e) {
+    console.error("[counters.renderInitial] error:", e);
+  }
+}
+
+// ============================================================
+// Public API
+// ============================================================
 export function getTodayCounts() {
-  return readDay(dateKey());
+  return getDaily();
 }
 
 export function initCounters() {
-  console.log("[counters] init…");
+  console.log("[counters.initCounters] Starting...");
   try {
     setupButtons();
-    console.log("[counters] ✓ prêt");
+    setupStateListener();
+    renderInitial();
+    console.log("[counters.initCounters] ✓ Ready");
   } catch (e) {
-    console.error("[counters] init error:", e);
+    console.error("[counters.initCounters] error:", e);
   }
 }
