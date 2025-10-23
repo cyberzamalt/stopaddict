@@ -1,6 +1,6 @@
-/* app.css — v2.4.3 */
+/* web/css/app.css — Option A "monolithe visuel" */
 
-/* 1) Masquer la zone résumé/date/calcul du bas (on garde le bandeau du haut) */
+/* 1) Si un ancien "bandeau bas" subsistait, on le cache pour éviter les doublons */
 #bandeau-resume,
 .footer-summary,
 .summary-footer,
@@ -8,69 +8,39 @@
   display: none !important;
 }
 
-/* 2) Désenchevêtrer les boutons d’export en bas des Stats */
+/* 2) Boutons d’export (Stats) non superposés */
 .stats-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
   gap: .5rem;
 }
 .stats-actions .btn {
+  margin: 0;
+}
+
+/* 3) Petites puces/chips homogènes (si pas déjà stylées inline) */
+.chip {
   display: inline-block;
-  margin: .25rem 0;
+  padding: .25rem .5rem;
+  border-radius: 999px;
+  background: #222;
+  border: 1px solid #333;
+  margin-right: .5rem;
+  font-size: .9rem;
 }
-/* ============================================================
-   PHASE 2 — Fix CSS pour Stats & Export buttons
-   ============================================================ */
+.chip-alcool { background: #202226; }
 
-/* Conteneur des boutons d'export (bas de l'écran Stats) */
-.chart-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 12px;
-  margin-top: 12px;
-  padding: 10px;
-  background: #f9fafb;
-  border-radius: 8px;
-}
-
-.chart-actions button {
-  flex: 1;
-  min-width: 120px;
-  padding: 10px 12px;
-  font-size: 12px;
-  white-space: nowrap;
+/* 4) Par sécurité : masquer une carte si un module est désactivé */
+#card-cigs[style*="display: none"],
+#card-weed[style*="display: none"],
+#card-alcool[style*="display: none"] {
+  visibility: hidden;
 }
 
-/* Responsive: moins d'espace en mobile < 480px */
-@media (max-width: 480px) {
-  .chart-actions {
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  .chart-actions button {
-    width: 100%;
-    min-width: unset;
-  }
-}
-
-/* S'assurer que le conteneur Stats a un padding-bottom pour ne pas chevaucher */
-#ecran-stats {
-  padding-bottom: 100px;
-}
-
-/* Container des graphes avec espacement */
-.stats-block {
-  background: #fff;
-  border-radius: 12px;
-  padding: 14px;
-  margin-bottom: 10px;
-}
-
-/* Canvas graphes avec hauteur définie */
-#chart-consommations,
-#chart-cout-eco {
-  max-height: 300px;
-  margin-bottom: 10px;
+/* 5) Accessibilité visuelle mineure (focus) */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 2px solid #32b87b;
+  outline-offset: 2px;
 }
