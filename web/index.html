@@ -1,271 +1,483 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8">
-  <title>StopAddict</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <!-- CSS principal (monolithe avait surtout du inline ; on ajoute le link pour que tes rÃ¨gles sâ€™appliquent) -->
-  <link rel="stylesheet" href="./css/app.css">
+<title>StopAddict – Compteur Tabac, Cannabis & Alcool (v2.4.0 CLEAN)</title>
+<meta name="application-name" content="StopAddict">
+<meta name="apple-mobile-web-app-title" content="StopAddict">
 
-  <style>
-    /* Base minimale pour la dÃ©mo (tu peux garder ton gros bloc inline du monolithe ici si besoin) */
-    :root { --bg:#0a0a0a; --fg:#fff; --muted:#999; --accent:#32b87b; --warn:#e86; }
-    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol"; background:#111; color:#eee; }
-    header, footer { background:#151515; }
-    .wrap { max-width: 1100px; margin: 0 auto; padding: 12px; }
-    h1,h2,h3 { margin: 0.2rem 0 0.6rem; }
-    .row { display:flex; gap:.75rem; align-items:center; }
-    .chip { display:inline-block; padding:.25rem .5rem; border-radius:999px; background:#222; border:1px solid #333; margin-right:.5rem; font-size:.9rem; }
-    .chip-alcool { background:#202226; }
-    .cards { display:grid; grid-template-columns: repeat(3, 1fr); gap:.75rem; }
-    .card { background:#161616; border:1px solid #222; border-radius:12px; padding:12px; }
-    .hide { display:none !important; }
+<!-- CSP -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:;
+               img-src 'self' data: blob:;
+               style-src 'self' 'unsafe-inline';
+               script-src 'self' 'unsafe-inline';
+               connect-src 'self';
+               object-src 'none';
+               base-uri 'none';
+               form-action 'self'">
 
-    /* BanniÃ¨res */
-    #banner-accueil, #banner-stats { background:#1a1a1a; border:1px solid #222; border-radius:12px; padding:12px; margin:12px 0; }
-    #banner-stats { border-left: 4px solid #32b87b; }
-    .row-alcool { opacity: .95; }
+<style>
+  :root{
+    --bg1:#667eea; --bg2:#764ba2;
+    --ink:#1f2937; --muted:#6b7280; --card:#ffffff;
+    --ok:#22c55e; --warn:#f59e0b; --danger:#ef4444; --info:#3b82f6;
+    --chip:#f3f4f6; --divider:#e5e7eb;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    color:var(--ink); background:linear-gradient(180deg,var(--bg1),var(--bg2));
+    -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+  }
+  .container{max-width:460px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; background:#f8fafc; position:relative;}
 
-    /* Nav bas */
-    .nav { position:fixed; left:0; right:0; bottom:0; background:#151515; border-top:1px solid #222; display:flex; }
-    .nav button { flex:1; background:transparent; border:0; color:#ccc; padding:.8rem .4rem; font-size:.95rem; }
-    .nav button.active, .nav button.actif { color:#fff; border-bottom: 2px solid #32b87b; }
+  /* Header */
+  .header{position:sticky; top:0; z-index:3; background:linear-gradient(135deg,#2c3e50,#34495e); color:#fff; padding:10px 14px; text-align:center}
+  .brand{display:flex; align-items:center; gap:8px; justify-content:center; margin-bottom:2px}
+  .brand img{width:24px; height:24px; border-radius:6px; object-fit:cover}
+  .brand-name{font-weight:900; letter-spacing:.2px}
+  .brand-ver{opacity:.8; font-size:12px; margin-left:4px}
+  .date{font-weight:800; font-size:18px}
+  .heure{opacity:.95; font-size:13px; margin-top:2px}
 
-    /* Ã‰crans */
-    .screen { display:none; min-height: calc(100dvh - 56px - 56px); padding-bottom: 76px; }
-    .screen.show, .screen.active, .screen.actif { display:block; }
+  /* Console debug — lisible et sous le header */
+  .debug-console{
+    position:fixed; top:68px; left:0; right:0;
+    background:rgba(0,0,0,.95); color:#b5f7b7;
+    font:14px/1.45 ui-monospace, Menlo, monospace;
+    padding:8px 10px; max-height:50vh; overflow:auto;
+    z-index:9999; border-bottom:2px solid #34d399; display:none
+  }
+  .debug-console.show{display:block}
 
-    /* Modale 18+ (simple) */
-    .modal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.6); z-index:1000; }
-    .modal.show { display:flex; }
-    .modal .panel { width:min(680px, 92vw); background:#141414; border:1px solid #333; border-radius:14px; padding:16px; }
-    .modal .panel h3 { margin-top: 0; }
-    .modal .panel footer { display:flex; gap:.5rem; justify-content:flex-end; background:transparent; border:0; padding:0; margin-top:10px; }
-    .btn { border:1px solid #2a2a2a; background:#1b1b1b; color:#eee; padding:.5rem .75rem; border-radius:10px; cursor:pointer; }
-    .btn:disabled { opacity:.5; cursor:not-allowed; }
+  /* Stats rapides (jour courant) */
+  .stats-rapides{background:#fff; display:grid; grid-template-columns:repeat(4,1fr); gap:8px; padding:10px; border-bottom:1px solid var(--divider)}
+  .stat-item{text-align:center; padding:6px}
+  .stat-val{font-weight:900; font-size:20px; color:var(--ink)}
+  .stat-lbl{font-size:11px; color:#6b7280; margin-top:2px}
 
-    /* Calendrier (placeholder simple) */
-    #cal-entete { display:flex; align-items:center; justify-content:space-between; margin: 8px 0 12px; }
-    #cal-grille { display:grid; grid-template-columns: repeat(7, 1fr); gap:6px; }
-    #cal-grille .cell { background:#161616; border:1px solid #222; border-radius:8px; padding:10px; min-height:54px; }
+  /* Bandeau KPIs (totaux & économies) utilisé par stats.js */
+  .stats-header{background:#fff; display:grid; grid-template-columns:repeat(5,1fr); gap:8px; padding:8px 10px; border-bottom:1px solid var(--divider)}
+  .kpi{background:#f9fafb; border:1px solid var(--divider); border-radius:10px; padding:6px; text-align:center}
+  .kpi .kpi-val{font-weight:900; font-size:16px; color:#111827}
+  .kpi .kpi-lbl{font-size:11px; color:#6b7280}
 
-    /* Zone export actions (Stats) */
-    .stats-actions { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:10px; }
-  </style>
+  .content{flex:1; padding:0 0 80px; overflow-y:auto}
+  .ecran{display:none}
+  .ecran.show{display:block; animation:fadeIn .2s ease}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+  .card{background:#fff; border-radius:14px; margin:10px; padding:14px; box-shadow:0 2px 8px rgba(0,0,0,.06)}
+  .card.bar-left{border-left:4px solid var(--info)}
+  .card.bar-left.green{border-left-color:var(--ok)}
+  .card.bar-left.orange{border-left-color:var(--warn)}
+
+  .banner{background:#fff; border-radius:14px; margin:10px; padding:12px; border:2px solid var(--divider)}
+  .banner.green{background:#ecfdf5; border-color:#6ee7b7}
+  .banner.orange{background:#fff7ed; border-color:#fdba74}
+  .banner-title{font-weight:900; font-size:15px; margin-bottom:8px}
+
+  .line{display:flex; justify-content:space-between; align-items:center; padding:4px 0}
+  .lbl{font-weight:700; font-size:14px}
+  .val{font-weight:900; font-size:18px; color:#111827}
+
+  .segment{display:flex; gap:4px; margin:6px 0}
+  .seg{flex:1; height:28px; border-radius:6px; background:#e5e7eb; border:2px solid transparent; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:11px; color:#6b7280; cursor:pointer; transition:all .15s ease}
+  .seg.actif{background:#3b82f6; color:#fff; border-color:#2563eb}
+  .seg:hover{transform:scale(1.05)}
+
+  .pm{display:flex; gap:8px; justify-content:center; margin:8px 0}
+  .btn-round{width:56px; height:56px; border-radius:50%; border:0; background:#f3f4f6; color:#111827; font-size:22px; font-weight:900; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .15s ease}
+  .btn-round:hover{background:#e5e7eb; transform:scale(1.05)}
+  .btn-round.btn-plus{background:var(--ok); color:#fff}
+  .btn-round.btn-plus:hover{background:#16a34a}
+  .btn-round.btn-minus{background:#f3f4f6; color:#6b7280}
+  .btn-round.btn-minus:hover{background:#e5e7eb; color:#374151}
+
+  .conseil{background:#fef3c7; border-left:4px solid var(--warn); padding:12px; border-radius:8px; margin:10px; font-size:14px; line-height:1.5}
+  .adv-ctl{display:flex; align-items:center; gap:6px; justify-content:flex-end}
+  .ctl{background:#fff; color:#111827; border-radius:8px; padding:4px 8px; text-decoration:none; font-weight:900; font-size:12px; cursor:pointer; border:0}
+  .dots{font-size:12px; letter-spacing:3px; opacity:.85}
+
+  .tabs{display:flex; gap:8px; margin-bottom:8px}
+  .tab{flex:1; background:#e6fffa; border:2px solid #b2f5ea; color:#0f766e; border-radius:999px; padding:8px; font-weight:800; font-size:13px; text-align:center; cursor:pointer; transition:all .15s ease}
+  .tab.actif{background:#3b82f6; border-color:#3b82f6; color:#fff}
+  .tab:hover{transform:translateY(-2px)}
+
+  .divider{height:1px; background:var(--divider); margin:10px 0}
+  .stats-block{background:#fff; border-radius:12px; padding:14px}
+
+  .grid-2{display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:center}
+  .grid-2 .param{display:contents}
+  .param label{font-size:13px; color:#374151; font-weight:700}
+  .param input[type="number"], .param input[type="text"], .param input[type="date"]{width:100%; padding:8px 10px; border:2px solid #e5e7eb; border-radius:8px; font-size:14px; background:#f9fafb}
+  .param input[type="checkbox"]{transform:scale(1.1); cursor:pointer}
+  .param .hint{grid-column:1 / -1; font-size:12px; color:#6b7280}
+  .section-title{font-weight:900; font-size:15px; color:#111827; border-bottom:2px solid #eef2f7; padding-bottom:6px; margin-bottom:10px}
+
+  .nav{position:fixed; left:50%; transform:translateX(-50%); bottom:0; width:100%; max-width:460px; background:#fff; border-top:1px solid var(--divider); display:flex; z-index:10}
+  .nav button{flex:1; background:transparent; border:0; padding:10px 6px 8px; color:#64748b; font-size:12px; display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer; transition:all .15s ease}
+  .nav button.actif{color:#3b82f6; background:rgba(59,130,246,.06)}
+  .nav .ico{font-size:18px}
+
+  .snackbar{position:fixed; left:50%; transform:translateX(-50%) translateY(20px); bottom:76px; background:#111827; color:#fff; padding:10px 14px; border-radius:999px; font-size:13px; display:none; gap:10px; align-items:center; z-index:20}
+  .snackbar.show{display:flex; animation:fadeUp .2s ease}
+  .snackbar a{color:#34d399; font-weight:900; text-decoration:none}
+  @keyframes fadeUp{from{opacity:0; transform:translateX(-50%) translateY(40px)} to{opacity:1; transform:translateX(-50%) translateY(20px)}}
+
+  .btn{background:#111827; color:#fff; border:0; border-radius:10px; padding:10px 12px; font-weight:800; cursor:pointer; transition:all .15s ease}
+  .btn:hover{background:#374151; transform:translateY(-1px)}
+  .btn.alt{background:#374151}
+  .btn.alt:hover{background:#4b5563}
+  .btn.warn{background:#ef4444}
+  .btn.warn:hover{background:#dc2626}
+  .btn.small{padding:6px 10px; font-size:13px}
+  .btn:disabled{opacity:.5; cursor:not-allowed; transform:none !important}
+
+  .modal{position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; align-items:flex-end; justify-content:center; z-index:50}
+  .modal.show{display:flex; animation:fadeIn .2s ease}
+  .sheet{background:#fff; width:100%; max-width:460px; border-radius:16px 16px 0 0; padding:16px; max-height:80vh; overflow-y:auto}
+  .sheet h3{margin:0 0 12px; font-size:18px; color:#111827}
+
+  .cal-grid{display:grid; grid-template-columns:repeat(7, 1fr); gap:6px; margin-top:10px}
+  .cal-cell{background:#fff; border:1px solid var(--divider); border-radius:8px; padding:6px; min-height:56px; position:relative; cursor:pointer; font-size:12px; transition:all .15s ease}
+  .cal-cell:hover{background:#f9fafb; transform:scale(1.05)}
+  .cal-cell.today{border-color:#3b82f6; border-width:2px}
+  .cal-cell.has-data{background:#ecfdf5}
+  .cal-num{color:var(--muted); font-weight:800}
+  .dot{width:8px; height:8px; border-radius:50%; display:inline-block; margin:2px}
+  .dot.c{background:var(--info)}
+  .dot.j{background:var(--ok)}
+  .dot.a{background:var(--warn)}
+
+  /* Zone charts (compatible web/js/charts.js) */
+  #chartRange { display:flex; gap:8px; margin:10px 0; }
+  #chartRange .btn.pill { flex:1; background:#e6fffa; border:2px solid #b2f5ea; color:#0f766e; border-radius:999px; padding:8px; font-weight:800; font-size:13px; text-align:center; cursor:pointer; }
+  #chartRange .btn.pill.active { background:#3b82f6; border-color:#3b82f6; color:#fff; }
+
+  /* === Anti-scroll infini : hauteur fixe des 2 canvases === */
+  .chart-block{ position:relative; display:flex; flex-direction:column; gap:12px; }
+  #chart-consommations,
+  #chart-cout-eco{
+    display:block; width:100%;
+    height:240px; max-height:240px;
+  }
+  /* (La règle historique canvas#chartCanvas ne s'applique pas ici) */
+
+  @media (max-width: 460px){
+    .container{margin:0; max-width:100%}
+    .card, .banner{margin:6px; padding:12px}
+    .grid-2{grid-template-columns:1fr}
+  }
+</style>
 </head>
 <body>
 
-  <!-- HEADER (date/heure) -->
-  <header>
-    <div class="wrap row" style="justify-content:space-between;">
-      <div class="row">
-        <strong>StopAddict</strong>
-      </div>
-      <div class="row" style="gap:10px;">
-        <span id="date-actuelle" aria-label="date du jour">â€”</span>
-        <span id="heure-actuelle" aria-label="heure actuelle" style="color:#aaa;">â€”</span>
-      </div>
+<div class="container">
+  <!-- ======================= HEADER ======================= -->
+  <div class="header">
+    <div class="brand">
+      <span class="brand-name">🚭 StopAddict</span>
+      <span class="brand-ver">v2.4.0 CLEAN</span>
     </div>
-  </header>
+    <div class="date" id="date-actuelle">—</div>
+    <div class="heure" id="heure-actuelle">—</div>
+  </div>
 
-  <main class="wrap">
-    <!-- Ã‰CRAN : ACCUEIL -->
-    <section id="ecran-principal" class="screen show actif active">
-      <!-- Bandeau Accueil (monolithe) -->
-      <div id="banner-accueil">
-        <div id="hello-accueil">Bonjour ðŸ‘‹</div>
-        <div id="chips-accueil" style="margin:6px 0 10px;">
-          <span class="chip">Conseils du jour</span>
-        </div>
-        <div class="row">
-          <div style="flex:1">
-            <div style="font-size:.9rem; color:#aaa;">Cigarettes</div>
-            <div id="bar-clopes" style="font-size:1.4rem;">â€”</div>
-            <div id="note-clopes" style="color:#888;">â€”</div>
-          </div>
-          <div style="flex:1">
-            <div style="font-size:.9rem; color:#aaa;">Joints</div>
-            <div id="bar-joints" style="font-size:1.4rem;">â€”</div>
-            <div id="note-joints" style="color:#888;">â€”</div>
-          </div>
-          <div class="row-alcool" style="flex:1">
-            <div style="font-size:.9rem; color:#aaa;">Alcool</div>
-            <div id="bar-alcool" style="font-size:1.4rem;">â€”</div>
-            <div id="note-alcool" style="color:#888;">â€”</div>
-          </div>
-        </div>
-      </div>
+  <!-- Console debug -->
+  <div class="debug-console" id="debug-console"></div>
 
-      <!-- Tes cartes actions (placeholders, tu peux conserver ta version) -->
-      <div class="cards" style="margin-top:12px;">
-        <div class="card" id="card-cigs">
-          <h3>Clopes</h3>
-          <div class="row">
-            <button class="btn" id="cl-moins">âˆ’</button>
-            <button class="btn" id="cl-plus">+</button>
-          </div>
-        </div>
-        <div class="card" id="card-weed">
-          <h3>Joints</h3>
-          <div class="row">
-            <button class="btn" id="j-moins">âˆ’</button>
-            <button class="btn" id="j-plus">+</button>
-          </div>
-        </div>
-        <div class="card" id="card-alcool">
-          <h3>Alcool</h3>
-          <div class="row">
-            <button class="btn" id="a-moins">âˆ’</button>
-            <button class="btn" id="a-plus">+</button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Ã‰CRAN : STATS -->
-    <section id="ecran-stats" class="screen">
-      <!-- BanniÃ¨re Stats (monolithe) -->
-      <div id="banner-stats">
-        <div id="hello-stats">Statistiques â€” Aujourdâ€™hui</div>
-        <div id="chips-stats" style="margin:6px 0 10px;">
-          <span class="chip">Clopes : <strong>â€”</strong></span>
-          <span class="chip">Joints : <strong>â€”</strong></span>
-          <span class="chip chip-alcool">Alcool : <strong>â€”</strong></span>
-        </div>
-        <div class="row">
-          <div style="flex:1">
-            <div style="font-size:.9rem; color:#aaa;">Clopes (pÃ©riode)</div>
-            <div id="bar-clopes-periode" style="font-size:1.4rem;">â€”</div>
-            <div id="note-clopes-periode" style="color:#888;">â€”</div>
-          </div>
-          <div style="flex:1">
-            <div style="font-size:.9rem; color:#aaa;">Joints (pÃ©riode)</div>
-            <div id="bar-joints-periode" style="font-size:1.4rem;">â€”</div>
-            <div id="note-joints-periode" style="color:#888;">â€”</div>
-          </div>
-          <div class="row-alcool" style="flex:1">
-            <div style="font-size:.9rem; color:#aaa;">Alcool (pÃ©riode)</div>
-            <div id="bar-alcool-periode" style="font-size:1.4rem;">â€”</div>
-            <div id="note-alcool-periode" style="color:#888;">â€”</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Canvases aux IDs du monolithe -->
-      <div class="row" style="gap:12px; align-items:stretch;">
-        <div style="flex:2; min-height:260px; background:#161616; border:1px solid #222; border-radius:12px; padding:10px;">
-          <canvas id="chart-consommations" style="width:100%; height:240px;"></canvas>
-        </div>
-        <div style="flex:1; min-height:260px; background:#161616; border:1px solid #222; border-radius:12px; padding:10px;">
-          <canvas id="chart-cout-eco" style="width:100%; height:240px;"></canvas>
-        </div>
-      </div>
-
-      <!-- Actions export (exemple) -->
-      <div class="stats-actions">
-        <button class="btn">Exporter la vue actuelle</button>
-        <button class="btn">Importer (CSV/JSON)</button>
-        <button class="btn">Exporter lâ€™historique complet (Excel)</button>
-      </div>
-    </section>
-
-    <!-- Ã‰CRAN : CALENDRIER -->
-    <section id="ecran-calendrier" class="screen">
-      <div id="cal-entete">
-        <button class="btn" id="cal-prev">â†</button>
-        <div id="cal-titre"><strong>Octobre 2025</strong></div>
-        <button class="btn" id="cal-next">â†’</button>
-      </div>
-      <div id="cal-grille">
-        <!-- rendu JS par calendar.js -->
-        <div class="cell">1</div><div class="cell">2</div><div class="cell">3</div><div class="cell">4</div><div class="cell">5</div><div class="cell">6</div><div class="cell">7</div>
-      </div>
-    </section>
-
-    <!-- Ã‰CRAN : HABITUDES -->
-    <section id="ecran-habitudes" class="screen">
-      <h2>Habitudes / Limites</h2>
-      <p>RÃ¨gles quotidiennes, objectifs et jalonsâ€¦</p>
-      <!-- Contenu rendu/lu par limits.js, etc. -->
-    </section>
-
-    <!-- Ã‰CRAN : RÃ‰GLAGES (plein Ã©cran, monolithe) -->
-    <section id="ecran-params" class="screen">
-      <h2>RÃ©glages</h2>
-      <div class="row" style="gap:12px; flex-wrap:wrap; margin: 8px 0 14px;">
-        <button class="btn" id="open-manuel">ðŸ“˜ Manuel</button>
-        <button class="btn" id="open-ressources">ðŸ†˜ Ressources utiles</button>
-        <button class="btn" id="open-cgv">ðŸ“„ CGU / CGV</button>
-        <button class="btn" id="open-mentions">â„¹ï¸ Mentions lÃ©gales</button>
-        <button class="btn" id="open-export-json">ðŸ’¾ Export JSON</button>
-        <button class="btn" id="open-export-csv">ðŸ’¾ Export CSV</button>
-        <button class="btn" id="open-export-view">ðŸ’¾ Export vue Stats</button>
-        <button class="btn" id="open-import">ðŸ“¥ Importer (CSV/JSON)</button>
-      </div>
-
-      <div class="cards" style="grid-template-columns: repeat(2, 1fr);">
-        <div class="card">
-          <h3>Personnalisation</h3>
-          <p>Affichage, modules visibles (clopes/weed/alcool)â€¦</p>
-          <div class="row">
-            <label><input type="checkbox" id="toggle-cigs" checked> Afficher Clopes</label>
-          </div>
-          <div class="row">
-            <label><input type="checkbox" id="toggle-weed" checked> Afficher Joints</label>
-          </div>
-          <div class="row">
-            <label><input type="checkbox" id="toggle-alcool" checked> Afficher Alcool</label>
-          </div>
-        </div>
-        <div class="card">
-          <h3>Prix</h3>
-          <p>Prix des cigarettes, cannabis, alcoolâ€¦</p>
-          <small style="color:#888;">(Saisi gÃ©rÃ©e dans tes modules dÃ©diÃ©s si existants)</small>
-        </div>
-        <div class="card">
-          <h3>Objectifs & Dates</h3>
-          <p>DÃ©finir des jalons, sevrage, etc.</p>
-        </div>
-        <div class="card">
-          <h3>Ã€ propos</h3>
-          <p>Version locale, donnÃ©es stockÃ©es sur lâ€™appareil.</p>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- NAVIGATION BAS (5 onglets, monolithe) -->
-  <nav class="nav">
-    <button id="nav-principal"   class="active">Accueil</button>
-    <button id="nav-stats">Stats</button>
-    <button id="nav-calendrier">Calendrier</button>
-    <button id="nav-habitudes">Habitudes</button>
-    <button id="nav-params">RÃ©glages</button>
-  </nav>
-
-  <!-- MODALE 18+ -->
-  <div id="modal-warn" class="modal" aria-hidden="true">
-    <div class="panel">
-      <h3>Contenu rÃ©servÃ© aux majeurs (+18)</h3>
-      <p>Cette application traite de consommation de tabac, cannabis et alcool.</p>
-      <div style="margin:8px 0;">
-        <label><input type="checkbox" id="chk-warn-18"> Jâ€™ai 18 ans ou plus</label><br>
-        <label><input type="checkbox" id="chk-warn-hide"> Ne plus rÃ©afficher ce message</label>
-      </div>
-      <p><a href="#" id="open-ressources-from-warn">Ressources et numÃ©ros utiles</a></p>
-      <footer>
-        <button id="btn-warn-cancel" class="btn">Annuler</button>
-        <button id="btn-warn-quit" class="btn">Quitter</button>
-        <button id="btn-warn-accept" class="btn" disabled>Jâ€™accepte et continuer</button>
-      </footer>
+  <!-- Stats rapides (jour) -->
+  <div class="stats-rapides">
+    <div class="stat-item">
+      <div class="stat-val" id="bar-clopes">0</div>
+      <div class="stat-lbl">Clopes</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-val" id="bar-joints">0</div>
+      <div class="stat-lbl">Joints</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-val" id="bar-alcool">0</div>
+      <div class="stat-lbl">Alcool</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-val" id="stat-cout-jr">0€</div>
+      <div class="stat-lbl">Coût</div>
     </div>
   </div>
 
-  <!-- SCRIPTS -->
-  <!-- Chart.js UMD v4 (AVANT app.js) -->
-  <script src="./vendor/chart.umd.min.js"></script>
-  <!-- App principal (modules ES) -->
-  <script type="module" src="./js/app.js"></script>
+  <!-- KPIs header (utilisé par web/js/stats.js) -->
+  <div class="stats-header" id="stats-header">
+    <div class="kpi"><div class="kpi-val" id="todayTotal">0</div><div class="kpi-lbl">Total jour</div></div>
+    <div class="kpi"><div class="kpi-val" id="weekTotal">0</div><div class="kpi-lbl">Total semaine</div></div>
+    <div class="kpi"><div class="kpi-val" id="monthTotal">0</div><div class="kpi-lbl">Total mois</div></div>
+    <div class="kpi"><div class="kpi-val" id="todayCost">0 €</div><div class="kpi-lbl">Coût jour</div></div>
+    <div class="kpi"><div class="kpi-val" id="economies-amount">0 €</div><div class="kpi-lbl">Économies</div></div>
+  </div>
+
+  <div class="content">
+    <!-- ======================= ÉCRAN PRINCIPAL ======================= -->
+    <div class="ecran show" id="ecran-principal" aria-label="SA:ECRAN:ACCUEIL" data-sa="screen-home">
+      <!-- Clopes -->
+      <div id="card-cigs" class="card bar-left">
+        <div class="line">
+          <span class="lbl">🚬 Cigarettes</span>
+          <label class="mini-toggle"><input type="checkbox" id="toggle-cigs" checked aria-label="Activer module"></label>
+          <span class="val">0</span>
+        </div>
+        <div class="segment" id="seg-clopes"></div>
+        <div class="pm" aria-label="Actions cigarettes">
+          <button class="btn-round btn-minus" id="cl-moins" type="button">−1</button>
+          <button class="btn-round btn-plus" id="cl-plus" type="button">+1</button>
+        </div>
+      </div>
+
+      <!-- Joints -->
+      <div id="card-weed" class="card bar-left green">
+        <div class="line">
+          <span class="lbl">🌿 Joints</span>
+          <label class="mini-toggle"><input type="checkbox" id="toggle-weed" checked aria-label="Activer module"></label>
+          <span class="val">0</span>
+        </div>
+        <div class="pm" aria-label="Actions joints">
+          <button class="btn-round btn-minus" id="j-moins" type="button">−1</button>
+          <button class="btn-round btn-plus" id="j-plus" type="button">+1</button>
+        </div>
+      </div>
+
+      <!-- Alcool -->
+      <div id="card-alcool" class="card bar-left orange">
+        <div class="line">
+          <span class="lbl">🍺 Alcool</span>
+          <label class="mini-toggle"><input type="checkbox" id="toggle-alcool" checked aria-label="Activer module"></label>
+          <span class="val">0</span>
+        </div>
+        <div class="segment" id="seg-alcool"></div>
+        <div class="pm" aria-label="Actions alcool">
+          <button class="btn-round btn-minus" id="a-moins" type="button">−1</button>
+          <button class="btn-round btn-plus" id="a-plus" type="button">+1</button>
+        </div>
+      </div>
+
+      <!-- Conseil du jour -->
+      <div class="conseil" id="conseil-card">
+        <div id="conseil-texte">—</div>
+        <div class="adv-ctl">
+          <button class="ctl" id="adv-prev" type="button">◀</button>
+          <button class="ctl" id="adv-pause" type="button">⏸</button>
+          <span class="dots">• • •</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======================= ÉCRAN STATS ======================= -->
+    <div class="ecran" id="ecran-stats" aria-label="SA:ECRAN:STATS" data-sa="screen-stats">
+      <!-- ✅ wrapper requis par app.js pour le lazy-init -->
+      <div id="screen-stats">
+        <div class="card">
+          <!-- Boutons d’échelle attendus par web/js/charts.js -->
+          <div class="tabs" role="tablist" id="chartRange">
+            <button class="btn pill active" data-range="day" type="button">Jour</button>
+            <button class="btn pill" data-range="week" type="button">Semaine</button>
+            <button class="btn pill" data-range="month" type="button">Mois</button>
+            <!-- ➕ Ajout “Année” -->
+            <button class="btn pill" data-range="year" type="button">Année</button>
+          </div>
+
+          <div class="banner green">
+            <div class="banner-title" id="stats-titre">—</div>
+            <div class="line"><span class="lbl">Cigarettes</span><span class="val" id="stats-clopes">0</span></div>
+            <div class="line"><span class="lbl">Joints</span><span class="val" id="stats-joints">0</span></div>
+            <div class="line" id="stats-alcool-line" style="display:none">
+              <span class="lbl">Alcool</span><span class="val" id="stats-alcool">0</span>
+            </div>
+          </div>
+
+          <!-- Canvas unique attendu par web/js/charts.js -->
+          <div class="chart-block">
+            <div class="chart-caption">Consommations (unités) / Coût</div>
+            <canvas id="chart-consommations" width="960" height="260"></canvas>
+            <canvas id="chart-cout-eco" width="960" height="220"></canvas>
+          </div>
+
+          <div class="chart-actions" id="chart-actions">
+            <button class="btn" id="btn-export-csv" type="button">Exporter historique complet (Excel)</button>
+            <button class="btn" id="btn-export-stats" type="button">Exporter la vue actuelle</button>
+            <!-- ➕ Import CSV/JSON (+ input caché) -->
+            <button class="btn alt" id="btn-import" type="button">Importer (CSV/JSON)</button>
+            <input type="file" id="input-import" accept=".csv,.json" style="display:none">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======================= ÉCRAN CALENDRIER ======================= -->
+    <div class="ecran" id="ecran-calendrier" aria-label="SA:ECRAN:CALENDRIER" data-sa="screen-cal">
+      <div class="card">
+        <div style="display:flex; gap:8px; margin-bottom:10px; align-items:center; justify-content:space-between">
+          <button class="btn small" id="cal-prev" type="button">◀</button>
+          <div style="font-weight:900; flex:1; text-align:center" id="cal-titre">—</div>
+          <button class="btn small" id="cal-next" type="button">▶</button>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
+      </div>
+    </div>
+
+    <!-- ======================= ÉCRAN HABITUDES ======================= -->
+    <div class="ecran" id="ecran-habitudes">
+      <div class="card">
+        <div class="section-title">⚙️ Limites Consommation/Jour</div>
+        <div class="grid-2">
+          <div class="param"><label>Cigarettes (max/jour)</label><input type="number" min="0" id="limite-clopes" value="20"></div>
+          <div class="param"><label>Joints (max/jour)</label><input type="number" min="0" id="limite-joints" value="3"></div>
+          <div class="param"><label>Bière (max/jour)</label><input type="number" min="0" id="limite-biere" value="2"></div>
+          <div class="param"><label>Alcool fort (max/jour)</label><input type="number" min="0" id="limite-fort" value="1"></div>
+          <div class="param"><label>Liqueur (max/jour)</label><input type="number" min="0" id="limite-liqueur" value="1"></div>
+          <div class="param hint">Les limites apparaissent en orange quand approchées, rouge quand dépassées.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">📊 Habitudes Antérieures (Baseline)</div>
+        <div class="grid-2">
+          <div class="param"><label>Clopes classiques (min)</label><input type="number" min="0" id="hab-min-cl-class" value="0"></div>
+          <div class="param"><label>Clopes classiques (max)</label><input type="number" min="0" id="hab-max-cl-class" value="20"></div>
+          <div class="param"><label>Clopes roulées (min)</label><input type="number" min="0" id="hab-min-cl-roul" value="0"></div>
+          <div class="param"><label>Clopes roulées (max)</label><input type="number" min="0" id="hab-max-cl-roul" value="20"></div>
+          <div class="param"><label>Clopes tubes (min)</label><input type="number" min="0" id="hab-min-cl-tube" value="0"></div>
+          <div class="param"><label>Clopes tubes (max)</label><input type="number" min="0" id="hab-max-cl-tube" value="20"></div>
+          <div class="param"><label>Joints (min)</label><input type="number" min="0" id="hab-min-joint" value="0"></div>
+          <div class="param"><label>Joints (max)</label><input type="number" min="0" id="hab-max-joint" value="5"></div>
+          <div class="param"><label>Bière (min)</label><input type="number" min="0" id="hab-min-biere" value="0"></div>
+          <div class="param"><label>Bière (max)</label><input type="number" min="0" id="hab-max-biere" value="3"></div>
+          <div class="param"><label>Alcool fort (min)</label><input type="number" min="0" id="hab-min-fort" value="0"></div>
+          <div class="param"><label>Alcool fort (max)</label><input type="number" min="0" id="hab-max-fort" value="2"></div>
+          <div class="param"><label>Liqueur (min)</label><input type="number" min="0" id="hab-min-liqueur" value="0"></div>
+          <div class="param"><label>Liqueur (max)</label><input type="number" min="0" id="hab-max-liqueur" value="2"></div>
+          <div class="param hint">Utilisées pour calculer les économies estimées. Tout est optionnel.</div>
+        </div>
+        <button class="btn small" id="btn-save-hab" type="button" style="margin-top:10px">Enregistrer</button>
+      </div>
+
+      <div class="card">
+        <div class="section-title">📅 Dates Clés</div>
+        <div class="grid-2">
+          <div class="param"><label>Réduction clopes</label><input type="date" id="date-reduc-clopes"></div>
+          <div class="param"><label>Stop clopes</label><input type="date" id="date-stop-clopes"></div>
+          <div class="param"><label>Objectif 0 clope</label><input type="date" id="date-no-clopes"></div>
+          <div class="param"><label>Réduction joints</label><input type="date" id="date-reduc-joints"></div>
+          <div class="param"><label>Stop joints</label><input type="date" id="date-stop-joints"></div>
+          <div class="param"><label>Objectif 0 joint</label><input type="date" id="date-no-joints"></div>
+          <div class="param"><label>Réduction alcool</label><input type="date" id="date-reduc-alcool"></div>
+          <div class="param"><label>Stop alcool</label><input type="date" id="date-stop-alcool"></div>
+          <div class="param"><label>Objectif 0 alcool</label><input type="date" id="date-no-alcool"></div>
+          <div class="param hint">Optionnel. Apparaissent sur le calendrier.</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="ecran-params" class="ecran" style="display:none;">
+      <p style="padding: 20px; text-align: center; color: #999;">Réglages</p>
+    </div>
+  </div>
+
+  <!-- ======================= NAV ======================= -->
+  <div class="nav">
+    <button id="nav-principal" class="actif" type="button"><span class="ico">🏠</span>Accueil</button>
+    <button id="nav-stats" type="button"><span class="ico">📊</span>Stats</button>
+    <button id="nav-calendrier" type="button"><span class="ico">📅</span>Calendrier</button>
+    <button id="nav-habitudes" type="button"><span class="ico">⚙️</span>Habitudes</button>
+    <button id="nav-params" type="button"><span class="ico">⚙️</span>Réglages</button>
+  </div>
+</div>
+
+<!-- ======================= MODALE CALENDRIER JOUR ======================= -->
+<div class="modal" id="cal-jour" aria-hidden="true">
+  <div class="sheet" role="dialog" aria-modal="true">
+    <h3 id="cal-jour-titre">—</h3>
+
+    <div class="line"><span class="lbl">Cigarettes</span> <span id="cal-jour-cl"></span></div>
+    <div class="segment" id="cal-jour-seg-cl"></div>
+    <div class="pm" aria-label="Actions cigarettes (jour)">
+      <button class="btn-round btn-minus" id="cal-cl-moins" type="button">−1</button>
+      <button class="btn-round btn-plus" id="cal-cl-plus" type="button">+1</button>
+    </div>
+
+    <div class="divider" style="margin:10px 0"></div>
+
+    <div class="line"><span class="lbl">Joints</span> <span id="cal-jour-j"></span></div>
+    <div class="pm" aria-label="Actions joints (jour)">
+      <button class="btn-round btn-minus" id="cal-j-moins" type="button">−1</button>
+      <button class="btn-round btn-plus" id="cal-j-plus" type="button">+1</button>
+    </div>
+
+    <div class="divider" style="margin:10px 0"></div>
+
+    <div class="line"><span class="lbl">Alcool</span> <span id="cal-jour-a"></span></div>
+    <div class="segment" id="cal-jour-seg-a"></div>
+    <div class="pm" aria-label="Actions alcool (jour)">
+      <button class="btn-round btn-minus" id="cal-a-moins" type="button">−1</button>
+      <button class="btn-round btn-plus" id="cal-a-plus" type="button">+1</button>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; margin-top:12px">
+      <button class="btn alt" id="cal-jour-raz" type="button">RAZ du jour</button>
+      <button class="btn" id="cal-jour-fermer" type="button">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Snackbar -->
+<div class="snackbar" id="snackbar">Action enregistrée — <a href="#" id="undo-link">Annuler</a></div>
+
+<!-- ======================= MODALE AVERTISSEMENT (18+) ======================= -->
+<div class="modal" id="modal-warn" aria-hidden="true">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="warn-title">
+    <h3 class="warn-title" id="warn-title">Avertissement – Public majeur (18+)</h3>
+    <div class="warn-box">
+      <p><strong>StopAddict</strong> est une application d'auto-suivi et d'aide à la réduction/arrêt des consommations (tabac, alcool, cannabis).</p>
+      <ul class="warn-list">
+        <li>Réservée aux personnes de 18 ans et plus.</li>
+        <li>Ne fait pas la promotion de ces produits.</li>
+        <li>Ne remplace pas un accompagnement médical, psychologique ou social. En cas de difficulté, consultez un professionnel.</li>
+        <li>Utilisez StopAddict de façon responsable.</li>
+      </ul>
+      <p class="warn-note">Besoin d'aide ? <a href="#" id="open-ressources-from-warn">Ressources et numéros utiles</a></p>
+      <div style="margin-top:8px">
+        <label><input type="checkbox" id="chk-warn-18"> J'ai 18 ans ou plus</label><br>
+        <label><input type="checkbox" id="chk-warn-hide"> Ne plus réafficher ce message</label>
+      </div>
+      <div class="warn-actions">
+        <button class="btn warn" id="btn-warn-quit" type="button">Quitter</button>
+        <div class="right">
+          <button class="btn alt" id="btn-warn-cancel" type="button">Annuler</button>
+          <button class="btn" id="btn-warn-accept" type="button" disabled>J'accepte et continuer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= MODALE PAGES (Manuel / CGV / Mentions / Ressources) ======================= -->
+<div class="modal" id="modal-page" aria-hidden="true">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="page-title">
+    <h3 class="pages-title" id="page-title">—</h3>
+    <div class="page-content" id="page-content">
+      <!-- Contenu injecté par JS -->
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px">
+      <button class="btn alt" id="btn-page-close" type="button">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Vendor (Chart.js ou fallback local) -->
+<script src="./js/vendor/chart.umd.min.js"></script>
+<!-- App -->
+<script type="module" src="./js/app.js"></script>
 </body>
 </html>
