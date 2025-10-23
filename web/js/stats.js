@@ -1,149 +1,83 @@
 // ============================================================
-// stats.js — Bannière stats + onglets range (PHASE 2)
+// stats.js — Bannière KPIs (PHASE 2, aligné Claude)
 // ============================================================
-// Adapté : utilise state.js pour les données, délègue graphiques à charts.js
+// Pas de graphiques ici. On écoute charts.js & state.js et on
+// met à jour le titre et les 3 valeurs (clopes/joints/alcool).
 // ============================================================
 
-import { getDaily, on, emit } from "./state.js";
+import { on, getTotalsForRange } from "./state.js";
 
 console.log("[stats.js] Module loaded");
 
-// ============================================================
-// Helpers DOM
-// ============================================================
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => Array.from(document.querySelectorAll(sel));
-
-// ============================================================
-// Label range
-// ============================================================
-function labelForRange(range) {
-  const map = {
-    day: "Aujourd'hui",
-    week: "Cette semaine",
-    month: "Ce mois",
-    year: "Cette année",
-  };
-  return map[range] || "Période";
+function labelForRange(r) {
+  if (r === "week") return "Semaine";
+  if (r === "month") return "Mois";
+  if (r === "year") return "Année"; // fallback logique côté state → "day"
+  return "Jour";
 }
 
-// ============================================================
-// Refresh Bannière
-// ============================================================
-function refreshBanner(counts) {
+function currentRangeFromUI() {
+  const active = document.querySelector('#chartRange .btn.pill.active');
+  return active?.dataset?.range || "day";
+}
+
+function updateBanner(range, totals) {
   try {
-    const titre = $("#stats-titre");
-    if (titre) titre.textContent = labelForRange(getCurrentRange());
+    const titre = document.getElementById("stats-titre");
+    const elC = document.getElementById("stats-clopes");
+    const elJ = document.getElementById("stats-joints");
+    const elA = document.getElementById("stats-alcool");
+    const alcoolLine = document.getElementById("stats-alcool-line");
 
-    const vC = $("#stats-clopes");
-    const vJ = $("#stats-joints");
-    const vA = $("#stats-alcool");
-    const lineA = $("#stats-alcool-line");
+    if (titre) titre.textContent = `Bilan ${labelForRange(range)} — Total ${totals.total ?? 0}`;
 
-    if (vC) vC.textContent = String(counts?.cigs || 0);
-    if (vJ) vJ.textContent = String(counts?.weed || 0);
+    if (elC) elC.textContent = String(totals.cigs ?? 0);
+    if (elJ) elJ.textContent = String(totals.weed ?? 0);
 
-    const hasAlcool = (counts?.alcohol || 0) > 0;
-    if (lineA) lineA.style.display = hasAlcool ? "" : "none";
-    if (vA) vA.textContent = String(counts?.alcohol || 0);
+    // Alcool visible si présent (sinon on laisse comme en HTML)
+    const a = Number(totals.alcohol ?? 0);
+    if (elA) elA.textContent = String(a);
+    if (alcoolLine) alcoolLine.style.display = a > 0 ? "" : ""; // on n'impose plus le hide ici
 
-    // KPIs header (jour)
-    const todayTotal = $("#todayTotal");
-    if (todayTotal) {
-      todayTotal.textContent = String(
-        (counts?.cigs || 0) + (counts?.weed || 0) + (counts?.alcohol || 0)
-      );
-    }
-
-    console.log("[stats.refreshBanner] Updated with:", counts);
+    console.log("[stats.updateBanner]", { range, totals });
   } catch (e) {
-    console.error("[stats.refreshBanner] error:", e);
-  }
-}
-
-// ============================================================
-// Range buttons
-// ============================================================
-let currentRange = "day";
-
-function getCurrentRange() {
-  return currentRange;
-}
-
-function bindRangeButtons() {
-  const container = $("#chartRange");
-  if (!container) {
-    console.warn("[stats] ⚠️ #chartRange container not found");
-    return;
-  }
-
-  const buttons = $$("#chartRange .btn.pill");
-  console.log("[stats.bindRangeButtons] Found", buttons.length, "buttons");
-
-  function setActive(btn) {
-    buttons.forEach((b) => b.classList.remove("active"));
-    if (btn) btn.classList.add("active");
-  }
-
-  buttons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const r = btn.dataset.range || "day";
-      currentRange = r;
-      setActive(btn);
-      console.log("[stats] Range clicked:", r);
-      // charts.js écoute ce event et redessine
-      emit("charts:range-changed", { range: r });
-    });
-  });
-
-  // Active initial
-  if (buttons.length > 0) setActive(buttons[0]);
-  console.log("[stats.bindRangeButtons] ✓ Buttons wired");
-}
-
-// ============================================================
-// State Listeners
-// ============================================================
-function setupStateListener() {
-  console.log("[stats.setupStateListener] Subscribing to state events...");
-
-  on("sa:counts-updated", (e) => {
-    try {
-      const counts = e.detail?.counts || getDaily();
-      refreshBanner(counts);
-    } catch (err) {
-      console.error("[stats.setupStateListener] error:", err);
-    }
-  });
-
-  console.log("[stats.setupStateListener] ✓ Listener attached");
-}
-
-// ============================================================
-// Public API (compatibilité app.js)
-// ============================================================
-export function refreshStatsFromCounts(counts) {
-  try {
-    refreshBanner(counts);
-  } catch (e) {
-    console.error("[stats.refreshStatsFromCounts] error:", e);
+    console.error("[stats.updateBanner] error:", e);
   }
 }
 
 export function initStats() {
-  console.log("[stats.initStats] Starting...");
-  try {
-    bindRangeButtons();
-    setupStateListener();
+  console.log("[stats.init] start");
 
-    // Render initial (jour)
-    const today = getDaily();
-    refreshBanner(today);
+  // 1) quand charts.js rend, il émet "charts:totals"
+  on("charts:totals", (e) => {
+    const range = e.detail?.range || currentRangeFromUI();
+    const totals = e.detail?.totals || getTotalsForRange(range);
+    updateBanner(range, totals);
+  });
 
-    console.log("[stats.initStats] ✓ Ready");
-  } catch (e) {
-    console.error("[stats.initStats] error:", e);
-  }
+  // 2) si on change d’écran → rafraîchir la bannière
+  on("sa:route-changed", (e) => {
+    if (e.detail?.screen === "ecran-stats") {
+      const range = currentRangeFromUI();
+      const totals = getTotalsForRange(range);
+      updateBanner(range, totals);
+    }
+  });
+
+  // 3) sécurité : si des compteurs bougent alors qu’on est sur stats
+  on("sa:counts-updated", () => {
+    const stats = document.getElementById("ecran-stats");
+    if (stats?.classList.contains("show")) {
+      const range = currentRangeFromUI();
+      const totals = getTotalsForRange(range);
+      updateBanner(range, totals);
+    }
+  });
+
+  // 4) initial minimal (si on ouvre directement la page sur Stats)
+  const firstRange = currentRangeFromUI();
+  const firstTotals = getTotalsForRange(firstRange);
+  updateBanner(firstRange, firstTotals);
+
+  console.log("[stats.init] ready ✓");
 }
-
-console.log("[stats.js] ✓ Ready");
