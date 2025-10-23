@@ -1,160 +1,271 @@
 <!doctype html>
 <html lang="fr">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>StopAddict — Phase 2</title>
-<style>
-:root {
-  --bg:#0b1220;
-  --panel:#0e1729;
-  --card:#111a2e;
-  --grid:#1a2642;
-  --text:#e5e7eb;
-  --muted:#9ca3af;
-  --ok:#10b981;
-  --err:#ef4444;
-  --blue:#3b82f6;
-  --green:#22c55e;
-  --orange:#f59e0b;
-}
+  <meta charset="utf-8">
+  <title>StopAddict</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 
-/* RESET + STRUCTURE */
-*{box-sizing:border-box;margin:0;padding:0;}
-body{background:var(--bg);color:var(--text);font-family:Inter,Arial,sans-serif;}
-main{display:flex;flex-direction:column;align-items:center;padding-bottom:90px;}
-header{position:fixed;top:0;left:0;right:0;background:var(--panel);color:var(--text);
-  display:flex;justify-content:space-between;align-items:center;padding:8px 16px;
-  border-bottom:1px solid var(--grid);z-index:3;}
-header h1{font-size:18px;cursor:pointer;}
-header .date{font-size:14px;opacity:.8;}
+  <!-- CSS principal (monolithe avait surtout du inline ; on ajoute le link pour que tes rÃ¨gles sâ€™appliquent) -->
+  <link rel="stylesheet" href="./css/app.css">
 
-/* DEBUG CONSOLE */
-.debug-console{
-  position:fixed;top:64px;left:0;right:0;
-  background:rgba(0,0,0,.95);color:#b5f7b7;
-  font:14px/1.4 ui-monospace,Menlo,monospace;
-  padding:6px 8px;max-height:50vh;overflow:auto;
-  z-index:9999;border-bottom:2px solid #34d399;
-  display:none;
-}
+  <style>
+    /* Base minimale pour la dÃ©mo (tu peux garder ton gros bloc inline du monolithe ici si besoin) */
+    :root { --bg:#0a0a0a; --fg:#fff; --muted:#999; --accent:#32b87b; --warn:#e86; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol"; background:#111; color:#eee; }
+    header, footer { background:#151515; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 12px; }
+    h1,h2,h3 { margin: 0.2rem 0 0.6rem; }
+    .row { display:flex; gap:.75rem; align-items:center; }
+    .chip { display:inline-block; padding:.25rem .5rem; border-radius:999px; background:#222; border:1px solid #333; margin-right:.5rem; font-size:.9rem; }
+    .chip-alcool { background:#202226; }
+    .cards { display:grid; grid-template-columns: repeat(3, 1fr); gap:.75rem; }
+    .card { background:#161616; border:1px solid #222; border-radius:12px; padding:12px; }
+    .hide { display:none !important; }
 
-/* NAV */
-nav{position:fixed;bottom:0;left:0;right:0;background:var(--panel);
-  display:flex;justify-content:space-around;align-items:center;height:56px;
-  border-top:1px solid var(--grid);z-index:2;}
-nav button{background:none;border:none;color:var(--text);font-size:14px;cursor:pointer;}
-nav button.active{color:var(--blue);}
+    /* BanniÃ¨res */
+    #banner-accueil, #banner-stats { background:#1a1a1a; border:1px solid #222; border-radius:12px; padding:12px; margin:12px 0; }
+    #banner-stats { border-left: 4px solid #32b87b; }
+    .row-alcool { opacity: .95; }
 
-/* SECTIONS */
-section{display:none;padding:70px 12px 60px;width:100%;max-width:800px;}
-section.active{display:block;}
-.cards{display:flex;justify-content:space-around;margin-top:20px;}
-.card{background:var(--card);border-radius:10px;padding:10px 16px;text-align:center;width:30%;}
-.card .val{font-size:28px;color:var(--blue);}
-.card h3{font-size:14px;margin-top:4px;color:var(--muted);}
-.btn-row{display:flex;justify-content:center;gap:8px;margin-top:10px;}
-.btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:6px 12px;cursor:pointer;}
-.btn.alt{background:var(--muted);}
-.bar-top{display:flex;justify-content:space-around;padding:8px;background:var(--panel);border-radius:8px;margin-top:8px;}
-.bar-top div{font-size:16px;color:var(--ok);}
-#advice-bar{background:var(--orange);color:#111;padding:8px;margin-top:20px;border-radius:8px;}
+    /* Nav bas */
+    .nav { position:fixed; left:0; right:0; bottom:0; background:#151515; border-top:1px solid #222; display:flex; }
+    .nav button { flex:1; background:transparent; border:0; color:#ccc; padding:.8rem .4rem; font-size:.95rem; }
+    .nav button.active, .nav button.actif { color:#fff; border-bottom: 2px solid #32b87b; }
 
-/* STATS */
-#stats-wrap{display:flex;flex-direction:column;gap:16px;max-height:80vh;overflow:auto;}
-.chart-box{background:var(--card);padding:10px;border-radius:8px;min-height:280px;position:relative;}
-#chartRange{display:flex;gap:6px;justify-content:center;margin-bottom:8px;}
-.btn.pill{background:var(--grid);border-radius:20px;padding:4px 10px;font-size:13px;color:var(--text);cursor:pointer;}
-.btn.pill.active{background:var(--blue);color:#fff;}
-.stats-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:12px;}
-.stats-header{display:flex;justify-content:space-around;font-size:15px;color:var(--muted);}
+    /* Ã‰crans */
+    .screen { display:none; min-height: calc(100dvh - 56px - 56px); padding-bottom: 76px; }
+    .screen.show, .screen.active, .screen.actif { display:block; }
 
-/* PLACEHOLDERS */
-.placeholder{text-align:center;margin-top:40px;color:var(--muted);font-size:15px;}
-</style>
+    /* Modale 18+ (simple) */
+    .modal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.6); z-index:1000; }
+    .modal.show { display:flex; }
+    .modal .panel { width:min(680px, 92vw); background:#141414; border:1px solid #333; border-radius:14px; padding:16px; }
+    .modal .panel h3 { margin-top: 0; }
+    .modal .panel footer { display:flex; gap:.5rem; justify-content:flex-end; background:transparent; border:0; padding:0; margin-top:10px; }
+    .btn { border:1px solid #2a2a2a; background:#1b1b1b; color:#eee; padding:.5rem .75rem; border-radius:10px; cursor:pointer; }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+
+    /* Calendrier (placeholder simple) */
+    #cal-entete { display:flex; align-items:center; justify-content:space-between; margin: 8px 0 12px; }
+    #cal-grille { display:grid; grid-template-columns: repeat(7, 1fr); gap:6px; }
+    #cal-grille .cell { background:#161616; border:1px solid #222; border-radius:8px; padding:10px; min-height:54px; }
+
+    /* Zone export actions (Stats) */
+    .stats-actions { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:10px; }
+  </style>
 </head>
-
 <body>
-<header>
-  <h1 id="hdr-title">StopAddict</h1>
-  <div class="date" id="hdr-date"></div>
-</header>
 
-<div id="debug-console" class="debug-console"></div>
-
-<main>
-  <!-- ACCUEIL -->
-  <section id="ecran-accueil" class="active">
-    <div class="bar-top">
-      <div id="bar-clopes">0</div>
-      <div id="bar-joints">0</div>
-      <div id="bar-alcool">0</div>
-    </div>
-    <div class="cards">
-      <div class="card" id="card-cigs"><div class="val">0</div><h3>Cigarettes</h3>
-        <div class="btn-row"><button id="cl-moins" class="btn alt">−</button><button id="cl-plus" class="btn">+</button></div>
+  <!-- HEADER (date/heure) -->
+  <header>
+    <div class="wrap row" style="justify-content:space-between;">
+      <div class="row">
+        <strong>StopAddict</strong>
       </div>
-      <div class="card" id="card-weed"><div class="val">0</div><h3>Joints</h3>
-        <div class="btn-row"><button id="j-moins" class="btn alt">−</button><button id="j-plus" class="btn">+</button></div>
-      </div>
-      <div class="card" id="card-alcool"><div class="val">0</div><h3>Alcool</h3>
-        <div class="btn-row"><button id="a-moins" class="btn alt">−</button><button id="a-plus" class="btn">+</button></div>
+      <div class="row" style="gap:10px;">
+        <span id="date-actuelle" aria-label="date du jour">â€”</span>
+        <span id="heure-actuelle" aria-label="heure actuelle" style="color:#aaa;">â€”</span>
       </div>
     </div>
-    <div id="advice-bar">Conseils à venir (Phase 3)</div>
-  </section>
+  </header>
 
-  <!-- STATS -->
-  <section id="ecran-stats">
-    <div class="stats-header" id="stats-summary">
-      <div>Cigarettes: 0</div>
-      <div>Joints: 0</div>
-      <div>Alcool: 0</div>
+  <main class="wrap">
+    <!-- Ã‰CRAN : ACCUEIL -->
+    <section id="ecran-principal" class="screen show actif active">
+      <!-- Bandeau Accueil (monolithe) -->
+      <div id="banner-accueil">
+        <div id="hello-accueil">Bonjour ðŸ‘‹</div>
+        <div id="chips-accueil" style="margin:6px 0 10px;">
+          <span class="chip">Conseils du jour</span>
+        </div>
+        <div class="row">
+          <div style="flex:1">
+            <div style="font-size:.9rem; color:#aaa;">Cigarettes</div>
+            <div id="bar-clopes" style="font-size:1.4rem;">â€”</div>
+            <div id="note-clopes" style="color:#888;">â€”</div>
+          </div>
+          <div style="flex:1">
+            <div style="font-size:.9rem; color:#aaa;">Joints</div>
+            <div id="bar-joints" style="font-size:1.4rem;">â€”</div>
+            <div id="note-joints" style="color:#888;">â€”</div>
+          </div>
+          <div class="row-alcool" style="flex:1">
+            <div style="font-size:.9rem; color:#aaa;">Alcool</div>
+            <div id="bar-alcool" style="font-size:1.4rem;">â€”</div>
+            <div id="note-alcool" style="color:#888;">â€”</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tes cartes actions (placeholders, tu peux conserver ta version) -->
+      <div class="cards" style="margin-top:12px;">
+        <div class="card" id="card-cigs">
+          <h3>Clopes</h3>
+          <div class="row">
+            <button class="btn" id="cl-moins">âˆ’</button>
+            <button class="btn" id="cl-plus">+</button>
+          </div>
+        </div>
+        <div class="card" id="card-weed">
+          <h3>Joints</h3>
+          <div class="row">
+            <button class="btn" id="j-moins">âˆ’</button>
+            <button class="btn" id="j-plus">+</button>
+          </div>
+        </div>
+        <div class="card" id="card-alcool">
+          <h3>Alcool</h3>
+          <div class="row">
+            <button class="btn" id="a-moins">âˆ’</button>
+            <button class="btn" id="a-plus">+</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Ã‰CRAN : STATS -->
+    <section id="ecran-stats" class="screen">
+      <!-- BanniÃ¨re Stats (monolithe) -->
+      <div id="banner-stats">
+        <div id="hello-stats">Statistiques â€” Aujourdâ€™hui</div>
+        <div id="chips-stats" style="margin:6px 0 10px;">
+          <span class="chip">Clopes : <strong>â€”</strong></span>
+          <span class="chip">Joints : <strong>â€”</strong></span>
+          <span class="chip chip-alcool">Alcool : <strong>â€”</strong></span>
+        </div>
+        <div class="row">
+          <div style="flex:1">
+            <div style="font-size:.9rem; color:#aaa;">Clopes (pÃ©riode)</div>
+            <div id="bar-clopes-periode" style="font-size:1.4rem;">â€”</div>
+            <div id="note-clopes-periode" style="color:#888;">â€”</div>
+          </div>
+          <div style="flex:1">
+            <div style="font-size:.9rem; color:#aaa;">Joints (pÃ©riode)</div>
+            <div id="bar-joints-periode" style="font-size:1.4rem;">â€”</div>
+            <div id="note-joints-periode" style="color:#888;">â€”</div>
+          </div>
+          <div class="row-alcool" style="flex:1">
+            <div style="font-size:.9rem; color:#aaa;">Alcool (pÃ©riode)</div>
+            <div id="bar-alcool-periode" style="font-size:1.4rem;">â€”</div>
+            <div id="note-alcool-periode" style="color:#888;">â€”</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Canvases aux IDs du monolithe -->
+      <div class="row" style="gap:12px; align-items:stretch;">
+        <div style="flex:2; min-height:260px; background:#161616; border:1px solid #222; border-radius:12px; padding:10px;">
+          <canvas id="chart-consommations" style="width:100%; height:240px;"></canvas>
+        </div>
+        <div style="flex:1; min-height:260px; background:#161616; border:1px solid #222; border-radius:12px; padding:10px;">
+          <canvas id="chart-cout-eco" style="width:100%; height:240px;"></canvas>
+        </div>
+      </div>
+
+      <!-- Actions export (exemple) -->
+      <div class="stats-actions">
+        <button class="btn">Exporter la vue actuelle</button>
+        <button class="btn">Importer (CSV/JSON)</button>
+        <button class="btn">Exporter lâ€™historique complet (Excel)</button>
+      </div>
+    </section>
+
+    <!-- Ã‰CRAN : CALENDRIER -->
+    <section id="ecran-calendrier" class="screen">
+      <div id="cal-entete">
+        <button class="btn" id="cal-prev">â†</button>
+        <div id="cal-titre"><strong>Octobre 2025</strong></div>
+        <button class="btn" id="cal-next">â†’</button>
+      </div>
+      <div id="cal-grille">
+        <!-- rendu JS par calendar.js -->
+        <div class="cell">1</div><div class="cell">2</div><div class="cell">3</div><div class="cell">4</div><div class="cell">5</div><div class="cell">6</div><div class="cell">7</div>
+      </div>
+    </section>
+
+    <!-- Ã‰CRAN : HABITUDES -->
+    <section id="ecran-habitudes" class="screen">
+      <h2>Habitudes / Limites</h2>
+      <p>RÃ¨gles quotidiennes, objectifs et jalonsâ€¦</p>
+      <!-- Contenu rendu/lu par limits.js, etc. -->
+    </section>
+
+    <!-- Ã‰CRAN : RÃ‰GLAGES (plein Ã©cran, monolithe) -->
+    <section id="ecran-params" class="screen">
+      <h2>RÃ©glages</h2>
+      <div class="row" style="gap:12px; flex-wrap:wrap; margin: 8px 0 14px;">
+        <button class="btn" id="open-manuel">ðŸ“˜ Manuel</button>
+        <button class="btn" id="open-ressources">ðŸ†˜ Ressources utiles</button>
+        <button class="btn" id="open-cgv">ðŸ“„ CGU / CGV</button>
+        <button class="btn" id="open-mentions">â„¹ï¸ Mentions lÃ©gales</button>
+        <button class="btn" id="open-export-json">ðŸ’¾ Export JSON</button>
+        <button class="btn" id="open-export-csv">ðŸ’¾ Export CSV</button>
+        <button class="btn" id="open-export-view">ðŸ’¾ Export vue Stats</button>
+        <button class="btn" id="open-import">ðŸ“¥ Importer (CSV/JSON)</button>
+      </div>
+
+      <div class="cards" style="grid-template-columns: repeat(2, 1fr);">
+        <div class="card">
+          <h3>Personnalisation</h3>
+          <p>Affichage, modules visibles (clopes/weed/alcool)â€¦</p>
+          <div class="row">
+            <label><input type="checkbox" id="toggle-cigs" checked> Afficher Clopes</label>
+          </div>
+          <div class="row">
+            <label><input type="checkbox" id="toggle-weed" checked> Afficher Joints</label>
+          </div>
+          <div class="row">
+            <label><input type="checkbox" id="toggle-alcool" checked> Afficher Alcool</label>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Prix</h3>
+          <p>Prix des cigarettes, cannabis, alcoolâ€¦</p>
+          <small style="color:#888;">(Saisi gÃ©rÃ©e dans tes modules dÃ©diÃ©s si existants)</small>
+        </div>
+        <div class="card">
+          <h3>Objectifs & Dates</h3>
+          <p>DÃ©finir des jalons, sevrage, etc.</p>
+        </div>
+        <div class="card">
+          <h3>Ã€ propos</h3>
+          <p>Version locale, donnÃ©es stockÃ©es sur lâ€™appareil.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- NAVIGATION BAS (5 onglets, monolithe) -->
+  <nav class="nav">
+    <button id="nav-principal"   class="active">Accueil</button>
+    <button id="nav-stats">Stats</button>
+    <button id="nav-calendrier">Calendrier</button>
+    <button id="nav-habitudes">Habitudes</button>
+    <button id="nav-params">RÃ©glages</button>
+  </nav>
+
+  <!-- MODALE 18+ -->
+  <div id="modal-warn" class="modal" aria-hidden="true">
+    <div class="panel">
+      <h3>Contenu rÃ©servÃ© aux majeurs (+18)</h3>
+      <p>Cette application traite de consommation de tabac, cannabis et alcool.</p>
+      <div style="margin:8px 0;">
+        <label><input type="checkbox" id="chk-warn-18"> Jâ€™ai 18 ans ou plus</label><br>
+        <label><input type="checkbox" id="chk-warn-hide"> Ne plus rÃ©afficher ce message</label>
+      </div>
+      <p><a href="#" id="open-ressources-from-warn">Ressources et numÃ©ros utiles</a></p>
+      <footer>
+        <button id="btn-warn-cancel" class="btn">Annuler</button>
+        <button id="btn-warn-quit" class="btn">Quitter</button>
+        <button id="btn-warn-accept" class="btn" disabled>Jâ€™accepte et continuer</button>
+      </footer>
     </div>
-    <div id="chartRange">
-      <div class="btn pill active" data-range="day">Jour</div>
-      <div class="btn pill" data-range="week">Semaine</div>
-      <div class="btn pill" data-range="month">Mois</div>
-      <div class="btn pill" data-range="year">Année</div>
-    </div>
-    <div id="stats-wrap">
-      <div class="chart-box"><canvas id="chart-consommations"></canvas></div>
-      <div class="chart-box"><canvas id="chart-cout-eco"></canvas></div>
-    </div>
-    <div class="stats-actions">
-      <button class="btn alt">Exporter la vue actuelle</button>
-      <button class="btn alt">Importer CSV/JSON</button>
-      <button class="btn">Exporter historique complet (Excel)</button>
-    </div>
-  </section>
+  </div>
 
-  <!-- CALENDRIER -->
-  <section id="ecran-calendrier">
-    <div class="placeholder">Calendrier à venir (Phase 3)</div>
-  </section>
-
-  <!-- HABITUDES -->
-  <section id="ecran-habitudes">
-    <div class="placeholder">Habitudes à venir (Phase 3)</div>
-  </section>
-
-  <!-- REGLAGES -->
-  <section id="ecran-reglages">
-    <div class="placeholder">Réglages à venir (Phase 3)</div>
-  </section>
-</main>
-
-<nav>
-  <button data-screen="ecran-accueil" class="active">Accueil</button>
-  <button data-screen="ecran-stats">Stats</button>
-  <button data-screen="ecran-calendrier">Calendrier</button>
-  <button data-screen="ecran-habitudes">Habitudes</button>
-  <button data-screen="ecran-reglages">Réglages</button>
-</nav>
-
-<!-- Vendor Chart.js -->
-<script src="./js/vendor/chart.umd.min.js"></script>
-<!-- App -->
-<script type="module" src="./js/app.js"></script>
+  <!-- SCRIPTS -->
+  <!-- Chart.js UMD v4 (AVANT app.js) -->
+  <script src="./vendor/chart.umd.min.js"></script>
+  <!-- App principal (modules ES) -->
+  <script type="module" src="./js/app.js"></script>
 </body>
 </html>
