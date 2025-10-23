@@ -1,45 +1,35 @@
 // ============================================================
-// app.js — Boot, Routing, Debug, Date/Heure (phase 2, aligné Claude)
+// app.js — Boot, Routing, Lazy Init (PHASE 2)
 // ============================================================
 
 import { initModals } from "./modals.js";
-import { initCounters } from "./counters.js";
+import { initCounters, getTodayCounts } from "./counters.js";
+import { initStats, refreshStatsFromCounts } from "./stats.js";
 import { initCharts } from "./charts.js";
-import { on as onState, emit as emitState } from "./state.js";
 
 console.log("[app.js] Module loaded");
 
-// ---------- utils DOM ----------
-const $ = (sel, root = document) => root.querySelector(sel);
+// ------------------------------
+// Helpers DOM
+// ------------------------------
+const $  = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
-const on = (el, evt, fn) => el && el.addEventListener(evt, fn);
 
-// ---------- toast ----------
-function showToast(msg, ms = 2500) {
+// ------------------------------
+// Toast (réutilise #snackbar)
+// ------------------------------
+function showToast(message, duration = 2500) {
   const bar = $("#snackbar");
   if (!bar) return;
-  bar.textContent = msg;
+  bar.textContent = message;
   bar.classList.add("show");
-  setTimeout(() => bar.classList.remove("show"), ms);
+  setTimeout(() => bar.classList.remove("show"), duration);
 }
+window.__showToast = showToast; // utile pour d'autres modules si besoin
 
-// ---------- header: date / heure ----------
-function startClock() {
-  const elDate = $("#date-actuelle");
-  const elTime = $("#heure-actuelle");
-  const fmtDate = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
-  const fmtTime = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" });
-
-  function tick() {
-    const now = new Date();
-    if (elDate) elDate.textContent = fmtDate.format(now);
-    if (elTime) elTime.textContent = fmtTime.format(now);
-  }
-  tick();
-  setInterval(tick, 1000);
-}
-
-// ---------- debug console (5 taps header) ----------
+// ------------------------------
+// Debug console (5 taps sur header)
+// ------------------------------
 (function setupDebugConsoleToggle() {
   const header = $(".header");
   const dbg = $("#debug-console");
@@ -47,10 +37,13 @@ function startClock() {
 
   let tapCount = 0;
   let lastTap = 0;
-  on(header, "click", () => {
+
+  header.addEventListener("click", () => {
     const now = Date.now();
-    tapCount = (now - lastTap < 800) ? tapCount + 1 : 1;
+    if (now - lastTap < 800) tapCount += 1;
+    else tapCount = 1;
     lastTap = now;
+
     if (tapCount >= 5) {
       dbg.classList.toggle("show");
       showToast(dbg.classList.contains("show") ? "Debug visible" : "Debug masqué");
@@ -59,72 +52,104 @@ function startClock() {
   });
 })();
 
-// ---------- routing ----------
+// Petit logger vers la console flottante (optionnel)
+function uiLog(msg) {
+  const dbg = $("#debug-console");
+  if (!dbg) return;
+  const line = document.createElement("div");
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  dbg.appendChild(line);
+}
+
+// ------------------------------
+// Horloge (date + heure header)
+// ------------------------------
+function startClock() {
+  const elDate  = $("#date-actuelle");
+  const elHeure = $("#heure-actuelle");
+  if (!elDate || !elHeure) return;
+
+  const tick = () => {
+    const now = new Date();
+    elDate.textContent  = now.toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" });
+    elHeure.textContent = now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  };
+  tick();
+  setInterval(tick, 1000);
+}
+
+// ------------------------------
+// ROUTING — Basculer entre écrans
+// ------------------------------
 const ECRANS = [
   "ecran-principal",
   "ecran-stats",
   "ecran-calendrier",
   "ecran-habitudes",
-  "ecran-params"
+  "ecran-params",
 ];
 
-function switchTo(screenId) {
+function switchTo(ecranId) {
   ECRANS.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
-    if (id === screenId) el.classList.add("show");
-    else el.classList.remove("show");
+    el.classList.toggle("show", id === ecranId);
   });
 
-  // nav active
+  // Nav active
   const map = {
-    "ecran-principal": "nav-principal",
-    "ecran-stats": "nav-stats",
+    "ecran-principal":  "nav-principal",
+    "ecran-stats":      "nav-stats",
     "ecran-calendrier": "nav-calendrier",
-    "ecran-habitudes": "nav-habitudes",
-    "ecran-params": "nav-params",
+    "ecran-habitudes":  "nav-habitudes",
+    "ecran-params":     "nav-params",
   };
-  $$(".nav button").forEach(b => b.classList.remove("actif"));
-  const activeBtn = document.getElementById(map[screenId]);
-  if (activeBtn) activeBtn.classList.add("actif");
+  Object.entries(map).forEach(([screenId, navId]) => {
+    const btn = document.getElementById(navId);
+    if (btn) btn.classList.toggle("actif", screenId === ecranId);
+  });
 
-  // notifier les modules (charts, stats…) qu’on a changé d’écran
-  emitState("sa:route-changed", { screen: screenId });
+  // Événement global (lazy init éventuel)
+  window.dispatchEvent(new CustomEvent("sa:route-changed", { detail: { screen: ecranId } }));
+  uiLog(`Route: ${ecranId}`);
 }
 
 function bindNav() {
-  const pairs = [
-    ["nav-principal", "ecran-principal"],
-    ["nav-stats", "ecran-stats"],
+  const bindings = [
+    ["nav-principal",  "ecran-principal"],
+    ["nav-stats",      "ecran-stats"],
     ["nav-calendrier", "ecran-calendrier"],
-    ["nav-habitudes", "ecran-habitudes"],
-    ["nav-params", "ecran-params"],
+    ["nav-habitudes",  "ecran-habitudes"],
+    ["nav-params",     "ecran-params"],
   ];
-  pairs.forEach(([btnId, screenId]) => {
-    const btn = document.getElementById(btnId);
-    on(btn, "click", () => switchTo(screenId));
+  bindings.forEach(([navId, screenId]) => {
+    const btn = document.getElementById(navId);
+    if (btn) btn.addEventListener("click", () => switchTo(screenId));
   });
 }
 
-// ---------- boot ----------
+// ------------------------------
+// BOOT
+// ------------------------------
 function boot() {
-  console.log("[app.boot] starting…");
-
-  // phase 1
-  initModals();
-
-  // phase 2
-  initCounters();   // +/− accueil (émet sa:counts-updated via state.js)
-  initCharts();     // graphiques + onglets (écoute sa:counts-updated)
-
-  // horloge & date
+  uiLog("Boot…");
+  bindNav();
   startClock();
 
-  // nav
-  bindNav();
+  // Init modules
+  initModals();
+  initCounters();
+  initCharts();
+  initStats();
+
+  // Première remontée des stats depuis les compteurs du jour
+  const todayCounts = getTodayCounts();
+  refreshStatsFromCounts(todayCounts);
+
+  // Écran par défaut (déjà visible dans HTML, mais on synchronise nav)
   switchTo("ecran-principal");
 
-  console.log("[app.boot] ready ✓");
+  uiLog("✓ App prête (PHASE 2)");
 }
 
-window.addEventListener("DOMContentLoaded", boot);
+document.addEventListener("DOMContentLoaded", boot);
