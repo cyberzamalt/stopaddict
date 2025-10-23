@@ -1,170 +1,76 @@
-  display: inline-block;
+/* app.css — v2.4.3 */
 
-  margin: .25rem 0;
-
+/* 1) Masquer la zone résumé/date/calcul du bas (on garde le bandeau du haut) */
+#bandeau-resume,
+.footer-summary,
+.summary-footer,
+.calc-footer {
+  display: none !important;
 }
 
-
+/* 2) Désenchevêtrer les boutons d’export en bas des Stats */
+.stats-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+}
+.stats-actions .btn {
+  display: inline-block;
+  margin: .25rem 0;
+}
 /* ============================================================
-
-
    PHASE 2 — Fix CSS pour Stats & Export buttons
-
-
    ============================================================ */
 
-
-
-
-
 /* Conteneur des boutons d'export (bas de l'écran Stats) */
-
-
 .chart-actions {
-
-
   display: flex;
-
-
   flex-wrap: wrap;
-
-
   gap: 10px 12px;
-
-
   margin-top: 12px;
-
-
   padding: 10px;
-
-
   background: #f9fafb;
-
-
   border-radius: 8px;
-
-
 }
-
-
-
-
 
 .chart-actions button {
-
-
   flex: 1;
-
-
   min-width: 120px;
-
-
   padding: 10px 12px;
-
-
   font-size: 12px;
-
-
   white-space: nowrap;
-
-
 }
-
-
-
-
 
 /* Responsive: moins d'espace en mobile < 480px */
-
-
 @media (max-width: 480px) {
-
-
   .chart-actions {
-
-
     flex-direction: column;
-
-
     gap: 8px;
-
-
   }
-
-
   
-
-
   .chart-actions button {
-
-
     width: 100%;
-
-
     min-width: unset;
-
-
   }
-
-
 }
-
-
-
-
 
 /* S'assurer que le conteneur Stats a un padding-bottom pour ne pas chevaucher */
-
-
 #ecran-stats {
-
-
   padding-bottom: 100px;
-
-
 }
-
-
-
-
 
 /* Container des graphes avec espacement */
-
-
 .stats-block {
-
-
   background: #fff;
-
-
   border-radius: 12px;
-
-
   padding: 14px;
-
-
   margin-bottom: 10px;
-
-
 }
 
-
-
-
-
 /* Canvas graphes avec hauteur définie */
-
-
 #chart-consommations,
-
-
 #chart-cout-eco {
-
-
   max-height: 300px;
-
-
   margin-bottom: 10px;
-
-
 }
