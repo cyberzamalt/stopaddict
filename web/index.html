@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<title>StopAddict – Compteur Tabac, Cannabis & Alcool (v2.4.4 PHASE 2)</title>
+<title>StopAddict – Compteur Tabac, Cannabis & Alcool (v2.4.0 CLEAN)</title>
 <meta name="application-name" content="StopAddict">
 <meta name="apple-mobile-web-app-title" content="StopAddict">
 
@@ -17,9 +17,6 @@
                object-src 'none';
                base-uri 'none';
                form-action 'self'">
-
-<!-- ✅ PHASE 2 : Chargement de app.css externe -->
-<link rel="stylesheet" href="./css/app.css">
 
 <style>
   :root{
@@ -45,6 +42,16 @@
   .brand-ver{opacity:.8; font-size:12px; margin-left:4px}
   .date{font-weight:800; font-size:18px}
   .heure{opacity:.95; font-size:13px; margin-top:2px}
+
+  /* Console debug — lisible et sous le header */
+  .debug-console{
+    position:fixed; top:68px; left:0; right:0;
+    background:rgba(0,0,0,.95); color:#b5f7b7;
+    font:14px/1.45 ui-monospace, Menlo, monospace;
+    padding:8px 10px; max-height:50vh; overflow:auto;
+    z-index:9999; border-bottom:2px solid #34d399; display:none
+  }
+  .debug-console.show{display:block}
 
   /* Stats rapides (jour courant) */
   .stats-rapides{background:#fff; display:grid; grid-template-columns:repeat(4,1fr); gap:8px; padding:10px; border-bottom:1px solid var(--divider)}
@@ -76,19 +83,6 @@
   .line{display:flex; justify-content:space-between; align-items:center; padding:4px 0}
   .lbl{font-weight:700; font-size:14px}
   .val{font-weight:900; font-size:18px; color:#111827}
-
-  /* ✅ CORRECTION : Styles pour les toggles (cases à cocher) */
-  .mini-toggle{
-    display:inline-flex;
-    align-items:center;
-    gap:4px;
-  }
-  .mini-toggle input[type="checkbox"]{
-    width:18px;
-    height:18px;
-    cursor:pointer;
-    accent-color:var(--ok);
-  }
 
   .segment{display:flex; gap:4px; margin:6px 0}
   .seg{flex:1; height:28px; border-radius:6px; background:#e5e7eb; border:2px solid transparent; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:11px; color:#6b7280; cursor:pointer; transition:all .15s ease}
@@ -164,6 +158,15 @@
   #chartRange .btn.pill { flex:1; background:#e6fffa; border:2px solid #b2f5ea; color:#0f766e; border-radius:999px; padding:8px; font-weight:800; font-size:13px; text-align:center; cursor:pointer; }
   #chartRange .btn.pill.active { background:#3b82f6; border-color:#3b82f6; color:#fff; }
 
+  /* === Anti-scroll infini : hauteur fixe des 2 canvases === */
+  .chart-block{ position:relative; display:flex; flex-direction:column; gap:12px; }
+  #chart-consommations,
+  #chart-cout-eco{
+    display:block; width:100%;
+    height:240px; max-height:240px;
+  }
+  /* (La règle historique canvas#chartCanvas ne s'applique pas ici) */
+
   @media (max-width: 460px){
     .container{margin:0; max-width:100%}
     .card, .banner{margin:6px; padding:12px}
@@ -178,7 +181,7 @@
   <div class="header">
     <div class="brand">
       <span class="brand-name">🚭 StopAddict</span>
-      <span class="brand-ver">v2.4.4 PHASE 2</span>
+      <span class="brand-ver">v2.4.0 CLEAN</span>
     </div>
     <div class="date" id="date-actuelle">—</div>
     <div class="heure" id="heure-actuelle">—</div>
@@ -224,7 +227,7 @@
         <div class="line">
           <span class="lbl">🚬 Cigarettes</span>
           <label class="mini-toggle"><input type="checkbox" id="toggle-cigs" checked aria-label="Activer module"></label>
-          <span class="val" id="note-cigs">0</span>
+          <span class="val">0</span>
         </div>
         <div class="segment" id="seg-clopes"></div>
         <div class="pm" aria-label="Actions cigarettes">
@@ -238,7 +241,7 @@
         <div class="line">
           <span class="lbl">🌿 Joints</span>
           <label class="mini-toggle"><input type="checkbox" id="toggle-weed" checked aria-label="Activer module"></label>
-          <span class="val" id="note-weed">0</span>
+          <span class="val">0</span>
         </div>
         <div class="pm" aria-label="Actions joints">
           <button class="btn-round btn-minus" id="j-moins" type="button">−1</button>
@@ -251,7 +254,7 @@
         <div class="line">
           <span class="lbl">🍺 Alcool</span>
           <label class="mini-toggle"><input type="checkbox" id="toggle-alcool" checked aria-label="Activer module"></label>
-          <span class="val" id="note-alcool">0</span>
+          <span class="val">0</span>
         </div>
         <div class="segment" id="seg-alcool"></div>
         <div class="pm" aria-label="Actions alcool">
@@ -271,65 +274,40 @@
       </div>
     </div>
 
-    <!-- ======================= ÉCRAN STATS (✅ CLASSE .stats AJOUTÉE) ======================= -->
-    <div class="ecran stats" id="ecran-stats" aria-label="SA:ECRAN:STATS" data-sa="screen-stats">
+    <!-- ======================= ÉCRAN STATS ======================= -->
+    <div class="ecran" id="ecran-stats" aria-label="SA:ECRAN:STATS" data-sa="screen-stats">
+      <!-- ✅ wrapper requis par app.js pour le lazy-init -->
       <div id="screen-stats">
         <div class="card">
-          <!-- Boutons d'échelle -->
+          <!-- Boutons d’échelle attendus par web/js/charts.js -->
           <div class="tabs" role="tablist" id="chartRange">
             <button class="btn pill active" data-range="day" type="button">Jour</button>
             <button class="btn pill" data-range="week" type="button">Semaine</button>
             <button class="btn pill" data-range="month" type="button">Mois</button>
+            <!-- ➕ Ajout “Année” -->
             <button class="btn pill" data-range="year" type="button">Année</button>
           </div>
 
-          <!-- ✅ PHASE 2 : Bloc KPI vert (3 lignes toujours visibles) -->
-          <div class="kpi-block">
-            <h3>Consommations</h3>
-            <div class="kpi-line" id="kpi-cigarettes">
-              <span class="kpi-label">🚬 Cigarettes</span>
-              <span class="kpi-value" id="kpi-cigarettes-value">0</span>
-            </div>
-            <div class="kpi-line" id="kpi-joints">
-              <span class="kpi-label">🌿 Joints</span>
-              <span class="kpi-value" id="kpi-joints-value">0</span>
-            </div>
-            <div class="kpi-line" id="kpi-alcohol">
-              <span class="kpi-label">🍺 Alcool</span>
-              <span class="kpi-value" id="kpi-alcohol-value">0</span>
-            </div>
-          </div>
-
-          <!-- ✅ PHASE 2 : Carte agrégée (Total période) -->
-          <div class="summary-cards">
-            <div class="summary-card">
-              <div class="summary-card-label" id="summary-card-period-label">Total jour</div>
-              <div class="summary-card-value" id="summary-card-period-value">0</div>
-            </div>
-          </div>
-
-          <!-- Titre Stats (mis à jour par stats.js) -->
           <div class="banner green">
-            <div class="banner-title" id="stats-titre">Bilan Jour — Total 0</div>
+            <div class="banner-title" id="stats-titre">—</div>
             <div class="line"><span class="lbl">Cigarettes</span><span class="val" id="stats-clopes">0</span></div>
             <div class="line"><span class="lbl">Joints</span><span class="val" id="stats-joints">0</span></div>
-            <!-- ✅ PHASE 2 : Ligne Alcool VISIBLE (plus de display:none) -->
-            <div class="line" id="stats-alcool-line">
+            <div class="line" id="stats-alcool-line" style="display:none">
               <span class="lbl">Alcool</span><span class="val" id="stats-alcool">0</span>
             </div>
           </div>
 
-          <!-- Canvas graphiques -->
+          <!-- Canvas unique attendu par web/js/charts.js -->
           <div class="chart-block">
             <div class="chart-caption">Consommations (unités) / Coût</div>
             <canvas id="chart-consommations" width="960" height="260"></canvas>
             <canvas id="chart-cout-eco" width="960" height="220"></canvas>
           </div>
 
-          <!-- Boutons d'export -->
           <div class="chart-actions" id="chart-actions">
             <button class="btn" id="btn-export-csv" type="button">Exporter historique complet (Excel)</button>
             <button class="btn" id="btn-export-stats" type="button">Exporter la vue actuelle</button>
+            <!-- ➕ Import CSV/JSON (+ input caché) -->
             <button class="btn alt" id="btn-import" type="button">Importer (CSV/JSON)</button>
             <input type="file" id="input-import" accept=".csv,.json" style="display:none">
           </div>
