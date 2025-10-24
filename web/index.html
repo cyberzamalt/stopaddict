@@ -496,6 +496,28 @@
     </div>
   </div>
 </div>
+<script>
+  (function () {
+    function show(msg) {
+      var el = document.getElementById('debug-console');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'debug-console';
+        el.style.cssText = 'position:fixed;left:0;right:0;bottom:0;max-height:40vh;overflow:auto;background:#111;color:#0f0;padding:8px;font:12px/1.4 monospace;z-index:99999;white-space:pre-wrap';
+        document.body.appendChild(el);
+      }
+      el.style.display = 'block';
+      el.textContent += '\n' + msg;
+    }
+    window.addEventListener('error', function (e) {
+      show('[error] ' + (e && e.message ? e.message : '') + ' @ ' + (e && e.filename ? e.filename : '') + ':' + (e && e.lineno ? e.lineno : ''));
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      var r = (e && e.reason) || {};
+      show('[promise] ' + (r && r.message ? r.message : String(r)));
+    });
+  })();
+</script>
 
 <!-- Vendor (Chart.js ou fallback local) -->
 <script src="./js/vendor/chart.umd.min.js"></script>
