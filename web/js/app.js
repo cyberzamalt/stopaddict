@@ -4,7 +4,8 @@
 
 import { initModals } from "./modals.js";
 import { initCounters } from "./counters.js";
-import { initCharts } from "./charts.js";
+import { bootCharts } from "./charts.js";
+import { initStats } from "./stats.js";
 import { on as onState, emit as emitState } from "./state.js";
 
 console.log("[app.js] Module loaded");
@@ -60,14 +61,10 @@ function startClock() {
 
 // ---------- routing ----------
 function switchTo(screenId) {
-  // masquer tous les écrans
   $$(".ecran").forEach(e => e.classList.remove("show"));
-
-  // afficher l’écran cible
   const target = document.getElementById(screenId);
   if (target) target.classList.add("show");
 
-  // nav active
   const map = {
     "ecran-principal": "nav-principal",
     "ecran-stats": "nav-stats",
@@ -79,7 +76,6 @@ function switchTo(screenId) {
   const activeBtn = document.getElementById(map[screenId]);
   if (activeBtn) activeBtn.classList.add("actif");
 
-  // notifier les modules (charts, stats…) qu’on a changé d’écran
   emitState("sa:route-changed", { screen: screenId });
 }
 
@@ -93,7 +89,7 @@ function bindNav() {
   ];
   pairs.forEach(([btnId, screenId]) => {
     const btn = document.getElementById(btnId);
-    on(btn, "click", () => switchTo(screenId));
+    if (btn) btn.addEventListener("click", () => switchTo(screenId));
   });
 }
 
@@ -103,8 +99,9 @@ function boot() {
 
   // phase 1
   initModals();    // avertissement 18+
-  initCounters();  // +/− accueil (émet sa:counts-updated via state.js)
-  initCharts();    // graphiques + onglets (écoute sa:counts-updated)
+  initCounters();  // +/− accueil
+  bootCharts();    // graphiques
+  initStats();     // KPIs & carte agrégée (stats)
 
   // horloge & date
   startClock();
