@@ -77,6 +77,19 @@
   .lbl{font-weight:700; font-size:14px}
   .val{font-weight:900; font-size:18px; color:#111827}
 
+  /* ✅ CORRECTION : Styles pour les toggles (cases à cocher) */
+  .mini-toggle{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+  }
+  .mini-toggle input[type="checkbox"]{
+    width:18px;
+    height:18px;
+    cursor:pointer;
+    accent-color:var(--ok);
+  }
+
   .segment{display:flex; gap:4px; margin:6px 0}
   .seg{flex:1; height:28px; border-radius:6px; background:#e5e7eb; border:2px solid transparent; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:11px; color:#6b7280; cursor:pointer; transition:all .15s ease}
   .seg.actif{background:#3b82f6; color:#fff; border-color:#2563eb}
@@ -211,7 +224,7 @@
         <div class="line">
           <span class="lbl">🚬 Cigarettes</span>
           <label class="mini-toggle"><input type="checkbox" id="toggle-cigs" checked aria-label="Activer module"></label>
-          <span class="val">0</span>
+          <span class="val" id="note-cigs">0</span>
         </div>
         <div class="segment" id="seg-clopes"></div>
         <div class="pm" aria-label="Actions cigarettes">
@@ -225,7 +238,7 @@
         <div class="line">
           <span class="lbl">🌿 Joints</span>
           <label class="mini-toggle"><input type="checkbox" id="toggle-weed" checked aria-label="Activer module"></label>
-          <span class="val">0</span>
+          <span class="val" id="note-weed">0</span>
         </div>
         <div class="pm" aria-label="Actions joints">
           <button class="btn-round btn-minus" id="j-moins" type="button">−1</button>
@@ -238,7 +251,7 @@
         <div class="line">
           <span class="lbl">🍺 Alcool</span>
           <label class="mini-toggle"><input type="checkbox" id="toggle-alcool" checked aria-label="Activer module"></label>
-          <span class="val">0</span>
+          <span class="val" id="note-alcool">0</span>
         </div>
         <div class="segment" id="seg-alcool"></div>
         <div class="pm" aria-label="Actions alcool">
