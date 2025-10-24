@@ -1,198 +1,105 @@
 // ============================================================
-// stats.js — Bannière KPIs + Cartes agrégées (PHASE 2 - v2.4.4)
-// ============================================================
-// Objectif :
-// 1. Bloc vert : afficher TOUJOURS 3 lignes (Cigarettes/Joints/Alcool)
-//    - Si module désactivé ou valeur = 0 → ligne grisée (Option A)
-// 2. Cartes agrégées : Total jour/semaine/mois/année (réactives à l'onglet)
-// 3. AUCUN calcul ici → tout vient de state.getAggregates()
+// stats.js — Phase 2 (KPIs + Carte total + Bannière)
+// - Lit la même source que charts.js : getAggregates(getCurrentRange())
+// - Réagit à: sa:counts-updated, sa:range-changed
+// - Toujours 3 lignes (Cigarettes / Joints / Alcool)
 // ============================================================
 
-import { on, getAggregates, getCurrentRange, getSettings } from "./state.js";
+import { on as onState, getAggregates, getCurrentRange } from "./state.js";
 
-console.log("[stats.js] Module loaded");
+const $, $$ = (s, r = document) => r.querySelector(s);
 
-// ============================================================
-// Labels pour les ranges
-// ============================================================
-function labelForRange(r) {
-  if (r === "week") return "Semaine";
-  if (r === "month") return "Mois";
-  if (r === "year") return "Année";
-  return "Jour";
+function toInt(v) {
+  const n = Number.parseInt(v ?? 0, 10);
+  return Number.isFinite(n) ? n : 0;
 }
 
-// ============================================================
-// Récupérer le range actif depuis l'UI (boutons)
-// ============================================================
-function currentRangeFromUI() {
-  const active = document.querySelector('#chartRange .btn.pill.active');
-  return active?.dataset?.range || getCurrentRange() || "day";
+function normalizeAgg(agg = {}) {
+  const cigarettes = toInt(agg.cigarettes ?? agg.cigs ?? agg.clopes ?? 0);
+  const joints     = toInt(agg.joints ?? 0);
+  const alcohol    = toInt(agg.alcohol ?? agg.alcool ?? 0); // tolère "alcool"
+  const total      = cigarettes + joints + alcohol;
+  return { cigarettes, joints, alcohol, total };
 }
 
-// ============================================================
-// Mise à jour du bloc vert KPI (3 lignes toujours visibles)
-// ============================================================
-function updateKPIBlock(aggregates) {
+function rangeLabel(range) {
+  // libellés UI
+  const map = { day: "jour", week: "semaine", month: "mois", year: "année" };
+  const key = String(range || "").toLowerCase();
+  return map[key] || "jour";
+}
+
+function capFirst(s) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
+// -- DOM targets (tous optionnels : pas de crash si absents)
+const els = {
+  kpiCigs:   $("#kpi-cigarettes-value"),
+  kpiJoints: $("#kpi-joints-value"),
+  kpiAlc:    $("#kpi-alcohol-value"),
+
+  sumLabel:  $("#summary-card-period-label"),
+  sumValue:  $("#summary-card-period-value"),
+
+  bannTitle: $("#stats-titre"),
+  bCigs:     $("#stats-clopes"),
+  bJoints:   $("#stats-joints"),
+  bAlc:      $("#stats-alcool"),
+  bAlcLine:  $("#stats-alcool-line"),
+};
+
+function renderStats() {
   try {
-    const settings = getSettings();
-    const modules = settings.modules || { cigs: true, weed: true, alcohol: true };
+    const range = typeof getCurrentRange === "function" ? getCurrentRange() : "day";
+    const aggRaw = typeof getAggregates === "function" ? getAggregates(range) : {};
+    const agg = normalizeAgg(aggRaw);
 
-    // Ligne Cigarettes
-    const cigLine = document.getElementById("kpi-cigarettes");
-    const cigValue = document.getElementById("kpi-cigarettes-value");
-    if (cigLine && cigValue) {
-      cigValue.textContent = String(aggregates.cigarettes || 0);
-      // Griser si désactivé OU si valeur = 0
-      if (!modules.cigs || aggregates.cigarettes === 0) {
-        cigLine.classList.add("disabled");
-      } else {
-        cigLine.classList.remove("disabled");
-      }
+    // Bloc vert (KPI)
+    if (els.kpiCigs)  els.kpiCigs.textContent = String(agg.cigarettes);
+    if (els.kpiJoints)els.kpiJoints.textContent= String(agg.joints);
+    if (els.kpiAlc)   els.kpiAlc.textContent   = String(agg.alcohol);
+
+    // Carte totale (label + valeur)
+    const rLbl = rangeLabel(range);
+    if (els.sumLabel) els.sumLabel.textContent = `Total ${rLbl}`;
+    if (els.sumValue) els.sumValue.textContent = String(agg.total);
+
+    // Bannière “Bilan … — Total …”
+    if (els.bannTitle) els.bannTitle.textContent = `${capFirst(rLbl)} — Total ${agg.total}`;
+    if (els.bCigs)  els.bCigs.textContent  = String(agg.cigarettes);
+    if (els.bJoints)els.bJoints.textContent= String(agg.joints);
+    if (els.bAlc)   els.bAlc.textContent   = String(agg.alcohol);
+    if (els.bAlcLine) els.bAlcLine.style.display = ""; // toujours visible en phase 2
+  } catch (err) {
+    // On ne bloque jamais l'app si un élément manque
+    const dbg = document.getElementById("debug-console");
+    if (dbg) {
+      dbg.classList.add("show");
+      dbg.textContent += `\n[stats.js] renderStats error: ${err?.message || err}`;
     }
-
-    // Ligne Joints
-    const jointLine = document.getElementById("kpi-joints");
-    const jointValue = document.getElementById("kpi-joints-value");
-    if (jointLine && jointValue) {
-      jointValue.textContent = String(aggregates.joints || 0);
-      if (!modules.weed || aggregates.joints === 0) {
-        jointLine.classList.add("disabled");
-      } else {
-        jointLine.classList.remove("disabled");
-      }
-    }
-
-    // Ligne Alcool
-    const alcLine = document.getElementById("kpi-alcohol");
-    const alcValue = document.getElementById("kpi-alcohol-value");
-    if (alcLine && alcValue) {
-      alcValue.textContent = String(aggregates.alcohol || 0);
-      if (!modules.alcohol || aggregates.alcohol === 0) {
-        alcLine.classList.add("disabled");
-      } else {
-        alcLine.classList.remove("disabled");
-      }
-    }
-
-    console.log("[stats.updateKPIBlock]", aggregates);
-  } catch (e) {
-    console.error("[stats.updateKPIBlock] error:", e);
+    console.error("[stats.js] renderStats error", err);
   }
 }
 
-// ============================================================
-// Mise à jour des cartes agrégées (Total jour/semaine/mois/année)
-// ============================================================
-function updateSummaryCards(range, aggregates) {
-  try {
-    const total = (aggregates.cigarettes || 0) + (aggregates.joints || 0) + (aggregates.alcohol || 0);
-    
-    // Carte "Total [période]"
-    const cardLabel = document.getElementById("summary-card-period-label");
-    const cardValue = document.getElementById("summary-card-period-value");
-    if (cardLabel && cardValue) {
-      cardLabel.textContent = `Total ${labelForRange(range).toLowerCase()}`;
-      cardValue.textContent = String(total);
-    }
+function initStats() {
+  if (window.__sa_stats_inited) return;
+  window.__sa_stats_inited = true;
 
-    console.log("[stats.updateSummaryCards]", { range, total });
-  } catch (e) {
-    console.error("[stats.updateSummaryCards] error:", e);
+  // Rendu initial
+  renderStats();
+
+  // Écoute les mises à jour de compteurs & changements de période
+  if (typeof onState === "function") {
+    onState("sa:counts-updated", renderStats);
+    onState("sa:range-changed", renderStats);
   }
 }
 
-// ============================================================
-// Mise à jour du titre Stats (Bilan [période] — Total X)
-// ============================================================
-function updateStatsTitle(range, aggregates) {
-  try {
-    const titre = document.getElementById("stats-titre");
-    if (!titre) return;
-
-    const total = (aggregates.cigarettes || 0) + (aggregates.joints || 0) + (aggregates.alcohol || 0);
-    titre.textContent = `Bilan ${labelForRange(range)} — Total ${total}`;
-
-    console.log("[stats.updateStatsTitle]", { range, total });
-  } catch (e) {
-    console.error("[stats.updateStatsTitle] error:", e);
-  }
+// Auto-init à l’import du module
+try {
+  initStats();
+} catch (e) {
+  console.error("[stats.js] init error", e);
 }
-
-// ============================================================
-// Mise à jour complète (bloc vert + cartes + titre)
-// ============================================================
-function updateAllStats(range = "day") {
-  try {
-    const aggregates = getAggregates(range);
-    
-    updateKPIBlock(aggregates);
-    updateSummaryCards(range, aggregates);
-    updateStatsTitle(range, aggregates);
-
-    console.log("[stats.updateAllStats]", { range, aggregates });
-  } catch (e) {
-    console.error("[stats.updateAllStats] error:", e);
-  }
-}
-
-// ============================================================
-// Initialisation des événements
-// ============================================================
-export function initStats() {
-  console.log("[stats.init] start");
-
-  // 1) Quand charts.js rend, il émet "charts:totals"
-  on("charts:totals", (e) => {
-    const range = e.detail?.range || currentRangeFromUI();
-    const totals = e.detail?.totals;
-    
-    if (totals) {
-      // charts.js envoie déjà les aggregates
-      updateKPIBlock(totals);
-      updateSummaryCards(range, totals);
-      updateStatsTitle(range, totals);
-    } else {
-      // Sinon on récupère depuis state.js
-      updateAllStats(range);
-    }
-  });
-
-  // 2) Changement de range (onglet Jour/Semaine/Mois/Année)
-  on("sa:range-changed", (e) => {
-    const range = e.detail?.range || currentRangeFromUI();
-    updateAllStats(range);
-  });
-
-  // 3) Si on change d'écran → rafraîchir
-  on("sa:route-changed", (e) => {
-    if (e.detail?.screen === "ecran-stats") {
-      const range = currentRangeFromUI();
-      updateAllStats(range);
-    }
-  });
-
-  // 4) Si compteurs bougent alors qu'on est sur Stats
-  on("sa:counts-updated", () => {
-    const stats = document.getElementById("ecran-stats");
-    if (stats?.classList.contains("show")) {
-      const range = currentRangeFromUI();
-      updateAllStats(range);
-    }
-  });
-
-  // 5) Si settings changent (module activé/désactivé)
-  on("sa:settings-updated", () => {
-    const stats = document.getElementById("ecran-stats");
-    if (stats?.classList.contains("show")) {
-      const range = currentRangeFromUI();
-      updateAllStats(range);
-    }
-  });
-
-  // 6) Initial : affichage au chargement
-  const firstRange = currentRangeFromUI();
-  updateAllStats(firstRange);
-
-  console.log("[stats.init] ready ✓ (Phase 2 - v2.4.4)");
-}
+export { initStats };
