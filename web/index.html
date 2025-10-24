@@ -77,6 +77,17 @@
   .lbl{font-weight:700; font-size:14px}
   .val{font-weight:900; font-size:18px; color:#111827}
 
+  /* ✅ Styles pour la console debug toujours visibles si activée */
+  #debug-console{
+    position:fixed; left:0; right:0; bottom:0;
+    max-height:40vh; overflow:auto;
+    background:#111; color:#0f0;
+    padding:8px; font:12px/1.4 monospace;
+    z-index:99999; white-space:pre-wrap;
+    display:none; /* sera forcé à block par le hook ou via .show */
+  }
+  #debug-console.show{ display:block; }
+
   /* ✅ CORRECTION : Styles pour les toggles (cases à cocher) */
   .mini-toggle{
     display:inline-flex;
@@ -496,6 +507,8 @@
     </div>
   </div>
 </div>
+
+<!-- Hook erreurs: affiche toutes les erreurs JS dans #debug-console (utile sur smartphone) -->
 <script>
   (function () {
     function show(msg) {
@@ -505,12 +518,17 @@
         el.id = 'debug-console';
         el.style.cssText = 'position:fixed;left:0;right:0;bottom:0;max-height:40vh;overflow:auto;background:#111;color:#0f0;padding:8px;font:12px/1.4 monospace;z-index:99999;white-space:pre-wrap';
         document.body.appendChild(el);
+      } else {
+        /* ✅ si l’élément existe déjà, s’assurer qu’il a un style lisible */
+        el.style.cssText = 'position:fixed;left:0;right:0;bottom:0;max-height:40vh;overflow:auto;background:#111;color:#0f0;padding:8px;font:12px/1.4 monospace;z-index:99999;white-space:pre-wrap';
       }
       el.style.display = 'block';
       el.textContent += '\n' + msg;
     }
     window.addEventListener('error', function (e) {
-      show('[error] ' + (e && e.message ? e.message : '') + ' @ ' + (e && e.filename ? e.filename : '') + ':' + (e && e.lineno ? e.lineno : ''));
+      show('[error] ' + (e && e.message ? e.message : '') + ' @ ' +
+           (e && e.filename ? e.filename : '') + ':' +
+           (e && e.lineno ? e.lineno : ''));
     });
     window.addEventListener('unhandledrejection', function (e) {
       var r = (e && e.reason) || {};
