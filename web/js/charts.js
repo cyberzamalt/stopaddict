@@ -1,19 +1,13 @@
 // ============================================================
-// charts.js — Phase 2 (axes temporels + autoscale + alignement)
-// - X = Jour(4 tranches) / Semaine(7j) / Mois(semaines) / Année(12 mois)
-// - Y autoscale (>= max, +10%), ticks entiers
-// - Deux charts avec options identiques (alignement)
-// - Détruit avant recréer (pas de fuite)
-// - Émet setCurrentRange(range) -> sa:range-changed (state.js)
+// charts.js — Phase 2 (compat WebView: pas de ?. ni ||=)
 // ============================================================
 
 import { getAllDaily, getSettings, ymd, getCurrentRange, setCurrentRange, on as onState } from "./state.js";
-import Stats from "./stats.js"; // garantit init des KPIs lors du chargement
 
 let chartConsos = null;
 let chartCostEco = null;
 
-const $ = (s, r = document) => r.querySelector(s);
+const $ = function (s, r) { return (r || document).querySelector(s); };
 
 const els = {
   rangeRoot: $("#chartRange"),
@@ -22,12 +16,12 @@ const els = {
 };
 
 // -------------------- Helpers temps --------------------
-const DAYS_FR = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
-const MONTHS_FR = ["Jan","Fév","Mar","Avr","Mai","Juin","Juil","Aoû","Sep","Oct","Nov","Déc"];
+var DAYS_FR = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
+var MONTHS_FR = ["Jan","Fév","Mar","Avr","Mai","Juin","Juil","Aoû","Sep","Oct","Nov","Déc"];
 
 function isoMonday(d) {
-  const dt = new Date(d);
-  const day = (dt.getDay() + 6) % 7; // 0 = lundi
+  var dt = new Date(d);
+  var day = (dt.getDay() + 6) % 7; // 0 = lundi
   dt.setHours(0,0,0,0);
   dt.setDate(dt.getDate() - day);
   return dt;
@@ -35,95 +29,93 @@ function isoMonday(d) {
 
 function weeksInMonthBuckets(dt) {
   // retourne 5 seaux [S1..S5] indexés 0..4
-  const first = new Date(dt.getFullYear(), dt.getMonth(), 1);
-  const offset = (first.getDay() + 6) % 7; // 0=lundi
-  const daysInMonth = new Date(dt.getFullYear(), dt.getMonth()+1, 0).getDate();
-  const buckets = [0,0,0,0,0];
-  for (let day=1; day<=daysInMonth; day++) {
-    const idx = Math.floor((day - 1 + offset) / 7);
-    buckets[idx] ||= 0; // ensure defined
+  var first = new Date(dt.getFullYear(), dt.getMonth(), 1);
+  var offset = (first.getDay() + 6) % 7; // 0=lundi
+  var daysInMonth = new Date(dt.getFullYear(), dt.getMonth()+1, 0).getDate();
+  var buckets = [0,0,0,0,0];
+  for (var day=1; day<=daysInMonth; day++) {
+    var idx = Math.floor((day - 1 + offset) / 7);
+    if (typeof buckets[idx] === "undefined" || buckets[idx] === null) buckets[idx] = 0; // compat
   }
   return buckets;
 }
 
 // -------------------- Agrégation séries --------------------
 function sumEnabled(dayObj, modules) {
-  // dayObj: { cigs, weed, alcohol }, modules: { cigs, weed, alcohol }
   if (!dayObj) return 0;
-  const cigs = modules.cigs ? (dayObj.cigs || 0) : 0;
-  const weed = modules.weed ? (dayObj.weed || 0) : 0;
-  const alc  = modules.alcohol ? (dayObj.alcohol || 0) : 0;
+  var cigs = modules.cigs ? (dayObj.cigs || 0) : 0;
+  var weed = modules.weed ? (dayObj.weed || 0) : 0;
+  var alc  = modules.alcohol ? (dayObj.alcohol || 0) : 0;
   return cigs + weed + alc;
 }
 
 function buildSeries(range) {
-  const store = getAllDaily() || {};
-  const modules = (getSettings()?.modules) || { cigs:true, weed:true, alcohol:true };
-  const todayKey = ymd();
+  var store = getAllDaily() || {};
+  var s = getSettings() || {};
+  var modules = s.modules || { cigs:true, weed:true, alcohol:true };
+  var todayKey = ymd();
 
   if (range === "day") {
-    // 4 tranches: Matin(06-11), Après-midi(12-17), Soir(18-22), Nuit(23-05)
-    const bins = [0,0,0,0];
-    const labels = ["Matin","Après-midi","Soir","Nuit"];
-    const today = store[todayKey] || {};
-    const hours = today.hours || {};
-    for (let h=0; h<24; h++) {
-      const slot = (h>=6 && h<=11) ? 0 : (h>=12 && h<=17) ? 1 : (h>=18 && h<=22) ? 2 : 3;
-      const types = hours[h] || {};
-      const v = sumEnabled({ cigs: types.cigs, weed: types.weed, alcohol: types.alcohol }, modules);
-      bins[slot] += v;
+    var binsD = [0,0,0,0];
+    var labelsD = ["Matin","Après-midi","Soir","Nuit"];
+    var today = store[todayKey] || {};
+    var hours = today.hours || {};
+    for (var h=0; h<24; h++) {
+      var slot = (h>=6 && h<=11) ? 0 : (h>=12 && h<=17) ? 1 : (h>=18 && h<=22) ? 2 : 3;
+      var types = hours[h] || {};
+      var v = sumEnabled({ cigs: types.cigs, weed: types.weed, alcohol: types.alcohol }, modules);
+      binsD[slot] += v;
     }
-    return { labels, data: bins };
+    return { labels: labelsD, data: binsD };
   }
 
   if (range === "week") {
-    const base = isoMonday(new Date());
-    const labels = DAYS_FR.slice(0); // 7
-    const bins = [0,0,0,0,0,0,0];
-    for (let i=0;i<7;i++) {
-      const d = new Date(base); d.setDate(base.getDate()+i);
-      const k = ymd(d);
-      bins[i] = sumEnabled(store[k], modules);
+    var base = isoMonday(new Date());
+    var labelsW = DAYS_FR.slice(0);
+    var binsW = [0,0,0,0,0,0,0];
+    for (var i=0;i<7;i++) {
+      var d = new Date(base); d.setDate(base.getDate()+i);
+      var k = ymd(d);
+      binsW[i] = sumEnabled(store[k], modules);
     }
-    return { labels, data: bins };
+    return { labels: labelsW, data: binsW };
   }
 
   if (range === "month") {
-    const now = new Date();
-    const first = new Date(now.getFullYear(), now.getMonth(), 1);
-    const next = new Date(now.getFullYear(), now.getMonth()+1, 1);
-    const offset = (first.getDay()+6)%7; // 0=lundi
-    const labels = ["Sem 1","Sem 2","Sem 3","Sem 4","Sem 5"];
-    const bins = [0,0,0,0,0];
-    for (let d = new Date(first); d < next; d.setDate(d.getDate()+1)) {
-      const idx = Math.floor((d.getDate()-1 + offset) / 7);
-      const k = ymd(d);
-      bins[idx] += sumEnabled(store[k], modules);
+    var now = new Date();
+    var first = new Date(now.getFullYear(), now.getMonth(), 1);
+    var next = new Date(now.getFullYear(), now.getMonth()+1, 1);
+    var offset = (first.getDay()+6)%7;
+    var labelsM = ["Sem 1","Sem 2","Sem 3","Sem 4","Sem 5"];
+    var binsM = [0,0,0,0,0];
+    for (var d2 = new Date(first); d2 < next; d2.setDate(d2.getDate()+1)) {
+      var idx = Math.floor((d2.getDate()-1 + offset) / 7);
+      var k2 = ymd(d2);
+      binsM[idx] += sumEnabled(store[k2], modules);
     }
-    return { labels, data: bins };
+    return { labels: labelsM, data: binsM };
   }
 
-  // year
-  const now = new Date();
-  const labels = MONTHS_FR.slice(0); // 12
-  const bins = new Array(12).fill(0);
-  // itère sur toutes les dates de l’année
-  const firstY = new Date(now.getFullYear(),0,1);
-  const nextY  = new Date(now.getFullYear()+1,0,1);
-  for (let d = new Date(firstY); d < nextY; d.setDate(d.getDate()+1)) {
-    const k = ymd(d);
-    const m = d.getMonth();
-    bins[m] += sumEnabled(store[k], modules);
+  var nowY = new Date();
+  var labelsY = MONTHS_FR.slice(0);
+  var binsY = new Array(12);
+  for (var j=0;j<12;j++) binsY[j]=0;
+  var firstY = new Date(nowY.getFullYear(),0,1);
+  var nextY  = new Date(nowY.getFullYear()+1,0,1);
+  for (var d3 = new Date(firstY); d3 < nextY; d3.setDate(d3.getDate()+1)) {
+    var k3 = ymd(d3);
+    var m = d3.getMonth();
+    binsY[m] += sumEnabled(store[k3], modules);
   }
-  return { labels, data: bins };
+  return { labels: labelsY, data: binsY };
 }
 
 // -------------------- Chart options (communes) --------------------
 function makeOptions(maxY) {
-  const suggestedMax = (maxY === 0) ? 1 : Math.ceil(maxY * 1.1);
+  var suggestedMax = (maxY === 0) ? 1 : Math.ceil(maxY * 1.1);
   return {
     responsive: true,
-    maintainAspectRatio: false, // alignement via CSS hauteur fixe
+    maintainAspectRatio: false,
     animation: false,
     scales: {
       x: {
@@ -132,7 +124,7 @@ function makeOptions(maxY) {
       },
       y: {
         beginAtZero: true,
-        suggestedMax,
+        suggestedMax: suggestedMax,
         ticks: { precision: 0, stepSize: 1 }
       }
     },
@@ -144,17 +136,17 @@ function makeOptions(maxY) {
 }
 
 function destroyCharts() {
-  if (chartConsos) { chartConsos.destroy(); chartConsos = null; }
-  if (chartCostEco) { chartCostEco.destroy(); chartCostEco = null; }
+  try { if (chartConsos) { chartConsos.destroy(); chartConsos = null; } } catch(e){}
+  try { if (chartCostEco) { chartCostEco.destroy(); chartCostEco = null; } } catch(e){}
 }
 
 // -------------------- Render charts --------------------
 function renderCharts(range) {
-  if (!els.c1 || !els.c2) return;
+  if (!els.c1 || !els.c2 || typeof Chart === "undefined") return;
 
-  const series = buildSeries(range);
-  const maxY = Math.max(0, ...series.data);
-  const options = makeOptions(maxY);
+  var series = buildSeries(range);
+  var maxY = 0; for (var i=0;i<series.data.length;i++) if (series.data[i]>maxY) maxY=series.data[i];
+  var options = makeOptions(maxY);
 
   destroyCharts();
 
@@ -168,10 +160,9 @@ function renderCharts(range) {
         borderWidth: 1
       }]
     },
-    options
+    options: options
   });
 
-  // Coût/Éco — Phase 3 : placeholder aligné (mêmes options)
   chartCostEco = new Chart(els.c2.getContext("2d"), {
     type: "bar",
     data: {
@@ -182,46 +173,50 @@ function renderCharts(range) {
         borderWidth: 1
       }]
     },
-    options
+    options: options
   });
 }
 
 // -------------------- Range UI --------------------
 function markActive(range) {
-  const buttons = els.rangeRoot?.querySelectorAll(".btn.pill[data-range]") || [];
-  buttons.forEach(b => b.classList.toggle("active", b.dataset.range === range));
+  var buttons = (els.rangeRoot && els.rangeRoot.querySelectorAll(".btn.pill[data-range]")) || [];
+  for (var i=0;i<buttons.length;i++) {
+    var b = buttons[i];
+    b.classList.toggle("active", b.getAttribute("data-range") === range);
+  }
 }
 
 function bindRangeUI() {
   if (!els.rangeRoot) return;
-  els.rangeRoot.addEventListener("click", (ev) => {
-    const btn = ev.target.closest(".btn.pill[data-range]");
+  els.rangeRoot.addEventListener("click", function(ev) {
+    var btn = ev.target && ev.target.closest ? ev.target.closest(".btn.pill[data-range]") : null;
     if (!btn) return;
-    const range = btn.dataset.range;
+    var range = btn.getAttribute("data-range");
     markActive(range);
-    setCurrentRange(range); // émet sa:range-changed
+    setCurrentRange(range);
     renderCharts(range);
   });
 }
 
 // -------------------- Init --------------------
 function bootCharts() {
-  // marquer actif selon state (ou défaut jour)
-  const range = getCurrentRange?.() || "day";
+  var range;
+  try { range = getCurrentRange(); } catch(e) { range = "day"; }
+  range = range || "day";
   markActive(range);
   renderCharts(range);
 
-  // events: mises à jour + changement de période
-  onState("sa:counts-updated", () => renderCharts(getCurrentRange?.() || "day"));
-  onState("sa:range-changed",  (e) => renderCharts(e?.detail?.range || getCurrentRange?.() || "day"));
+  onState("sa:counts-updated", function () {
+    var r;
+    try { r = getCurrentRange(); } catch(e) { r = "day"; }
+    renderCharts(r || "day");
+  });
+  onState("sa:range-changed",  function (e) {
+    var r = (e && e.detail && e.detail.range) || (function(){ try{return getCurrentRange();}catch(_){return "day";} })();
+    renderCharts(r || "day");
+  });
 
-  // UI
   bindRangeUI();
-}
-
-// Auto-init si présent dans la page Stats
-if (els.c1 && els.c2) {
-  bootCharts();
 }
 
 export { bootCharts, renderCharts };
