@@ -1,116 +1,144 @@
 // ============================================================
-// stats.js — KPIs & carte agrégée (compat WebView)
-// Source: state.getAggregates(range)
-// Réagit à: sa:counts-updated, sa:range-changed
+// stats.js — KPIs + Range selector (PHASE 2)
+// ============================================================
+// Met à jour les compteurs de l'écran Stats + le bandeau KPI en haut,
+// et notifie charts.js quand l'échelle change.
+// Dépendances: state.js (getTotalsForRange, on, emit)
 // ============================================================
 
-import { getAggregates, getCurrentRange, on as onState } from "./state.js";
+import { getTotalsForRange, on, emit } from "./state.js";
 
-var $ = function (s, r) { return (r || document).querySelector(s); };
+console.log("[stats.js] Module loaded");
 
-var els = {
-  rangeRoot:   $("#chartRange"),
-  titre:       $("#stats-titre"),
-  kpiCigs:     $("#kpi-cigarettes-value"),
-  kpiJoints:   $("#kpi-joints-value"),
-  kpiAlcohol:  $("#kpi-alcohol-value"),
-  sumLabel:    $("#summary-card-period-label"),
-  sumValue:    $("#summary-card-period-value"),
-  lineCigs:    $("#stats-clopes"),
-  lineJoints:  $("#stats-joints"),
-  lineAlcohol: $("#stats-alcool"),
-  todayTotal:  $("#todayTotal"),
-  weekTotal:   $("#weekTotal"),
-  monthTotal:  $("#monthTotal"),
-  todayCost:   $("#todayCost"),
-  economies:   $("#economies-amount")
-};
+let currentRange = "day";
 
-var labels = {
-  day:   { titre: "Bilan Jour",    sum: "Total jour"    },
-  week:  { titre: "Bilan Semaine", sum: "Total semaine" },
-  month: { titre: "Bilan Mois",    sum: "Total mois"    },
-  year:  { titre: "Bilan Année",   sum: "Total année"   }
-};
+// ------------------------------------------------------------
+// Helpers DOM
+// ------------------------------------------------------------
+function $(id) { return document.getElementById(id); }
+function setText(id, val) { const el = $(id); if (el) el.textContent = String(val); }
+function addClass(el, cls){ if (el && el.classList && !el.classList.contains(cls)) el.classList.add(cls); }
+function removeClass(el, cls){ if (el && el.classList && el.classList.contains(cls)) el.classList.remove(cls); }
 
-function getActiveRange() {
-  var btn = els.rangeRoot ? els.rangeRoot.querySelector(".btn.pill.active") : null;
-  var r = btn && btn.dataset ? btn.dataset.range : null;
-  if (r) return r;
-  try { return getCurrentRange(); } catch(e) { return "day"; }
+function labelForRange(r){
+  if (r === "day") return "Jour";
+  if (r === "week") return "Semaine";
+  if (r === "month") return "Mois";
+  if (r === "year") return "Année";
+  return r;
 }
 
-function sumAgg(a) {
-  a = a || {};
-  return (a.cigarettes||0) + (a.joints||0) + (a.alcohol||0);
-}
+// ------------------------------------------------------------
+// Header KPIs (au-dessus des écrans)
+// ------------------------------------------------------------
+function refreshHeaderKPIs(){
+  try{
+    const tDay   = getTotalsForRange("day");
+    const tWeek  = getTotalsForRange("week");
+    const tMonth = getTotalsForRange("month");
+    const totDay   = (tDay.cigs|0) + (tDay.weed|0) + (tDay.alcohol|0);
+    const totWeek  = (tWeek.cigs|0) + (tWeek.weed|0) + (tWeek.alcohol|0);
+    const totMonth = (tMonth.cigs|0) + (tMonth.weed|0) + (tMonth.alcohol|0);
 
-function renderForRange(range) {
-  try {
-    var agg = getAggregates(range);
-    var total = sumAgg(agg);
+    setText("todayTotal", String(totDay));
+    setText("weekTotal",  String(totWeek));
+    setText("monthTotal", String(totMonth));
 
-    var lab = labels[range] || {};
-    if (els.titre)    els.titre.textContent    = ((lab.titre || "Bilan") + " — Total " + total);
-    if (els.sumLabel) els.sumLabel.textContent = (lab.sum || "Total");
-    if (els.sumValue) els.sumValue.textContent = String(total);
-
-    if (els.kpiCigs)    els.kpiCigs.textContent    = String(agg.cigarettes||0);
-    if (els.kpiJoints)  els.kpiJoints.textContent  = String(agg.joints||0);
-    if (els.kpiAlcohol) els.kpiAlcohol.textContent = String(agg.alcohol||0);
-
-    if (els.lineCigs)    els.lineCigs.textContent    = String(agg.cigarettes||0);
-    if (els.lineJoints)  els.lineJoints.textContent  = String(agg.joints||0);
-    if (els.lineAlcohol) els.lineAlcohol.textContent = String(agg.alcohol||0);
-  } catch (e) {
-    var dbg = document.getElementById("debug-console");
-    if (dbg) {
-      dbg.classList.add("show");
-      dbg.textContent += "\n[stats] renderForRange(" + range + ") error: " + (e && e.message ? e.message : e);
-      dbg.style.display = "block";
-    }
-    console.error("[stats] renderForRange error", e);
+    // Coût jour + Économies si l'info existe dans state.js (facultatif)
+    const c = (typeof tDay.cost === "number") ? tDay.cost : 0;
+    const e = (typeof tDay.economies === "number") ? tDay.economies : 0;
+    setText("todayCost", (Math.round(c*100)/100).toString() + " €");
+    setText("economies-amount", (Math.round(e*100)/100).toString() + " €");
+  }catch(err){
+    console.warn("[stats] refreshHeaderKPIs error:", err);
   }
 }
 
-function updateHeaderKpis() {
-  try {
-    var d = getAggregates("day");
-    var w = getAggregates("week");
-    var m = getAggregates("month");
+// ------------------------------------------------------------
+// Stats screen (milieu de page)
+// ------------------------------------------------------------
+function refreshStatsCenter(range){
+  try{
+    const totals = getTotalsForRange(range) || {cigs:0, weed:0, alcohol:0};
+    const total = (totals.cigs|0) + (totals.weed|0) + (totals.alcohol|0);
 
-    if (els.todayTotal) els.todayTotal.textContent = String(sumAgg(d));
-    if (els.weekTotal)  els.weekTotal.textContent  = String(sumAgg(w));
-    if (els.monthTotal) els.monthTotal.textContent = String(sumAgg(m));
+    // Bloc KPI vert
+    setText("kpi-cigarettes-value", String(totals.cigs|0));
+    setText("kpi-joints-value",     String(totals.weed|0));
+    setText("kpi-alcohol-value",    String(totals.alcohol|0));
 
-    if (els.todayCost) els.todayCost.textContent = "0 €";
-    if (els.economies) els.economies.textContent = "0 €";
-  } catch (e) {
-    console.error("[stats] updateHeaderKpis error", e);
+    // Carte agrégée
+    setText("summary-card-period-label", "Total " + labelForRange(range));
+    setText("summary-card-period-value", String(total));
+
+    // Bannière détaillée
+    setText("stats-titre", "Bilan " + labelForRange(range) + " — Total " + total);
+    setText("stats-clopes", String(totals.cigs|0));
+    setText("stats-joints", String(totals.weed|0));
+    setText("stats-alcool", String(totals.alcohol|0));
+  }catch(err){
+    console.error("[stats] refreshStatsCenter error:", err);
   }
 }
 
-function refresh() {
-  var range = getActiveRange() || "day";
-  renderForRange(range);
-  updateHeaderKpis();
-}
+// ------------------------------------------------------------
+// Range tabs
+// ------------------------------------------------------------
+function setupRangeTabs(){
+  const cont = document.getElementById("chartRange");
+  if (!cont) return;
 
-function attachListeners() {
-  if (els.rangeRoot) {
-    els.rangeRoot.addEventListener("click", function(ev) {
-      var btn = ev.target && ev.target.closest ? ev.target.closest(".btn.pill[data-range]") : null;
-      if (!btn) return;
-      setTimeout(refresh, 0);
-    });
+  const btns = cont.querySelectorAll("button[data-range]");
+  for (var i=0;i<btns.length;i++){
+    (function(btn){
+      btn.addEventListener("click", function(){
+        const r = btn.getAttribute("data-range") || "day";
+        if (r === currentRange) return;
+
+        // Visuel
+        for (var j=0;j<btns.length;j++) removeClass(btns[j],"active");
+        addClass(btn,"active");
+
+        // État + MAJ UI + notifier charts
+        currentRange = r;
+        refreshStatsCenter(currentRange);
+        emit("sa:range-change", { range: currentRange });
+      });
+    })(btns[i]);
   }
-
-  onState("sa:counts-updated", function(){ refresh(); });
-  onState("sa:range-changed",  function(){ refresh(); });
 }
 
-export function initStats() {
-  attachListeners();
-  refresh();
-  console.log("[stats.init] ✓");
+// ------------------------------------------------------------
+// Events venant de state.js
+// ------------------------------------------------------------
+function setupStateListeners(){
+  on("sa:counts-updated", function(){
+    // Quand les compteurs changent, on recalcule tout
+    refreshHeaderKPIs();
+    refreshStatsCenter(currentRange);
+    // charts.js s'auto-redessinera aussi sur ce même event
+  });
+}
+
+// ------------------------------------------------------------
+// Public
+// ------------------------------------------------------------
+export function initStats(){
+  console.log("[stats.initStats] Starting...");
+  try{
+    // Range par défaut
+    currentRange = "day";
+
+    refreshHeaderKPIs();
+    refreshStatsCenter(currentRange);
+    setupRangeTabs();
+    setupStateListeners();
+
+    // Notifier charts du range initial
+    emit("sa:range-change",{ range: currentRange });
+
+    console.log("[stats.initStats] ✓ Ready");
+  }catch(e){
+    console.error("[stats.initStats] error:", e);
+  }
 }
