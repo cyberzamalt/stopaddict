@@ -3,7 +3,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="refresh" content="0; url=/stopaddict/web/index.html">
 <script>
-  // Évite toute boucle : si on n'est pas déjà dans /stopaddict/web/, on y va.
   if (!location.pathname.startsWith('/stopaddict/web/')) {
     location.replace('/stopaddict/web/index.html' + location.search + location.hash);
   }
