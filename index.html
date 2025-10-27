@@ -1,7 +1,10 @@
 <!doctype html>
 <meta charset="utf-8">
-<meta http-equiv="refresh" content="0; url=./stopaddict/web/index.html">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="0; url=/stopaddict/web/index.html">
 <script>
-  // redirige en conservant ?query et #hash
-  location.replace('./stopaddict/web/index.html' + location.search + location.hash);
+  // Évite toute boucle : si on n'est pas déjà dans /stopaddict/web/, on y va.
+  if (!location.pathname.startsWith('/stopaddict/web/')) {
+    location.replace('/stopaddict/web/index.html' + location.search + location.hash);
+  }
 </script>
