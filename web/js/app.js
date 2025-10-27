@@ -1,116 +1,153 @@
-// ============================================================
-// app.js — Boot, Routing, Debug, Date/Heure (phase 2, aligné)
-// ============================================================
-
-import { initModals } from "./modals.js";
+/* web/js/app.js
+   — Boot app, nav, date/heure, snackbar/undo, modules — v2.4.4
+*/
+import { on, undoLast, canUndo } from "./state.js";
 import { initCounters } from "./counters.js";
-import { bootCharts } from "./charts.js";
-import { initStats } from "./stats.js";
-import { on as onState, emit as emitState } from "./state.js";
 
-console.log("[app.js] Module loaded");
-
-// ---------- utils DOM ----------
-const $ = (sel, root = document) => root.querySelector(sel);
-const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
-const on = (el, evt, fn) => el && el.addEventListener(evt, fn);
-
-function showToast(msg, ms = 2500) {
-  const bar = $("#snackbar");
-  if (!bar) return;
-  bar.textContent = msg;
-  bar.classList.add("show");
-  setTimeout(() => bar.classList.remove("show"), ms);
+// ----------------------------------------------
+// Date / heure (header)
+// ----------------------------------------------
+function fmtDateFR(d) {
+  const jours = ["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"];
+  const mois  = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
+  return jours[d.getDay()] + " " + d.getDate() + " " + mois[d.getMonth()] + " " + d.getFullYear();
 }
-
-// ---------- header: date / heure ----------
-function startClock() {
-  const elDate = $("#date-actuelle");
-  const elTime = $("#heure-actuelle");
-  const fmtDate = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
-  const fmtTime = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" });
-
-  function tick() {
+function tickClock() {
+  try {
     const now = new Date();
-    if (elDate) elDate.textContent = fmtDate.format(now);
-    if (elTime) elTime.textContent = fmtTime.format(now);
-  }
-  tick();
-  setInterval(tick, 1000);
-}
-
-// ---------- debug console (5 taps header) ----------
-(function setupDebugConsoleToggle() {
-  const header = $(".header");
-  const dbg = $("#debug-console");
-  if (!header || !dbg) return;
-
-  let tapCount = 0;
-  let lastTap = 0;
-  on(header, "click", () => {
-    const now = Date.now();
-    tapCount = (now - lastTap < 800) ? tapCount + 1 : 1;
-    lastTap = now;
-    if (tapCount >= 5) {
-      dbg.classList.toggle("show");
-      showToast(dbg.classList.contains("show") ? "Debug visible" : "Debug masqué");
-      tapCount = 0;
+    const elD = document.getElementById("date-actuelle");
+    const elH = document.getElementById("heure-actuelle");
+    if (elD) elD.textContent = fmtDateFR(now);
+    if (elH) {
+      const h = String(now.getHours()).padStart(2, "0");
+      const m = String(now.getMinutes()).padStart(2, "0");
+      elH.textContent = h + ":" + m;
     }
-  });
-})();
-
-// ---------- routing ----------
-function switchTo(screenId) {
-  $$(".ecran").forEach(e => e.classList.remove("show"));
-  const target = document.getElementById(screenId);
-  if (target) target.classList.add("show");
-
-  const map = {
-    "ecran-principal": "nav-principal",
-    "ecran-stats": "nav-stats",
-    "ecran-calendrier": "nav-calendrier",
-    "ecran-habitudes": "nav-habitudes",
-    "ecran-params": "nav-params",
-  };
-  $$(".nav button").forEach(b => b.classList.remove("actif"));
-  const activeBtn = document.getElementById(map[screenId]);
-  if (activeBtn) activeBtn.classList.add("actif");
-
-  emitState("sa:route-changed", { screen: screenId });
+  } catch (e) { /* noop */ }
 }
 
-function bindNav() {
-  const pairs = [
-    ["nav-principal", "ecran-principal"],
-    ["nav-stats", "ecran-stats"],
-    ["nav-calendrier", "ecran-calendrier"],
-    ["nav-habitudes", "ecran-habitudes"],
-    ["nav-params", "ecran-params"],
+// ----------------------------------------------
+// Navigation écrans (bottom bar)
+// ----------------------------------------------
+function showScreen(id) {
+  const screens = ["ecran-principal","ecran-stats","ecran-calendrier","ecran-habitudes","ecran-params"];
+  for (var i=0;i<screens.length;i++) {
+    var el = document.getElementById(screens[i]);
+    if (el) el.classList.remove("show");
+  }
+  var tgt = document.getElementById(id);
+  if (tgt) tgt.classList.add("show");
+
+  // activer l’onglet
+  const tabs = [
+    {btn:"nav-principal", scr:"ecran-principal"},
+    {btn:"nav-stats", scr:"ecran-stats"},
+    {btn:"nav-calendrier", scr:"ecran-calendrier"},
+    {btn:"nav-habitudes", scr:"ecran-habitudes"},
+    {btn:"nav-params", scr:"ecran-params"}
   ];
-  pairs.forEach(([btnId, screenId]) => {
-    const btn = document.getElementById(btnId);
-    if (btn) btn.addEventListener("click", () => switchTo(screenId));
-  });
+  for (var j=0;j<tabs.length;j++){
+    var b = document.getElementById(tabs[j].btn);
+    if (b) {
+      if (tabs[j].scr === id) b.classList.add("actif");
+      else b.classList.remove("actif");
+    }
+  }
+}
+function setupNav() {
+  var map = [
+    {btn:"nav-principal", id:"ecran-principal"},
+    {btn:"nav-stats", id:"ecran-stats"},
+    {btn:"nav-calendrier", id:"ecran-calendrier"},
+    {btn:"nav-habitudes", id:"ecran-habitudes"},
+    {btn:"nav-params", id:"ecran-params"},
+  ];
+  for (var i=0;i<map.length;i++){
+    (function(cfg){
+      var b = document.getElementById(cfg.btn);
+      if (!b) return;
+      b.addEventListener("click", function(){ showScreen(cfg.id); });
+    })(map[i]);
+  }
+  showScreen("ecran-principal");
 }
 
-// ---------- boot ----------
+// ----------------------------------------------
+// Snackbar + Undo
+// ----------------------------------------------
+function setupUndo() {
+  var bar = document.getElementById("snackbar");
+  var link = document.getElementById("undo-link");
+  if (!bar || !link) return;
+
+  function show(msg) {
+    bar.textContent = ""; // reset
+    bar.innerHTML = (msg || "Action enregistrée") + ' — <a href="#" id="undo-link">Annuler</a>';
+    bar.classList.add("show");
+    setTimeout(function(){ bar.classList.remove("show"); }, 2500);
+    // ré-attacher le listener du lien nouvellement injecté
+    var l2 = document.getElementById("undo-link");
+    if (l2) l2.addEventListener("click", function(ev){
+      ev.preventDefault();
+      if (canUndo()) undoLast();
+      bar.classList.remove("show");
+    });
+  }
+
+  on("sa:counts-updated", function(){ show("Action enregistrée"); });
+}
+
+// ----------------------------------------------
+// Modales 18+ (si présent) + modules optionnels
+// ----------------------------------------------
+async function bootOptionalModules() {
+  // modals (18+)
+  try {
+    const mod = await import("./modals.js");
+    if (mod && typeof mod.initModals === "function") mod.initModals();
+  } catch (e) { /* silencieux */ }
+
+  // stats
+  try {
+    const s = await import("./stats.js");
+    if (s && typeof s.initStats === "function") s.initStats();
+  } catch (e2) { /* silencieux */ }
+
+  // charts
+  try {
+    const c = await import("./charts.js");
+    if (c && typeof c.initCharts === "function") c.initCharts();
+  } catch (e3) { /* silencieux */ }
+
+  // calendrier
+  try {
+    const cal = await import("./calendar.js");
+    if (cal && typeof cal.initCalendar === "function") cal.initCalendar();
+  } catch (e4) { /* silencieux */ }
+}
+
+// ----------------------------------------------
+// Boot
+// ----------------------------------------------
 function boot() {
-  console.log("[app.boot] starting…");
-
-  // phase 1
-  initModals();    // avertissement 18+
-  initCounters();  // +/− accueil
-  bootCharts();    // graphiques
-  initStats();     // KPIs & carte agrégée (stats)
-
-  // horloge & date
-  startClock();
-
-  // nav
-  bindNav();
-  switchTo("ecran-principal");
-
-  console.log("[app.boot] ready ✓");
+  try {
+    tickClock();
+    setInterval(tickClock, 15000); // rafraîchit l’heure
+    setupNav();
+    setupUndo();
+    initCounters();
+    bootOptionalModules();
+    console.log("[app] ✓ prêt");
+  } catch (e) {
+    console.error("[app.boot]", e);
+    // afficher la console debug si dispo
+    var dbg = document.getElementById("debug-console");
+    if (dbg) { dbg.classList.add("show"); dbg.textContent += "\n[boot] " + (e && e.message ? e.message : e); }
+  }
 }
 
-window.addEventListener("DOMContentLoaded", boot);
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", boot);
+} else {
+  boot();
+}
