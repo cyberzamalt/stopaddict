@@ -1,101 +1,134 @@
-// ============================================================
-// counters.js — Compteurs Accueil (PHASE 2) — compat WebView
-// ============================================================
+/* web/js/counters.js
+   — Compteurs Accueil (boutons +/−, toggles modules, affichages) — v2.4.4
+*/
+import {
+  addEntry, removeEntry, getDaily, on,
+  isModuleEnabled, setModuleEnabled
+} from "./state.js";
 
-import { addEntry, removeEntry, getDaily, on } from "./state.js";
+// ------------------------------------------------------------
+// UI helpers
+// ------------------------------------------------------------
+function setText(id, txt) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = String(txt);
+}
+function toggleCardEnabled(cardId, btnMinusId, btnPlusId, enabled) {
+  const card = document.getElementById(cardId);
+  const b1 = document.getElementById(btnMinusId);
+  const b2 = document.getElementById(btnPlusId);
+  if (card) {
+    card.style.opacity = enabled ? "1" : "0.5";
+    card.style.filter = enabled ? "none" : "grayscale(0.3)";
+  }
+  if (b1) b1.disabled = !enabled;
+  if (b2) b2.disabled = !enabled;
+}
 
-console.log("[counters.js] Module loaded");
-
+// ------------------------------------------------------------
+// Refresh zones (barres + cartes)
+// ------------------------------------------------------------
 function refreshBars(counts) {
-  const elC = document.getElementById("bar-clopes");
-  const elJ = document.getElementById("bar-joints");
-  const elA = document.getElementById("bar-alcool");
-  if (elC) elC.textContent = String(counts.cigs || 0);
-  if (elJ) elJ.textContent = String(counts.weed || 0);
-  if (elA) elA.textContent = String(counts.alcohol || 0);
-  console.log("[counters.refreshBars]", counts);
+  setText("bar-clopes", counts.cigs || 0);
+  setText("bar-joints", counts.weed || 0);
+  setText("bar-alcool", counts.alcohol || 0);
+  // coût jour si prix plus tard → laissé à 0€ par stats.js
 }
 
 function refreshCards(counts) {
-  const cardC = document.getElementById("card-cigs");
-  if (cardC) {
-    const v = cardC.querySelector(".val");
-    if (v) v.textContent = String(counts.cigs || 0);
-  }
-  const cardJ = document.getElementById("card-weed");
-  if (cardJ) {
-    const v = cardJ.querySelector(".val");
-    if (v) v.textContent = String(counts.weed || 0);
-  }
-  const cardA = document.getElementById("card-alcool");
-  if (cardA) {
-    const v = cardA.querySelector(".val");
-    if (v) v.textContent = String(counts.alcohol || 0);
-  }
-  console.log("[counters.refreshCards]", counts);
+  setText("note-cigs", counts.cigs || 0);
+  setText("note-weed", counts.weed || 0);
+  setText("note-alcool", counts.alcohol || 0);
 }
 
+// ------------------------------------------------------------
+// Buttons +/−
+// ------------------------------------------------------------
 function setupButtons() {
-  console.log("[counters.setupButtons] Wiring buttons...");
-  const btns = [
-    ["cl-moins", "cigs", -1],
-    ["cl-plus", "cigs", 1],
-    ["j-moins", "weed", -1],
-    ["j-plus", "weed", 1],
-    ["a-moins", "alcohol", -1],
-    ["a-plus", "alcohol", 1],
+  const map = [
+    { id: "cl-moins", t: "cigs", delta: -1 },
+    { id: "cl-plus",  t: "cigs", delta: +1 },
+    { id: "j-moins",  t: "weed", delta: -1 },
+    { id: "j-plus",   t: "weed", delta: +1 },
+    { id: "a-moins",  t: "alcohol", delta: -1 },
+    { id: "a-plus",   t: "alcohol", delta: +1 },
   ];
-  btns.forEach(([id, type, delta]) => {
-    const el = document.getElementById(id);
-    if (!el) {
-      console.warn(`[counters] Button #${id} not found`);
-      return;
-    }
-    el.addEventListener("click", () => {
-      try {
-        if (delta > 0) addEntry(type, Math.abs(delta));
-        else removeEntry(type, Math.abs(delta));
-      } catch (e) {
-        console.error(`[counters] Button click error for ${id}:`, e);
-      }
-    });
-  });
-  console.log("[counters.setupButtons] ✓ Buttons wired");
+  for (var i = 0; i < map.length; i++) {
+    (function (cfg) {
+      const el = document.getElementById(cfg.id);
+      if (!el) return;
+      el.addEventListener("click", function () {
+        try {
+          if (cfg.delta > 0) addEntry(cfg.t, cfg.delta);
+          else removeEntry(cfg.t, Math.abs(cfg.delta));
+        } catch (e) { console.error("[counters.click]", cfg.id, e); }
+      });
+    })(map[i]);
+  }
 }
 
-function setupStateListener() {
-  console.log("[counters.setupStateListener] Subscribing...");
-  on("sa:counts-updated", (e) => {
-    try {
-      const counts = (e && e.detail && e.detail.counts) || getDaily();
-      refreshBars(counts);
-      refreshCards(counts);
-    } catch (err) {
-      console.error("[counters.setupStateListener] error:", err);
-    }
-  });
-  console.log("[counters.setupStateListener] ✓");
+// ------------------------------------------------------------
+// Toggles modules (checkboxes) + persistance via state.js
+// ------------------------------------------------------------
+function setupToggles() {
+  var pairs = [
+    { toggle: "toggle-cigs", type: "cigs", card: "card-cigs", m: "cl-moins", p: "cl-plus" },
+    { toggle: "toggle-weed", type: "weed", card: "card-weed", m: "j-moins", p: "j-plus" },
+    { toggle: "toggle-alcool", type: "alcohol", card: "card-alcool", m: "a-moins", p: "a-plus" },
+  ];
+  for (var i = 0; i < pairs.length; i++) {
+    (function (cfg) {
+      var t = document.getElementById(cfg.toggle);
+      if (!t) return;
+      // hydrate
+      var enabled = isModuleEnabled(cfg.type);
+      t.checked = enabled;
+      toggleCardEnabled(cfg.card, cfg.m, cfg.p, enabled);
+      // persist changes
+      t.addEventListener("change", function () {
+        var en = !!t.checked;
+        setModuleEnabled(cfg.type, en);
+        toggleCardEnabled(cfg.card, cfg.m, cfg.p, en);
+      });
+    })(pairs[i]);
+  }
 }
 
+// ------------------------------------------------------------
+// Initial render + live refresh
+// ------------------------------------------------------------
 function renderInitial() {
   try {
     const counts = getDaily();
     refreshBars(counts);
     refreshCards(counts);
-    console.log("[counters.renderInitial] ✓", counts);
-  } catch (e) {
-    console.error("[counters.renderInitial] error:", e);
-  }
+  } catch (e) { console.error("[counters.renderInitial]", e); }
+}
+function listenState() {
+  on("sa:counts-updated", function (e) {
+    try {
+      var detail = e && e.detail ? e.detail : null;
+      var counts = detail && detail.counts ? detail.counts : getDaily();
+      refreshBars(counts);
+      refreshCards(counts);
+    } catch (err) { console.error("[counters.listener]", err); }
+  });
+  on("sa:modules-changed", function () {
+    // réaligner l’état visuel des cartes (au cas où)
+    setupToggles();
+  });
 }
 
+// ------------------------------------------------------------
+// Public API
+// ------------------------------------------------------------
+export function getTodayCounts() { return getDaily(); }
 export function initCounters() {
-  console.log("[counters.initCounters] Starting...");
   try {
     setupButtons();
-    setupStateListener();
+    setupToggles();
     renderInitial();
-    console.log("[counters.initCounters] ✓ Ready");
-  } catch (e) {
-    console.error("[counters.initCounters] error:", e);
-  }
+    listenState();
+    console.log("[counters] ✓ ready");
+  } catch (e) { console.error("[counters.init]", e); }
 }
