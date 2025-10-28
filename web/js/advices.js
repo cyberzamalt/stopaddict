@@ -1,100 +1,135 @@
-// ============================================================
-// advices.js — Conseil du jour (rotation simple)
-// ============================================================
-// - Affiche un conseil dans #conseil-texte
-// - Boutons: #adv-prev (conseil précédent), #adv-pause (pause/reprise)
-// - Persiste index + pause dans localStorage
-// ============================================================
+/* web/js/advices.js
+   Conseils rotatifs filtrés selon modules & usages — v2
+*/
+import { $, loadJSON, saveJSON } from "./utils.js";
+import { on, todayTotals, isModuleEnabled } from "./state.js";
 
-console.log("[advices.js] Module loaded");
+const LS_ADV_IDX   = "sa:adv:index";
+const LS_ADV_PAUSE = "sa:adv:paused";
+const DATA_URL     = "./data/advices.json";
 
-var STORAGE_KEY = "sa_adv_v1";
-var advices = [
-  "Bois un grand verre d’eau quand l’envie monte : ça occupe l’esprit.",
-  "Marche 5 minutes : l’envie baisse souvent avec le mouvement.",
-  "Respire lentement 4-4-4 (inspire 4s, bloque 4s, expire 4s).",
-  "Note ton déclencheur (stress, ennui, café) et évite-le 1 jour.",
-  "Remplace la clope par 10 press-ups ou 20 squats.",
-  "Appelle quelqu’un 2 minutes au lieu de fumer/boire.",
-  "Prends un chewing-gum sans sucre : mâcher réduit l’envie.",
-  "Occupe tes mains (balle anti-stress, stylo, élastique).",
-  "Rappelle-toi ta raison n°1 d’arrêter. Écris-la!",
-  "Chaque envie passe. Attends 3 minutes, puis 3 de plus."
-];
+let advices = [];
+let timer   = null;
+let idx     = Number(localStorage.getItem(LS_ADV_IDX) || 0) || 0;
+let paused  = localStorage.getItem(LS_ADV_PAUSE) === "1";
 
-var idx = 0;
-var paused = false;
-var timer = null;
-
-function $(id){ return document.getElementById(id); }
-
-function loadState(){
-  try{
-    var raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    var s = JSON.parse(raw);
-    if (typeof s.idx === "number") idx = s.idx;
-    if (typeof s.paused === "boolean") paused = s.paused;
-  }catch(e){}
-}
-function saveState(){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify({ idx: idx, paused: paused })); }catch(e){}
+function setPaused(p) {
+  paused = !!p;
+  localStorage.setItem(LS_ADV_PAUSE, paused ? "1":"0");
 }
 
-function showAdvice(){
-  var el = $("conseil-texte");
-  if (!el) return;
-  var text = advices[idx % advices.length];
-  el.textContent = text;
-}
+function pickPool() {
+  // Filtrage très tolérant : si le JSON contient des tags, on filtre par modules actifs.
+  const active = [];
+  if (isModuleEnabled("cigs")) active.push("cigs","cigarettes","tabac");
+  if (isModuleEnabled("weed")) active.push("weed","cannabis","joint","joints");
+  if (isModuleEnabled("alcohol")) active.push("alcohol","alcool","drink");
 
-function next(){
-  idx = (idx + 1) % advices.length;
-  saveState();
-  showAdvice();
-}
-function prev(){
-  idx = (idx - 1 + advices.length) % advices.length;
-  saveState();
-  showAdvice();
-}
+  const t = todayTotals();
 
-function startAuto(){
-  stopAuto();
-  if (paused) return;
-  timer = setInterval(function(){ next(); }, 12000); // 12s
-}
-function stopAuto(){
-  if (timer){ clearInterval(timer); timer = null; }
-}
-
-function setupButtons(){
-  var bPrev = $("adv-prev");
-  var bPause= $("adv-pause");
-  if (bPrev) bPrev.addEventListener("click", function(){ prev(); });
-  if (bPause) bPause.addEventListener("click", function(){
-    paused = !paused;
-    saveState();
-    if (paused){
-      stopAuto();
-      bPause.textContent = "▶";
-    } else {
-      bPause.textContent = "⏸";
-      startAuto();
+  const pool = advices.filter(a => {
+    if (!a || typeof a !== "object") return false;
+    // tags optionnels
+    if (Array.isArray(a.tags) && a.tags.length) {
+      const hasCommon = a.tags.some(tag => active.includes(String(tag).toLowerCase()) || String(tag).toLowerCase()==="generic");
+      if (!hasCommon) return false;
     }
+    // seuils optionnels
+    if (a.minCigs != null && t.cigs < Number(a.minCigs)) return false;
+    if (a.minWeed != null && t.weed < Number(a.minWeed)) return false;
+    if (a.minAlcohol != null && t.alcohol < Number(a.minAlcohol)) return false;
+    return true;
+  });
+
+  // fallback si pool vide
+  if (!pool.length) {
+    return advices.filter(a => Array.isArray(a.tags) ? a.tags.includes("generic") : true);
+  }
+  return pool;
+}
+
+function show(idxToShow) {
+  const el = $("#conseil-texte");
+  if (!el) return;
+  const pool = pickPool();
+  if (!pool.length) {
+    el.textContent = "Conseil bien-être : note tes réussites d’aujourd’hui. Même petites, elles comptent.";
+    return;
+  }
+  const i = ((idxToShow % pool.length) + pool.length) % pool.length;
+  const a = pool[i];
+
+  // Support {text} ou {html} ou simple string
+  if (typeof a === "string") {
+    el.textContent = a;
+  } else if (a && a.html) {
+    el.innerHTML = a.html;
+  } else if (a && a.text) {
+    el.textContent = a.text;
+  } else {
+    el.textContent = String(a);
+  }
+}
+
+function next() {
+  idx++;
+  localStorage.setItem(LS_ADV_IDX, String(idx));
+  show(idx);
+}
+function prev() {
+  idx--;
+  localStorage.setItem(LS_ADV_IDX, String(idx));
+  show(idx);
+}
+
+function startLoop() {
+  clearInterval(timer);
+  timer = setInterval(() => {
+    if (!paused) next();
+  }, 12000); // 12 s
+}
+
+async function loadAdvices() {
+  try {
+    const res = await fetch(DATA_URL, { cache:"no-store" });
+    if (!res.ok) throw new Error(res.statusText);
+    const j = await res.json();
+    if (Array.isArray(j)) advices = j;
+    else if (Array.isArray(j?.advices)) advices = j.advices;
+  } catch (e) {
+    // Fallback générique
+    advices = [
+      { text:"Hydrate-toi régulièrement et note une envie que tu as su éviter aujourd’hui.", tags:["generic"] },
+      { text:"Une baisse durable vaut mieux qu’un arrêt brutal si tu ne te sens pas prêt. Fixe un petit objectif atteignable.", tags:["generic"] },
+      { text:"Marche 10 minutes quand l’envie monte : bouger change l’état interne et l’attente diminue.", tags:["generic"] },
+      { text:"Note ton heure de dernière consommation : visualiser l’écart renforce la motivation.", tags:["generic"] },
+    ];
+  }
+}
+
+function bindControls() {
+  const bPrev = $("#adv-prev");
+  const bPause = $("#adv-pause");
+
+  if (bPrev) bPrev.addEventListener("click", () => { prev(); });
+  if (bPause) bPause.addEventListener("click", () => {
+    setPaused(!paused);
+    // feedback minimal visuel
+    bPause.textContent = paused ? "▶" : "⏸";
   });
 }
 
-// Public
-export function initAdvices(){
-  console.log("[advices.initAdvices] Starting...");
-  try{
-    loadState();
-    showAdvice();
-    setupButtons();
-    if (!paused) startAuto();
-    console.log("[advices.initAdvices] ✓ Ready");
-  }catch(e){
-    console.error("[advices.initAdvices] error:", e);
-  }
+export async function initAdvices() {
+  // Si l’UI n’est pas présente, on ne fait rien
+  const card = $("#conseil-card");
+  if (!card) return;
+
+  await loadAdvices();
+  bindControls();
+  show(idx);
+  startLoop();
+
+  // Refiltrer à chaque MAJ de compteurs ou modules
+  on("sa:counts-updated", () => show(idx));
+  on("sa:modules-changed", () => show(idx));
 }
