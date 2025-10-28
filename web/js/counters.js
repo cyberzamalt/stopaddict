@@ -1,134 +1,111 @@
 /* web/js/counters.js
-   — Compteurs Accueil (boutons +/−, toggles modules, affichages) — v2.4.4
+   Boutons +/−, toggles modules, barres header, notes cartes — v2
 */
-import {
-  addEntry, removeEntry, getDaily, on,
-  isModuleEnabled, setModuleEnabled
-} from "./state.js";
+import { $, clamp, formatYMD } from "./utils.js";
+import { on, inc, dec, todayTotals, isModuleEnabled, setModuleEnabled } from "./state.js";
 
-// ------------------------------------------------------------
-// UI helpers
-// ------------------------------------------------------------
-function setText(id, txt) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = String(txt);
-}
-function toggleCardEnabled(cardId, btnMinusId, btnPlusId, enabled) {
-  const card = document.getElementById(cardId);
-  const b1 = document.getElementById(btnMinusId);
-  const b2 = document.getElementById(btnPlusId);
-  if (card) {
-    card.style.opacity = enabled ? "1" : "0.5";
-    card.style.filter = enabled ? "none" : "grayscale(0.3)";
+let computeDayCostFn = null;
+(async () => {
+  try {
+    const m = await import("./settings.js");
+    if (typeof m.computeDayCost === "function") computeDayCostFn = m.computeDayCost;
+  } catch(e) { /* facultatif */ }
+})();
+
+function updateHeaderBars() {
+  const t = todayTotals();
+  const elC = $("#bar-clopes");  if (elC) elC.textContent = String(t.cigs);
+  const elJ = $("#bar-joints");  if (elJ) elJ.textContent = String(t.weed);
+  const elA = $("#bar-alcool");  if (elA) elA.textContent = String(t.alcohol);
+
+  // Coût jour (si settings fournit un calcul)
+  const elCost = $("#stat-cout-jr");
+  if (elCost) {
+    if (computeDayCostFn) {
+      try { elCost.textContent = computeDayCostFn(new Date()); }
+      catch { elCost.textContent = "—"; }
+    } else {
+      elCost.textContent = "—";
+    }
   }
-  if (b1) b1.disabled = !enabled;
-  if (b2) b2.disabled = !enabled;
 }
 
-// ------------------------------------------------------------
-// Refresh zones (barres + cartes)
-// ------------------------------------------------------------
-function refreshBars(counts) {
-  setText("bar-clopes", counts.cigs || 0);
-  setText("bar-joints", counts.weed || 0);
-  setText("bar-alcool", counts.alcohol || 0);
-  // coût jour si prix plus tard → laissé à 0€ par stats.js
+function updateCardNotes() {
+  const t = todayTotals();
+  const nC = $("#note-cigs");   if (nC) nC.textContent = String(t.cigs);
+  const nJ = $("#note-weed");   if (nJ) nJ.textContent = String(t.weed);
+  const nA = $("#note-alcool"); if (nA) nA.textContent = String(t.alcohol);
 }
 
-function refreshCards(counts) {
-  setText("note-cigs", counts.cigs || 0);
-  setText("note-weed", counts.weed || 0);
-  setText("note-alcool", counts.alcohol || 0);
+function applyModuleVisibility() {
+  const cards = [
+    { id: "#card-cigs", key: "cigs", toggle: "#toggle-cigs" },
+    { id: "#card-weed", key: "weed", toggle: "#toggle-weed" },
+    { id: "#card-alcool", key: "alcohol", toggle: "#toggle-alcool" }
+  ];
+  for (const c of cards) {
+    const vis = isModuleEnabled(c.key);
+    const el = $(c.id);
+    if (el) el.style.display = vis ? "" : "none";
+    const t = $(c.toggle);
+    if (t) t.checked = !!vis;
+  }
 }
 
-// ------------------------------------------------------------
-// Buttons +/−
-// ------------------------------------------------------------
-function setupButtons() {
+function bindToggles() {
   const map = [
-    { id: "cl-moins", t: "cigs", delta: -1 },
-    { id: "cl-plus",  t: "cigs", delta: +1 },
-    { id: "j-moins",  t: "weed", delta: -1 },
-    { id: "j-plus",   t: "weed", delta: +1 },
-    { id: "a-moins",  t: "alcohol", delta: -1 },
-    { id: "a-plus",   t: "alcohol", delta: +1 },
+    { key:"cigs",    sel:"#toggle-cigs",    card:"#card-cigs" },
+    { key:"weed",    sel:"#toggle-weed",    card:"#card-weed" },
+    { key:"alcohol", sel:"#toggle-alcool",  card:"#card-alcool" },
   ];
-  for (var i = 0; i < map.length; i++) {
-    (function (cfg) {
-      const el = document.getElementById(cfg.id);
-      if (!el) return;
-      el.addEventListener("click", function () {
-        try {
-          if (cfg.delta > 0) addEntry(cfg.t, cfg.delta);
-          else removeEntry(cfg.t, Math.abs(cfg.delta));
-        } catch (e) { console.error("[counters.click]", cfg.id, e); }
-      });
-    })(map[i]);
+  for (const it of map) {
+    const box = $(it.sel);
+    if (!box) continue;
+    box.addEventListener("change", () => {
+      setModuleEnabled(it.key, !!box.checked);
+      const card = $(it.card);
+      if (card) card.style.display = box.checked ? "" : "none";
+    });
   }
 }
 
-// ------------------------------------------------------------
-// Toggles modules (checkboxes) + persistance via state.js
-// ------------------------------------------------------------
-function setupToggles() {
-  var pairs = [
-    { toggle: "toggle-cigs", type: "cigs", card: "card-cigs", m: "cl-moins", p: "cl-plus" },
-    { toggle: "toggle-weed", type: "weed", card: "card-weed", m: "j-moins", p: "j-plus" },
-    { toggle: "toggle-alcool", type: "alcohol", card: "card-alcool", m: "a-moins", p: "a-plus" },
-  ];
-  for (var i = 0; i < pairs.length; i++) {
-    (function (cfg) {
-      var t = document.getElementById(cfg.toggle);
-      if (!t) return;
-      // hydrate
-      var enabled = isModuleEnabled(cfg.type);
-      t.checked = enabled;
-      toggleCardEnabled(cfg.card, cfg.m, cfg.p, enabled);
-      // persist changes
-      t.addEventListener("change", function () {
-        var en = !!t.checked;
-        setModuleEnabled(cfg.type, en);
-        toggleCardEnabled(cfg.card, cfg.m, cfg.p, en);
-      });
-    })(pairs[i]);
-  }
+function bindPlusMinus() {
+  // Cigarettes
+  const clP = $("#cl-plus");  if (clP) clP.addEventListener("click", () => inc("cigs"));
+  const clM = $("#cl-moins"); if (clM) clM.addEventListener("click", () => dec("cigs"));
+
+  // Joints
+  const jP = $("#j-plus");  if (jP) jP.addEventListener("click", () => inc("weed"));
+  const jM = $("#j-moins"); if (jM) jM.addEventListener("click", () => dec("weed"));
+
+  // Alcool (total, sans sous-types ici)
+  const aP = $("#a-plus");  if (aP) aP.addEventListener("click", () => inc("alcohol", null, 1));
+  const aM = $("#a-moins"); if (aM) aM.addEventListener("click", () => dec("alcohol", null, 1));
 }
 
-// ------------------------------------------------------------
-// Initial render + live refresh
-// ------------------------------------------------------------
-function renderInitial() {
-  try {
-    const counts = getDaily();
-    refreshBars(counts);
-    refreshCards(counts);
-  } catch (e) { console.error("[counters.renderInitial]", e); }
-}
-function listenState() {
-  on("sa:counts-updated", function (e) {
-    try {
-      var detail = e && e.detail ? e.detail : null;
-      var counts = detail && detail.counts ? detail.counts : getDaily();
-      refreshBars(counts);
-      refreshCards(counts);
-    } catch (err) { console.error("[counters.listener]", err); }
-  });
-  on("sa:modules-changed", function () {
-    // réaligner l’état visuel des cartes (au cas où)
-    setupToggles();
-  });
+function bootAdvicesIfPresent() {
+  // Initialise les conseils si le bloc est présent, sans modifier app.js ni index.html
+  const card = $("#conseil-card");
+  if (!card) return;
+  import("./advices.js").then(m => {
+    if (typeof m.initAdvices === "function") m.initAdvices();
+  }).catch(()=>{});
 }
 
-// ------------------------------------------------------------
-// Public API
-// ------------------------------------------------------------
-export function getTodayCounts() { return getDaily(); }
 export function initCounters() {
-  try {
-    setupButtons();
-    setupToggles();
-    renderInitial();
-    listenState();
-    console.log("[counters] ✓ ready");
-  } catch (e) { console.error("[counters.init]", e); }
+  applyModuleVisibility();
+  bindToggles();
+  bindPlusMinus();
+  updateHeaderBars();
+  updateCardNotes();
+  bootAdvicesIfPresent();
+
+  // Réagir aux changements d’état (pour Stats/Charts déjà un event global existe)
+  on("sa:counts-updated", () => {
+    updateHeaderBars();
+    updateCardNotes();
+  });
+  on("sa:modules-changed", () => {
+    applyModuleVisibility();
+  });
 }
