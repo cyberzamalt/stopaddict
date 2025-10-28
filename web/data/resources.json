@@ -1,0 +1,62 @@
+{
+  "version": "1.0.0",
+  "updated": "2025-10-28",
+  "language": "fr",
+  "country": "FR",
+  "sections": [
+    {
+      "id": "urgence",
+      "title": "Urgences",
+      "items": [
+        { "label": "Urgences européennes", "type": "phone", "value": "112", "availability": "24/7" },
+        { "label": "SAMU", "type": "phone", "value": "15", "availability": "24/7" },
+        { "label": "Pompiers", "type": "phone", "value": "18", "availability": "24/7" },
+        { "label": "Police Secours", "type": "phone", "value": "17", "availability": "24/7" },
+        { "label": "Prévention du suicide", "type": "phone", "value": "3114", "availability": "24/7" }
+      ],
+      "notes": "En danger immédiat : compose 112."
+    },
+    {
+      "id": "tabac",
+      "title": "Aide Tabac",
+      "items": [
+        { "label": "Tabac Info Service (conseils & coaching)", "type": "web", "value": "https://www.tabac-info-service.fr" },
+        { "label": "Tabac Info Service (application mobile)", "type": "web", "value": "https://www.tabac-info-service.fr/les-outils/application" },
+        { "label": "Tabac Info Service (numéro)", "type": "phone", "value": "3989", "availability": "Horaires variables" }
+      ]
+    },
+    {
+      "id": "alcool",
+      "title": "Aide Alcool",
+      "items": [
+        { "label": "Alcool Info Service", "type": "web", "value": "https://www.alcool-info-service.fr" },
+        { "label": "Trouver de l’aide près de chez moi", "type": "web", "value": "https://www.alcool-info-service.fr/annuaire" }
+      ]
+    },
+    {
+      "id": "cannabis",
+      "title": "Aide Cannabis et autres produits",
+      "items": [
+        { "label": "Drogues Info Service", "type": "web", "value": "https://www.drogues-info-service.fr" },
+        { "label": "Chat / Forums (Drogues Info Service)", "type": "web", "value": "https://www.drogues-info-service.fr/les-outils" }
+      ]
+    },
+    {
+      "id": "addictions",
+      "title": "Addictions — ressources générales",
+      "items": [
+        { "label": "Addict'Aide (le village des addictions)", "type": "web", "value": "https://www.addictaide.fr" },
+        { "label": "Annuaire des professionnels (annuaire.sante.fr)", "type": "web", "value": "https://annuaire.sante.fr" }
+      ]
+    },
+    {
+      "id": "outils",
+      "title": "Outils pratiques",
+      "items": [
+        { "label": "Calcul du coût (tabac)", "type": "web", "value": "https://www.tabac-info-service.fr/je-me-teste" },
+        { "label": "Auto-évaluations alcool", "type": "web", "value": "https://www.alcool-info-service.fr/testez-votre-consommation" }
+      ]
+    }
+  ],
+  "disclaimer": "Ces ressources ne remplacent pas un avis médical. En cas d’urgence ou de danger immédiat, appelle le 112."
+}
