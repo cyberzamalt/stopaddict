@@ -4,6 +4,11 @@
 import { on, undoLast, canUndo } from "./state.js";
 import { initCounters } from "./counters.js";
 
+// ✅ Pack 3: outillage commun
+import { installGlobalErrorHooks, autoEnableIfRequested } from "./debug.js";
+import * as storage from "./storage.js";
+// (utils déjà en place, rien à changer ici)
+
 // ----------------------------------------------
 // Date / heure (header)
 // ----------------------------------------------
@@ -131,6 +136,14 @@ async function bootOptionalModules() {
 // ----------------------------------------------
 function boot() {
   try {
+    // ✅ Hooks erreurs + debug auto si demandé
+    installGlobalErrorHooks();
+    autoEnableIfRequested();
+
+    // Expose outils au besoin pour tests manuels (sans impacter l’app)
+    if (!window.SA) window.SA = {};
+    window.SA.storage = storage;
+
     tickClock();
     setInterval(tickClock, 15000); // rafraîchit l’heure
     setupNav();
@@ -140,7 +153,6 @@ function boot() {
     console.log("[app] ✓ prêt");
   } catch (e) {
     console.error("[app.boot]", e);
-    // afficher la console debug si dispo
     var dbg = document.getElementById("debug-console");
     if (dbg) { dbg.classList.add("show"); dbg.textContent += "\n[boot] " + (e && e.message ? e.message : e); }
   }
