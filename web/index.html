@@ -7,6 +7,11 @@
 <title>StopAddict – Compteur Tabac, Cannabis & Alcool (v2.4.4 PHASE 2)</title>
 <meta name="application-name" content="StopAddict">
 <meta name="apple-mobile-web-app-title" content="StopAddict">
+<meta name="theme-color" content="#2c3e50">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<link rel="manifest" href="./manifest.webmanifest">
 
 <!-- CSP -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:;
@@ -395,22 +400,6 @@
         </div>
         <button class="btn small" id="btn-save-hab" type="button" style="margin-top:10px">Enregistrer</button>
       </div>
-
-      <div class="card">
-        <div class="section-title">📅 Dates Clés</div>
-        <div class="grid-2">
-          <div class="param"><label>Réduction clopes</label><input type="date" id="date-reduc-clopes"></div>
-          <div class="param"><label>Stop clopes</label><input type="date" id="date-stop-clopes"></div>
-          <div class="param"><label>Objectif 0 clope</label><input type="date" id="date-no-clopes"></div>
-          <div class="param"><label>Réduction joints</label><input type="date" id="date-reduc-joints"></div>
-          <div class="param"><label>Stop joints</label><input type="date" id="date-stop-joints"></div>
-          <div class="param"><label>Objectif 0 joint</label><input type="date" id="date-no-joints"></div>
-          <div class="param"><label>Réduction alcool</label><input type="date" id="date-reduc-alcool"></div>
-          <div class="param"><label>Stop alcool</label><input type="date" id="date-stop-alcool"></div>
-          <div class="param"><label>Objectif 0 alcool</label><input type="date" id="date-no-alcool"></div>
-          <div class="param hint">Optionnel. Apparaissent sur le calendrier.</div>
-        </div>
-      </div>
     </div>
 
     <div id="ecran-params" class="ecran" style="display:none;">
@@ -535,6 +524,17 @@
       show('[promise] ' + (r && r.message ? r.message : String(r)));
     });
   })();
+</script>
+
+<!-- ✅ Enregistrement du Service Worker -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('./service-worker.js', { scope: './' })
+        .then(function(reg){ console.log('[SW] registered:', reg.scope); })
+        .catch(function(err){ console.warn('[SW] registration failed:', err); });
+    });
+  }
 </script>
 
 <!-- Vendor (Chart.js ou fallback local) -->
