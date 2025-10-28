@@ -1,210 +1,169 @@
 // web/js/storage.js
-// Wrapper localStorage + import/export unifiés (JSON/CSV) + helpers fichiers.
+// Enveloppe de stockage + import/export unifié (JSON/CSV) pour StopAddict.
+// Reste minimaliste, offline-friendly, et rétro-compatible avec l’existant.
 
+import { loadJSON, saveJSON, formatYMD, parseYMD, todayYMD, safeParseJSON } from "./utils.js";
+
+// ----- NAMESPACE & KEYS -----
 const NS = "sa:";
+export const KEYS = {
+  HISTORY:   NS + "history",   // { [ymd]: { c,j,a, beer,strong,liqueur, ... } }
+  SETTINGS:  NS + "settings",  // { prices, modules, advice, charts, locale, ... }
+  LIMITS:    NS + "limits",    // { perDay: {...} }
+  HABITS:    NS + "habits",    // { baseline: {...} }
+  FLAGS:     NS + "flags",     // { warnAccepted, warnHidden, ... }
+  DATES:     NS + "dates"      // { milestones: {...} }
+};
 
-function k(key) { return key.startsWith(NS) ? key : NS + key; }
-
-// ----------------------------
-// Key/Value & JSON
-// ----------------------------
-export function get(key, def = null) {
-  try {
-    const v = localStorage.getItem(k(key));
-    return v === null ? def : v;
-  } catch { return def; }
+// ----- API bas niveau (clé/valeur) -----
+export function get(key, def = null) { return loadJSON(key, def); }
+export function set(key, val) { return saveJSON(key, val); }
+export function del(key) { try { localStorage.removeItem(key); return true; } catch { return false; } }
+export function keys(prefix = NS) {
+  return Object.keys(localStorage).filter(k => k.startsWith(prefix));
+}
+export function clearAll(prefix = NS) {
+  keys(prefix).forEach(k => localStorage.removeItem(k));
 }
 
-export function set(key, val) {
-  try {
-    localStorage.setItem(k(key), String(val));
-    return true;
-  } catch { return false; }
+// ----- HISTORY helpers -----
+export function getHistory() {
+  return get(KEYS.HISTORY, {}); // { ymd: { c, j, a, ... } }
 }
-
-export function remove(key) {
-  try { localStorage.removeItem(k(key)); } catch {}
+export function setHistory(histObj) {
+  return set(KEYS.HISTORY, histObj || {});
 }
-
-export function clearNamespace(prefix = "") {
-  try {
-    const p = k(prefix);
-    const rm = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const kk = localStorage.key(i);
-      if (kk && kk.startsWith(p)) rm.push(kk);
-    }
-    rm.forEach((kk) => localStorage.removeItem(kk));
-    return rm.length;
-  } catch { return 0; }
-}
-
-export function getJSON(key, def = null) {
-  try {
-    const v = localStorage.getItem(k(key));
-    return v ? JSON.parse(v) : def;
-  } catch { return def; }
-}
-
-export function setJSON(key, obj) {
-  try {
-    localStorage.setItem(k(key), JSON.stringify(obj));
-    return true;
-  } catch { return false; }
-}
-
-export function keys(prefix = "") {
-  const out = [];
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const kk = localStorage.key(i);
-      if (kk && kk.startsWith(NS + prefix)) out.push(kk);
-    }
-  } catch {}
-  return out;
-}
-
-// ----------------------------
-// Download helpers
-// ----------------------------
-export function downloadBlob(filename, blob) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
-export function downloadText(filename, text, mime = "text/plain;charset=utf-8") {
-  downloadBlob(filename, new Blob([text], { type: mime }));
-}
-
-export function exportJSONFile(filename, data) {
-  downloadText(filename, JSON.stringify(data, null, 2), "application/json;charset=utf-8");
-}
-
-export function exportCSVFile(filename, rows) {
-  const { text } = toCSV(rows);
-  downloadText(filename, text, "text/csv;charset=utf-8");
-}
-
-// ----------------------------
-// CSV utils (auto-détection ; , \t)
-// ----------------------------
-function detectDelimiter(s) {
-  const c = (ch) => (s.match(new RegExp(`\\${ch}`, "g")) || []).length;
-  const cand = [{ d: ";" }, { d: "," }, { d: "\t" }];
-  cand.forEach((o) => (o.c = c(o.d)));
-  cand.sort((a, b) => b.c - a.c);
-  return (cand[0]?.d) || ",";
-}
-
-function escapeCSV(v, delim) {
-  if (v == null) return "";
-  let s = String(v);
-  const needsQuotes = s.includes('"') || s.includes("\n") || s.includes(delim);
-  if (s.includes('"')) s = s.replace(/"/g, '""');
-  return needsQuotes ? `"${s}"` : s;
-}
-
-export function toCSV(rows = []) {
-  if (!rows || !rows.length) return { headers: [], text: "" };
-  // union des clés
-  const headers = Array.from(rows.reduce((acc, r) => {
-    Object.keys(r || {}).forEach((k) => acc.add(k));
-    return acc;
-  }, new Set()));
-  const delim = ";";
-  const head = headers.map((h) => escapeCSV(h, delim)).join(delim);
-  const body = rows.map((r) => headers.map((h) => escapeCSV(r[h], delim)).join(delim)).join("\n");
-  return { headers, text: head + "\n" + body, delimiter: delim };
-}
-
-// Parser CSV basique avec gestion des quotes doublées
-export function parseCSV(text) {
-  const delim = detectDelimiter(text);
-  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter(Boolean);
-  if (!lines.length) return [];
-  const headers = splitCSVLine(lines[0], delim);
-  const out = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cells = splitCSVLine(lines[i], delim);
-    const row = {};
-    for (let j = 0; j < headers.length; j++) row[headers[j]] = cells[j] ?? "";
-    out.push(row);
+export function mergeHistory(patch) {
+  const base = getHistory();
+  for (const ymd of Object.keys(patch || {})) {
+    base[ymd] = { ...(base[ymd] || {}), ...(patch[ymd] || {}) };
   }
-  return out;
+  return setHistory(base);
+}
+export function getCountsFor(ymd = todayYMD()) {
+  const h = getHistory();
+  return { c:0, j:0, a:0, ...h[ymd] }; // cigs, joints, alcool (total ou sous-catégories)
+}
+export function setCountsFor(ymd, counts) {
+  const h = getHistory();
+  h[ymd] = { ...(h[ymd] || {}), ...(counts || {}) };
+  return setHistory(h);
 }
 
-function splitCSVLine(line, delim) {
-  const out = [];
-  let cur = "";
-  let inQ = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (inQ) {
-      if (ch === '"') {
-        if (line[i + 1] === '"') { cur += '"'; i++; }
-        else inQ = false;
-      } else {
-        cur += ch;
-      }
-    } else {
-      if (ch === '"') inQ = true;
-      else if (ch === delim) { out.push(cur); cur = ""; }
-      else cur += ch;
+// ----- SETTINGS / LIMITS / HABITS / FLAGS / DATES -----
+export const getSettings = () => get(KEYS.SETTINGS, {});
+export const setSettings = (s) => set(KEYS.SETTINGS, s || {});
+
+export const getLimits = () => get(KEYS.LIMITS, {});
+export const setLimits = (l) => set(KEYS.LIMITS, l || {});
+
+export const getHabits = () => get(KEYS.HABITS, {});
+export const setHabits = (h) => set(KEYS.HABITS, h || {});
+
+export const getFlags = () => get(KEYS.FLAGS, {});
+export const setFlags = (f) => set(KEYS.FLAGS, f || {});
+
+export const getDates = () => get(KEYS.DATES, {});
+export const setDates = (d) => set(KEYS.DATES, d || {});
+
+// ----- EXPORT / IMPORT (JSON) -----
+export function exportAllObject() {
+  // Instantané complet — sans dépendre des autres modules
+  return {
+    meta: {
+      app: "StopAddict",
+      version: "2.4.4",
+      exportedAt: new Date().toISOString()
+    },
+    data: {
+      history:  getHistory(),
+      settings: getSettings(),
+      limits:   getLimits(),
+      habits:   getHabits(),
+      flags:    getFlags(),
+      dates:    getDates()
     }
-  }
-  out.push(cur);
-  return out;
-}
-
-// ----------------------------
-// File picker / Import auto
-// ----------------------------
-export function pickFile(accept = ".json,.csv") {
-  return new Promise((resolve, reject) => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = accept;
-    input.onchange = () => resolve(input.files && input.files[0]);
-    input.onerror = reject;
-    input.click();
-  });
-}
-
-export function readFileAsText(file) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result || ""));
-    r.onerror = reject;
-    r.readAsText(file);
-  });
-}
-
-// Résultat: { type: "json"|"csv", data: any }
-export async function importAutoFromFile(accept = ".json,.csv") {
-  const file = await pickFile(accept);
-  if (!file) return null;
-  const txt = await readFileAsText(file);
-  // JSON ?
-  try {
-    const data = JSON.parse(txt);
-    return { type: "json", data, filename: file.name };
-  } catch { /* not json */ }
-  // CSV
-  const rows = parseCSV(txt);
-  return { type: "csv", data: rows, filename: file.name };
-}
-
-// Expose pour debug manuel
-if (!window.saStorage) {
-  window.saStorage = {
-    get, set, remove, clearNamespace, getJSON, setJSON, keys,
-    downloadBlob, downloadText, exportJSONFile, exportCSVFile,
-    toCSV, parseCSV, pickFile, readFileAsText, importAutoFromFile
   };
+}
+export function exportAllJSON(pretty = true) {
+  const obj = exportAllObject();
+  return pretty ? JSON.stringify(obj, null, 2) : JSON.stringify(obj);
+}
+export function importAllObject(payload, { merge = true } = {}) {
+  const obj = (typeof payload === "string") ? safeParseJSON(payload, null) : payload;
+  if (!obj || !obj.data) throw new Error("Import invalide");
+
+  const { history, settings, limits, habits, flags, dates } = obj.data;
+
+  if (merge) {
+    if (history) mergeHistory(history);
+    if (settings) setSettings({ ...getSettings(), ...settings });
+    if (limits)   setLimits({   ...getLimits(),   ...limits   });
+    if (habits)   setHabits({   ...getHabits(),   ...habits   });
+    if (flags)    setFlags({    ...getFlags(),    ...flags    });
+    if (dates)    setDates({    ...getDates(),    ...dates    });
+  } else {
+    if (history) setHistory(history);
+    if (settings) setSettings(settings);
+    if (limits)   setLimits(limits);
+    if (habits)   setHabits(habits);
+    if (flags)    setFlags(flags);
+    if (dates)    setDates(dates);
+  }
+  return true;
+}
+
+// ----- CSV (HISTORY uniquement) -----
+// Colonnes: date,c,j,a,beer,strong,liqueur
+export function exportHistoryCSV() {
+  const h = getHistory();
+  const rows = [["date","c","j","a","beer","strong","liqueur"]];
+  const dates = Object.keys(h).sort();
+  for (const ymd of dates) {
+    const v = h[ymd] || {};
+    rows.push([
+      ymd,
+      Number(v.c || 0),
+      Number(v.j || 0),
+      Number(v.a || 0),
+      Number(v.beer || 0),
+      Number(v.strong || 0),
+      Number(v.liqueur || 0),
+    ].join(","));
+  }
+  return rows.map(r => Array.isArray(r) ? r : [r]).join("\n");
+}
+export function importHistoryCSV(csvText, { merge = true } = {}) {
+  const lines = String(csvText || "").split(/\r?\n/).filter(Boolean);
+  if (lines.length === 0) return 0;
+
+  // Header (souple sur l’ordre, mais attend les noms connus)
+  const header = lines[0].split(",").map(s => s.trim().toLowerCase());
+  const idx = Object.fromEntries(header.map((h, i) => [h, i]));
+  const want = ["date","c","j","a","beer","strong","liqueur"];
+  if (!want.every(k => k in idx)) {
+    throw new Error("CSV invalide: colonnes attendues: " + want.join(", "));
+    }
+
+  const patch = {};
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(",");
+    const ymd  = cols[idx.date]?.trim();
+    const d    = parseYMD(ymd);
+    if (!d) continue;
+
+    patch[ymd] = {
+      c:        Number(cols[idx.c] || 0),
+      j:        Number(cols[idx.j] || 0),
+      a:        Number(cols[idx.a] || 0),
+      beer:     Number(cols[idx.beer] || 0),
+      strong:   Number(cols[idx.strong] || 0),
+      liqueur:  Number(cols[idx.liqueur] || 0),
+    };
+  }
+
+  if (merge) mergeHistory(patch);
+  else       setHistory(patch);
+
+  return Object.keys(patch).length;
 }
