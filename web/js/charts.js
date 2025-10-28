@@ -1,162 +1,118 @@
-// ============================================================
-// charts.js — Graphiques consommations & coûts (PHASE 2)
-// ============================================================
-// Affiche un graphe simple avec 3 barres (cigs, weed, alcool)
-// pour l'échelle sélectionnée. Évite les features non supportées
-// par vieilles WebView (pas d'opérateur ?. ou ??).
-// Dépendances: Chart.js chargé globalement + state.js
-// ============================================================
-
-import { getTotalsForRange, on } from "./state.js";
-
-console.log("[charts.js] Module loaded");
+// web/js/charts.js
+// Instancie 2 graphiques Chart.js et écoute l’événement "sa:chart-data" produit par stats.js.
 
 let chartCons = null;
 let chartCost = null;
-let currentRange = "day";
 
-function $(id){ return document.getElementById(id); }
+function byId(id) { return document.getElementById(id); }
 
-// ------------------------------------------------------------
-// Small helpers
-// ------------------------------------------------------------
-function ensureCtx(id){
-  const cv = $(id);
-  if (!cv) return null;
-  // Sur certains Android, width/height inline améliorent le rendu
-  if (!cv.getAttribute("width"))  cv.setAttribute("width","960");
-  if (!cv.getAttribute("height")) cv.setAttribute("height","260");
-  const ctx = cv.getContext ? cv.getContext("2d") : null;
-  return ctx;
+function ensureCtx(id) {
+  const el = byId(id);
+  if (!el) return null;
+  const ctx = el.getContext("2d");
+  return ctx || null;
 }
 
-function destroyIfExists(ch){
-  try{ if (ch && ch.destroy) ch.destroy(); }catch(e){}
-}
-
-// ------------------------------------------------------------
-// Build data
-// ------------------------------------------------------------
-function buildConsumptionData(range){
-  const t = getTotalsForRange(range) || {cigs:0, weed:0, alcohol:0};
-  const labels = ["Cigarettes","Joints","Alcool"];
-  const data = [t.cigs|0, t.weed|0, t.alcohol|0];
-  return { labels: labels, data: data };
-}
-
-// ------------------------------------------------------------
-// Draw charts
-// ------------------------------------------------------------
-function drawConsumption(range){
-  try{
-    const ctx = ensureCtx("chart-consommations");
-    if (!ctx || !window.Chart){ console.warn("[charts] Chart.js non dispo"); return; }
-
-    const d = buildConsumptionData(range);
-
-    destroyIfExists(chartCons);
-    chartCons = new window.Chart(ctx, {
-      type: "bar",
-      data: {
-        labels: d.labels,
-        datasets: [{
-          label: "Consommations (" + range + ")",
-          data: d.data,
-          borderWidth: 1
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          y: { beginAtZero: true, ticks: { precision:0 } }
-        },
-        plugins: {
-          legend: { display: true }
-        }
+function makeConsChart(ctx) {
+  // Barres empilées par catégorie
+  return new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: [],
+      datasets: [
+        { label: "Cigarettes", data: [], borderWidth: 1, backgroundColor: "rgba(59,130,246,0.5)" },
+        { label: "Joints", data: [], borderWidth: 1, backgroundColor: "rgba(16,185,129,0.5)" },
+        { label: "Alcool", data: [], borderWidth: 1, backgroundColor: "rgba(245,158,11,0.5)" }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: "bottom" }, tooltip: { mode: "index", intersect: false } },
+      scales: {
+        x: { stacked: true, ticks: { autoSkip: true, maxRotation: 0 } },
+        y: { stacked: true, beginAtZero: true, title: { display: true, text: "Unités" } }
       }
-    });
-  }catch(err){
-    console.error("[charts] drawConsumption error:", err);
-  }
-}
-
-function drawCosts(range){
-  // Optionnel: si state.js ne fournit rien sur le coût,
-  // on dessine simplement un graphe vide sans planter.
-  try{
-    const canvas = $("chart-cout-eco");
-    if (!canvas || !window.Chart) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    // Chercher si state.js expose des coûts
-    var totalCost = 0;
-    var label = "Coût (" + range + ")";
-    try {
-      const t = getTotalsForRange(range);
-      if (t && typeof t.cost === "number") totalCost = t.cost;
-    } catch(e){ /* pas critique */ }
-
-    destroyIfExists(chartCost);
-    chartCost = new window.Chart(ctx, {
-      type: "bar",
-      data: {
-        labels: [label],
-        datasets: [{
-          label: "€",
-          data: [ totalCost ],
-          borderWidth: 1
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          y: { beginAtZero: true }
-        },
-        plugins: {
-          legend: { display: false }
-        }
-      }
-    });
-  }catch(err){
-    console.warn("[charts] drawCosts error:", err);
-  }
-}
-
-// ------------------------------------------------------------
-// Listeners
-// ------------------------------------------------------------
-function setupListeners(){
-  // Quand l'échelle change (via stats.js), on redessine
-  on("sa:range-change", function(e){
-    const r = e && e.detail ? e.detail.range : null;
-    if (r) currentRange = r;
-    drawConsumption(currentRange);
-    drawCosts(currentRange);
-  });
-
-  // Quand les compteurs changent
-  on("sa:counts-updated", function(){
-    drawConsumption(currentRange);
-    drawCosts(currentRange);
+    }
   });
 }
 
-// ------------------------------------------------------------
-// Public
-// ------------------------------------------------------------
-export function initCharts(){
-  console.log("[charts.initCharts] Starting...");
-  try{
-    currentRange = "day";
-    setupListeners();
-    // Premier rendu
-    drawConsumption(currentRange);
-    drawCosts(currentRange);
-    console.log("[charts.initCharts] ✓ Ready");
-  }catch(e){
-    console.error("[charts.initCharts] error:", e);
+function makeCostChart(ctx) {
+  // Courbes coût / économies
+  return new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: [],
+      datasets: [
+        { label: "Coût (€)", data: [], borderWidth: 2, tension: 0.25 },
+        { label: "Économies (€)", data: [], borderWidth: 2, tension: 0.25 }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: "bottom" }, tooltip: { mode: "index", intersect: false } },
+      scales: {
+        x: { ticks: { autoSkip: true, maxRotation: 0 } },
+        y: { beginAtZero: true, title: { display: true, text: "€" } }
+      }
+    }
+  });
+}
+
+function resizeCanvasToContainer(id, minH = 220) {
+  const canvas = byId(id);
+  if (!canvas) return;
+  const parent = canvas.parentElement;
+  if (parent) {
+    const h = Math.max(minH, parent.clientWidth * 0.45);
+    canvas.style.width = "100%";
+    canvas.style.height = h + "px";
   }
+}
+
+function applyConsData(chart, labels, cigs, joints, alcohol) {
+  chart.data.labels = labels;
+  chart.data.datasets[0].data = cigs;
+  chart.data.datasets[1].data = joints;
+  chart.data.datasets[2].data = alcohol;
+  chart.update();
+}
+
+function applyCostData(chart, labels, cost, eco) {
+  chart.data.labels = labels;
+  chart.data.datasets[0].data = cost;
+  chart.data.datasets[1].data = eco;
+  chart.update();
+}
+
+export function initCharts() {
+  // init charts (si canvases présents)
+  const ctx1 = ensureCtx("chart-consommations");
+  const ctx2 = ensureCtx("chart-cout-eco");
+
+  if (ctx1) {
+    resizeCanvasToContainer("chart-consommations", 260);
+    chartCons = makeConsChart(ctx1);
+  }
+  if (ctx2) {
+    resizeCanvasToContainer("chart-cout-eco", 220);
+    chartCost = makeCostChart(ctx2);
+  }
+
+  // écoute des données poussées par stats.js
+  document.addEventListener("sa:chart-data", (e) => {
+    const d = e.detail || {};
+    const { labels = [], cigs = [], joints = [], alcohol = [], cost = [], eco = [] } = d;
+    if (chartCons) applyConsData(chartCons, labels, cigs, joints, alcohol);
+    if (chartCost) applyCostData(chartCost, labels, cost, eco);
+  });
+
+  // simple responsive (orientations)
+  window.addEventListener("resize", () => {
+    resizeCanvasToContainer("chart-consommations", 260);
+    resizeCanvasToContainer("chart-cout-eco", 220);
+    chartCons && chartCons.resize();
+    chartCost && chartCost.resize();
+  });
 }
