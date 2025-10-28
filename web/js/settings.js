@@ -1,119 +1,95 @@
-// web/js/settings.js — v2.4.3 (plein écran Réglages, modale 18+ câblée)
-// Objectif: rester fidèle au monolithe (pas de mini-modales pour Réglages)
+// web/js/settings.js
+// Gestion des réglages (prix, modules, préférences UI, etc.) + helpers coût.
+// Stocke dans storage.js mais offre une API claire et typée.
 
-const LS_SETTINGS = "app_settings_v23";
+import { mergeDeep } from "./utils.js";
+import { get as sget, set as sset, KEYS } from "./storage.js";
 
-// ---------- Horloge (entête) ----------
-function startClock() {
-  const elDate = document.getElementById("date-actuelle");
-  const elHeure = document.getElementById("heure-actuelle");
-  function tick() {
-    try {
-      const now = new Date();
-      if (elDate)  elDate.textContent  = now.toLocaleDateString("fr-FR", { weekday:"long", day:"2-digit", month:"long" });
-      if (elHeure) elHeure.textContent = now.toLocaleTimeString("fr-FR", { hour:"2-digit", minute:"2-digit" });
-    } catch {}
+// ---------- Valeurs par défaut ----------
+const DEFAULTS = {
+  locale: "fr-FR",
+  prices: {
+    // Coût unitaire estimatif (modifiable dans Réglages quand l’écran sera câblé)
+    cig:    0.60,  // par cigarette
+    joint:  2.00,  // par joint
+    beer:   2.50,  // par bière
+    strong: 3.00,  // par verre d’alcool fort
+    liqueur:2.00   // par verre de liqueur
+  },
+  modules: {
+    cigs:   true,   // activer carte Cigarettes
+    weed:   true,   // activer carte Joints
+    alcohol:true    // activer carte Alcool
+  },
+  advice: {
+    enabled:   true,
+    autoRotate:true,
+    rotateMs:  15000
+  },
+  charts: {
+    smoothing: 0,      // 0..1 (si besoin plus tard)
+    stacked:   false,  // mode empilé vs séries séparées
+    range:     "day"   // "day" | "week" | "month" | "year"
   }
-  tick();
-  setInterval(tick, 60_000);
-}
+};
 
-// ---------- Settings (modules visibles Accueil) ----------
-function readSettings() {
-  try { return JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}"); }
-  catch { return {}; }
-}
-function writeSettings(s) {
-  try { localStorage.setItem(LS_SETTINGS, JSON.stringify(s||{})); }
-  catch {}
-}
-
-function applyModuleToggles() {
-  const s = readSettings(); const m = s.modules || {};
-  const cardC = document.getElementById("card-cigs");
-  const cardW = document.getElementById("card-weed");
-  const cardA = document.getElementById("card-alcool");
-  if (cardC) cardC.style.display = (m.cigs    === false) ? "none" : "";
-  if (cardW) cardW.style.display = (m.weed    === false) ? "none" : "";
-  if (cardA) cardA.style.display = (m.alcohol === false) ? "none" : "";
-}
-
-function wireHomeToggles() {
-  const s = readSettings(); s.modules = s.modules || {};
-  const chkC = document.getElementById("toggle-cigs");
-  const chkW = document.getElementById("toggle-weed");
-  const chkA = document.getElementById("toggle-alcool");
-
-  if (chkC) chkC.checked = !(s.modules.cigs    === false);
-  if (chkW) chkW.checked = !(s.modules.weed    === false);
-  if (chkA) chkA.checked = !(s.modules.alcohol === false);
-
-  function persist() {
-    s.modules = {
-      cigs:    chkC ? !!chkC.checked : true,
-      weed:    chkW ? !!chkW.checked : true,
-      alcohol: chkA ? !!chkA.checked : true
-    };
-    writeSettings(s);
-    applyModuleToggles();
-    window.dispatchEvent(new CustomEvent("sa:settings:changed", { detail: s }));
+// ---------- Accès / mutation ----------
+export function getSettings() {
+  const cur = sget(KEYS.SETTINGS, null);
+  if (!cur) {
+    sset(KEYS.SETTINGS, DEFAULTS);
+    return structuredClone(DEFAULTS);
   }
-  chkC?.addEventListener("change", persist);
-  chkW?.addEventListener("change", persist);
-  chkA?.addEventListener("change", persist);
-
-  applyModuleToggles();
+  // merge défensif (nouvelles clés)
+  const merged = mergeDeep(DEFAULTS, cur);
+  if (JSON.stringify(merged) !== JSON.stringify(cur)) {
+    sset(KEYS.SETTINGS, merged);
+  }
+  return structuredClone(merged);
 }
 
-// ---------- Lien "Ressources utiles" depuis la modale 18+ ----------
-function wireWarnShortcut() {
-  const link = document.getElementById("open-ressources-from-warn");
-  if (!link) return;
-  link.addEventListener("click", (e)=>{
-    e.preventDefault();
-    // Ici, on laisse ton onglet Réglages plein écran gérer l’affichage de la section Ressources
-    window.dispatchEvent(new CustomEvent("sa:open:resources"));
-  });
+export function updateSettings(patch) {
+  const cur = getSettings();
+  const next = mergeDeep(cur, patch || {});
+  sset(KEYS.SETTINGS, next);
+  dispatchEvent(new CustomEvent("sa:settings-changed", { detail: { settings: next }}));
+  return next;
 }
 
-// ---------- Modale 18+ (validation/fermeture) ----------
-function setupWarnModal(){
-  const $ = (id)=>document.getElementById(id);
-  const modal   = $("modal-warn");
-  if (!modal) return;
-  const chk18   = $("chk-warn-18");
-  const chkHide = $("chk-warn-hide");
-  const btnOK   = $("btn-warn-accept");
-  const btnQuit = $("btn-warn-quit");
-  const btnCanc = $("btn-warn-cancel");
-
-  if (btnOK) btnOK.disabled = !(chk18 && chk18.checked);
-  chk18?.addEventListener("change", ()=>{ if(btnOK) btnOK.disabled = !chk18.checked; });
-
-  btnOK?.addEventListener("click", ()=>{
-    try {
-      localStorage.setItem("app_warn_v23", JSON.stringify({ accepted:true, hide: !!chkHide?.checked, ts: Date.now() }));
-    } catch {}
-    modal.classList.remove("show");
-    modal.setAttribute("aria-hidden","true");
-  });
-
-  btnCanc?.addEventListener("click", ()=>{
-    if (chk18)  chk18.checked  = false;
-    if (chkHide)chkHide.checked= false;
-    if (btnOK)  btnOK.disabled = true;
-  });
-
-  btnQuit?.addEventListener("click", ()=> alert("Vous pouvez fermer l’application maintenant."));
+export function resetSettings() {
+  sset(KEYS.SETTINGS, DEFAULTS);
+  dispatchEvent(new CustomEvent("sa:settings-changed", { detail: { settings: structuredClone(DEFAULTS) }}));
+  return structuredClone(DEFAULTS);
 }
 
-// ---------- INIT PUBLIC ----------
-export function initSettings() {
-  startClock();
-  wireHomeToggles();
-  wireWarnShortcut();
-  setupWarnModal();
+export function onSettingsChange(handler) {
+  // usage: onSettingsChange(({settings}) => { ... })
+  addEventListener("sa:settings-changed", (e) => handler(e.detail || {}));
+}
 
-  // réappliquer la visibilité au besoin
-  window.addEventListener("sa:settings:changed", applyModuleToggles);
+// ---------- Helpers coût ----------
+export function getUnitPrice(kind /* "cig"|"joint"|"beer"|"strong"|"liqueur" */) {
+  const s = getSettings();
+  return Number(s?.prices?.[kind] ?? 0);
+}
+export function computeCostFromCounts(counts /* {c,j,beer,strong,liqueur} */) {
+  const s = getSettings();
+  const p = s.prices || {};
+  const cigs    = Number(counts?.c || 0) * Number(p.cig || 0);
+  const joints  = Number(counts?.j || 0) * Number(p.joint || 0);
+  const beer    = Number(counts?.beer || 0) * Number(p.beer || 0);
+  const strong  = Number(counts?.strong || 0) * Number(p.strong || 0);
+  const liqueur = Number(counts?.liqueur || 0) * Number(p.liqueur || 0);
+  return cigs + joints + beer + strong + liqueur;
+}
+
+// ---------- Modules actifs (toggles Accueil) ----------
+export function isModuleEnabled(key /* "cigs"|"weed"|"alcohol" */) {
+  const s = getSettings();
+  return !!s?.modules?.[key];
+}
+export function setModuleEnabled(key, enabled) {
+  const s = getSettings();
+  const next = mergeDeep(s, { modules: { [key]: !!enabled } });
+  return updateSettings(next);
 }
