@@ -1,236 +1,156 @@
-// ============================================================
-// habits.js — Limites, baselines, dates + toggles modules
-// ============================================================
-// - Sauvegarde/chargement des champs de l'écran Habitudes
-// - Gère les toggles des cartes (cigarettes / joints / alcool)
-// - Émet des events pour info: "sa:habits-updated", "sa:module-toggle"
-// ============================================================
+// web/js/habits.js
+// Écran Habitudes (limites, baseline, dates clés) avec persistance locale.
+// - Par défaut : TOUT à 0 si rien de sauvegardé (écrase les valeurs HTML) — demandé.
+// - Enregistrement sur clic "Enregistrer" + évènement 'sa:habits-updated'.
 
-import { on, emit } from "./state.js";
+import { $, $$, loadJSON, saveJSON, parseYMD, formatYMD } from './utils.js';
 
-console.log("[habits.js] Module loaded");
+const LS_KEY = 'sa:habits'; // { limits:{...}, baseline:{...}, dates:{...} }
 
-var STORAGE_KEY = "sa_habits_v1";
-var TOGGLES_KEY = "sa_toggles_v1";
-
-function $(id){ return document.getElementById(id); }
-
-// ---------------------------
-// Storage
-// ---------------------------
-function loadJSON(key, def){
-  try{
-    var raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : (def || {});
-  }catch(e){
-    console.warn("[habits] loadJSON error:", e);
-    return (def || {});
-  }
+function readHabits() {
+  const h = loadJSON(LS_KEY, null);
+  if (h) return h;
+  // défaut demandé: 0 partout
+  return {
+    limits: { clopes:0, joints:0, biere:0, fort:0, liqueur:0 },
+    baseline: {
+      cl_class_min:0, cl_class_max:0,
+      cl_roul_min:0,  cl_roul_max:0,
+      cl_tube_min:0,  cl_tube_max:0,
+      joint_min:0,    joint_max:0,
+      biere_min:0,    biere_max:0,
+      fort_min:0,     fort_max:0,
+      liqueur_min:0,  liqueur_max:0,
+    },
+    dates: {
+      reduc_clopes:null, stop_clopes:null, objectif0_clopes:null,
+      reduc_joints:null, stop_joints:null, objectif0_joints:null,
+      reduc_alcool:null, stop_alcool:null, objectif0_alcool:null
+    }
+  };
 }
-function saveJSON(key, obj){
-  try{ localStorage.setItem(key, JSON.stringify(obj)); }catch(e){ console.warn("[habits] saveJSON error:", e); }
+
+function writeHabits(h) {
+  saveJSON(LS_KEY, h);
+  try { window.dispatchEvent(new CustomEvent('sa:habits-updated', { detail: h })); } catch {}
 }
 
-// ---------------------------
-// Habitudes: hydrater / lire
-// ---------------------------
-function hydrateInputs(){
-  var h = loadJSON(STORAGE_KEY, {});
+function valNum(id, def=0) {
+  const el = document.getElementById(id);
+  if (!el) return def;
+  const n = Number(el.value);
+  return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : def;
+}
+function setNum(id, v=0) {
+  const el = document.getElementById(id);
+  if (el) el.value = String(v ?? 0);
+}
+function valDate(id) {
+  const el = document.getElementById(id);
+  if (!el || !el.value) return null;
+  const d = parseYMD(el.value);
+  return d ? formatYMD(d) : null;
+}
+function setDate(id, ymdOrNull) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.value = ymdOrNull ?? '';
+}
 
+function loadIntoForm() {
+  const h = readHabits();
   // Limites
-  setVal("limite-clopes", num(h["limite-clopes"], 0));
-  setVal("limite-joints", num(h["limite-joints"], 0));
-  setVal("limite-biere",  num(h["limite-biere"],  0));
-  setVal("limite-fort",   num(h["limite-fort"],   0));
-  setVal("limite-liqueur",num(h["limite-liqueur"],0));
+  setNum('limite-clopes', h.limits.clopes);
+  setNum('limite-joints', h.limits.joints);
+  setNum('limite-biere',  h.limits.biere);
+  setNum('limite-fort',   h.limits.fort);
+  setNum('limite-liqueur',h.limits.liqueur);
 
-  // Baselines
-  setVal("hab-min-cl-class", num(h["hab-min-cl-class"], 0));
-  setVal("hab-max-cl-class", num(h["hab-max-cl-class"], 0));
-  setVal("hab-min-cl-roul",  num(h["hab-min-cl-roul"],  0));
-  setVal("hab-max-cl-roul",  num(h["hab-max-cl-roul"],  0));
-  setVal("hab-min-cl-tube",  num(h["hab-min-cl-tube"],  0));
-  setVal("hab-max-cl-tube",  num(h["hab-max-cl-tube"],  0));
-  setVal("hab-min-joint",    num(h["hab-min-joint"],    0));
-  setVal("hab-max-joint",    num(h["hab-max-joint"],    0));
-  setVal("hab-min-biere",    num(h["hab-min-biere"],    0));
-  setVal("hab-max-biere",    num(h["hab-max-biere"],    0));
-  setVal("hab-min-fort",     num(h["hab-min-fort"],     0));
-  setVal("hab-max-fort",     num(h["hab-max-fort"],     0));
-  setVal("hab-min-liqueur",  num(h["hab-min-liqueur"],  0));
-  setVal("hab-max-liqueur",  num(h["hab-max-liqueur"],  0));
+  // Baseline
+  setNum('hab-min-cl-class', h.baseline.cl_class_min);
+  setNum('hab-max-cl-class', h.baseline.cl_class_max);
+  setNum('hab-min-cl-roul',  h.baseline.cl_roul_min);
+  setNum('hab-max-cl-roul',  h.baseline.cl_roul_max);
+  setNum('hab-min-cl-tube',  h.baseline.cl_tube_min);
+  setNum('hab-max-cl-tube',  h.baseline.cl_tube_max);
+  setNum('hab-min-joint',    h.baseline.joint_min);
+  setNum('hab-max-joint',    h.baseline.joint_max);
+  setNum('hab-min-biere',    h.baseline.biere_min);
+  setNum('hab-max-biere',    h.baseline.biere_max);
+  setNum('hab-min-fort',     h.baseline.fort_min);
+  setNum('hab-max-fort',     h.baseline.fort_max);
+  setNum('hab-min-liqueur',  h.baseline.liqueur_min);
+  setNum('hab-max-liqueur',  h.baseline.liqueur_max);
 
   // Dates clés
-  setVal("date-reduc-clopes", safe(h["date-reduc-clopes"]));
-  setVal("date-stop-clopes",  safe(h["date-stop-clopes"]));
-  setVal("date-no-clopes",    safe(h["date-no-clopes"]));
-  setVal("date-reduc-joints", safe(h["date-reduc-joints"]));
-  setVal("date-stop-joints",  safe(h["date-stop-joints"]));
-  setVal("date-no-joints",    safe(h["date-no-joints"]));
-  setVal("date-reduc-alcool", safe(h["date-reduc-alcool"]));
-  setVal("date-stop-alcool",  safe(h["date-stop-alcool"]));
-  setVal("date-no-alcool",    safe(h["date-no-alcool"]));
+  setDate('date-reduc-clopes', h.dates.reduc_clopes);
+  setDate('date-stop-clopes',  h.dates.stop_clopes);
+  setDate('date-no-clopes',    h.dates.objectif0_clopes);
+
+  setDate('date-reduc-joints', h.dates.reduc_joints);
+  setDate('date-stop-joints',  h.dates.stop_joints);
+  setDate('date-no-joints',    h.dates.objectif0_joints);
+
+  setDate('date-reduc-alcool', h.dates.reduc_alcool);
+  setDate('date-stop-alcool',  h.dates.stop_alcool);
+  setDate('date-no-alcool',    h.dates.objectif0_alcool);
 }
 
-function collectInputs(){
-  var h = {};
-  // Limites
-  h["limite-clopes"]  = num(getVal("limite-clopes"), 0);
-  h["limite-joints"]  = num(getVal("limite-joints"), 0);
-  h["limite-biere"]   = num(getVal("limite-biere"),  0);
-  h["limite-fort"]    = num(getVal("limite-fort"),   0);
-  h["limite-liqueur"] = num(getVal("limite-liqueur"),0);
-
-  // Baselines
-  h["hab-min-cl-class"] = num(getVal("hab-min-cl-class"), 0);
-  h["hab-max-cl-class"] = num(getVal("hab-max-cl-class"), 0);
-  h["hab-min-cl-roul"]  = num(getVal("hab-min-cl-roul"),  0);
-  h["hab-max-cl-roul"]  = num(getVal("hab-max-cl-roul"),  0);
-  h["hab-min-cl-tube"]  = num(getVal("hab-min-cl-tube"),  0);
-  h["hab-max-cl-tube"]  = num(getVal("hab-max-cl-tube"),  0);
-  h["hab-min-joint"]    = num(getVal("hab-min-joint"),    0);
-  h["hab-max-joint"]    = num(getVal("hab-max-joint"),    0);
-  h["hab-min-biere"]    = num(getVal("hab-min-biere"),    0);
-  h["hab-max-biere"]    = num(getVal("hab-max-biere"),    0);
-  h["hab-min-fort"]     = num(getVal("hab-min-fort"),     0);
-  h["hab-max-fort"]     = num(getVal("hab-max-fort"),     0);
-  h["hab-min-liqueur"]  = num(getVal("hab-min-liqueur"),  0);
-  h["hab-max-liqueur"]  = num(getVal("hab-max-liqueur"),  0);
-
-  // Dates
-  h["date-reduc-clopes"] = safe(getVal("date-reduc-clopes"));
-  h["date-stop-clopes"]  = safe(getVal("date-stop-clopes"));
-  h["date-no-clopes"]    = safe(getVal("date-no-clopes"));
-  h["date-reduc-joints"] = safe(getVal("date-reduc-joints"));
-  h["date-stop-joints"]  = safe(getVal("date-stop-joints"));
-  h["date-no-joints"]    = safe(getVal("date-no-joints"));
-  h["date-reduc-alcool"] = safe(getVal("date-reduc-alcool"));
-  h["date-stop-alcool"]  = safe(getVal("date-stop-alcool"));
-  h["date-no-alcool"]    = safe(getVal("date-no-alcool"));
-
-  return h;
-}
-
-// ---------------------------
-// Helpers DOM valeurs
-// ---------------------------
-function getVal(id){
-  var el = $(id); return el ? el.value : "";
-}
-function setVal(id, v){
-  var el = $(id); if (el) el.value = v;
-}
-function num(v, d){
-  var n = parseFloat(v); return isFinite(n) ? n : (d||0);
-}
-function safe(v){ return (typeof v === "string") ? v : ""; }
-
-// ---------------------------
-// Toggles modules (Accueil)
-// ---------------------------
-function applyToggleUI(){
-  var tg = loadJSON(TOGGLES_KEY, { cigs:true, weed:true, alcohol:true });
-
-  toggleCard("cigs",    tg.cigs !== false);
-  toggleCard("weed",    tg.weed !== false);
-  toggleCard("alcohol", tg.alcohol !== false);
-
-  // Hydrater les checkboxes
-  var cbC = $("toggle-cigs");
-  var cbW = $("toggle-weed");
-  var cbA = $("toggle-alcool");
-  if (cbC) cbC.checked = tg.cigs !== false;
-  if (cbW) cbW.checked = tg.weed !== false;
-  if (cbA) cbA.checked = tg.alcohol !== false;
-}
-
-function toggleCard(type, enabled){
-  var cardId = type==="cigs" ? "card-cigs" : (type==="weed" ? "card-weed" : "card-alcool");
-  var btnPlus = type==="cigs" ? "cl-plus" : (type==="weed" ? "j-plus" : "a-plus");
-  var btnMoins= type==="cigs" ? "cl-moins": (type==="weed" ? "j-moins": "a-moins");
-
-  var card = $(cardId);
-  var bp = $(btnPlus);
-  var bm = $(btnMoins);
-
-  if (card){
-    if (!enabled){
-      card.style.opacity = "0.5";
-    } else {
-      card.style.opacity = "1";
+function readFromFormAndSave() {
+  const h = {
+    limits: {
+      clopes:  valNum('limite-clopes', 0),
+      joints:  valNum('limite-joints', 0),
+      biere:   valNum('limite-biere', 0),
+      fort:    valNum('limite-fort', 0),
+      liqueur: valNum('limite-liqueur', 0),
+    },
+    baseline: {
+      cl_class_min: valNum('hab-min-cl-class', 0),
+      cl_class_max: valNum('hab-max-cl-class', 0),
+      cl_roul_min:  valNum('hab-min-cl-roul', 0),
+      cl_roul_max:  valNum('hab-max-cl-roul', 0),
+      cl_tube_min:  valNum('hab-min-cl-tube', 0),
+      cl_tube_max:  valNum('hab-max-cl-tube', 0),
+      joint_min:    valNum('hab-min-joint', 0),
+      joint_max:    valNum('hab-max-joint', 0),
+      biere_min:    valNum('hab-min-biere', 0),
+      biere_max:    valNum('hab-max-biere', 0),
+      fort_min:     valNum('hab-min-fort', 0),
+      fort_max:     valNum('hab-max-fort', 0),
+      liqueur_min:  valNum('hab-min-liqueur', 0),
+      liqueur_max:  valNum('hab-max-liqueur', 0),
+    },
+    dates: {
+      reduc_clopes:     valDate('date-reduc-clopes'),
+      stop_clopes:      valDate('date-stop-clopes'),
+      objectif0_clopes: valDate('date-no-clopes'),
+      reduc_joints:     valDate('date-reduc-joints'),
+      stop_joints:      valDate('date-stop-joints'),
+      objectif0_joints: valDate('date-no-joints'),
+      reduc_alcool:     valDate('date-reduc-alcool'),
+      stop_alcool:      valDate('date-stop-alcool'),
+      objectif0_alcool: valDate('date-no-alcool'),
     }
-  }
-  if (bp) bp.disabled = !enabled;
-  if (bm) bm.disabled = !enabled;
+  };
+
+  writeHabits(h);
+
+  // Option: informer le Calendrier que des dates peuvent changer l’affichage
+  try { window.dispatchEvent(new Event('sa:habits-saved')); } catch {}
 }
 
-// ---------------------------
-// Wiring
-// ---------------------------
-function setupSave(){
-  var btn = $("btn-save-hab");
-  if (!btn) return;
-  btn.addEventListener("click", function(){
-    try{
-      var data = collectInputs();
-      saveJSON(STORAGE_KEY, data);
-      console.log("[habits] saved", data);
-      emit("sa:habits-updated", { habits: data });
-      showToast("Paramètres enregistrés");
-    }catch(e){
-      console.error("[habits] save error:", e);
-    }
-  });
+function bindUI() {
+  const btn = $('#btn-save-hab');
+  if (btn) btn.addEventListener('click', readFromFormAndSave);
 }
 
-function setupToggles(){
-  var cbC = $("toggle-cigs");
-  var cbW = $("toggle-weed");
-  var cbA = $("toggle-alcool");
-
-  function saveAndEmit(){
-    var tg = {
-      cigs: cbC ? !!cbC.checked : true,
-      weed: cbW ? !!cbW.checked : true,
-      alcohol: cbA ? !!cbA.checked : true
-    };
-    saveJSON(TOGGLES_KEY, tg);
-    toggleCard("cigs", tg.cigs);
-    toggleCard("weed", tg.weed);
-    toggleCard("alcohol", tg.alcohol);
-    emit("sa:module-toggle", { toggles: tg });
-  }
-
-  if (cbC) cbC.addEventListener("change", saveAndEmit);
-  if (cbW) cbW.addEventListener("change", saveAndEmit);
-  if (cbA) cbA.addEventListener("change", saveAndEmit);
-}
-
-function showToast(msg){
-  try{
-    var s = $("snackbar");
-    if (!s) return;
-    s.textContent = msg;
-    s.classList.add("show");
-    setTimeout(function(){ s.classList.remove("show"); }, 2000);
-  }catch(e){}
-}
-
-// ---------------------------
-// Public
-// ---------------------------
-export function initHabits(){
-  console.log("[habits.initHabits] Starting...");
-  try{
-    hydrateInputs();
-    setupSave();
-    setupToggles();
-    applyToggleUI();
-
-    // Quand d'autres modules mettent à jour, on peut ré-appliquer si besoin
-    on("sa:counts-updated", function(){ /* no-op */ });
-    console.log("[habits.initHabits] ✓ Ready");
-  }catch(e){
-    console.error("[habits.initHabits] error:", e);
+export function initHabits() {
+  try {
+    // par défaut tout à 0 si rien
+    loadIntoForm();
+    bindUI();
+  } catch (e) {
+    console.warn('[habits.init] ', e);
   }
 }
