@@ -1,0 +1,176 @@
+{
+  "version": "1.0.0",
+  "updated": "2025-10-28",
+  "language": "fr",
+  "rotateEverySec": 12,
+  "advices": [
+    {
+      "id": "A001",
+      "category": "general",
+      "tone": "direct",
+      "tags": ["craving", "hydratation", "quick-win"],
+      "text": "Bois un grand verre d’eau maintenant : l’envie baisse souvent en 2–3 minutes."
+    },
+    {
+      "id": "A002",
+      "category": "cigs",
+      "tone": "coach",
+      "tags": ["respiration", "craving"],
+      "text": "Respiration 4-4-6 : inspire 4s, bloque 4s, expire 6s. À répéter 3 fois."
+    },
+    {
+      "id": "A003",
+      "category": "weed",
+      "tone": "neutre",
+      "tags": ["routine", "déclencheurs"],
+      "text": "Change de pièce et occupe tes mains (douche courte, vaisselle, pliage de linge)."
+    },
+    {
+      "id": "A004",
+      "category": "alcohol",
+      "tone": "direct",
+      "tags": ["substitution"],
+      "text": "Prends une boisson sans alcool (eau pétillante + citron) et une poignée de noix."
+    },
+    {
+      "id": "A005",
+      "category": "general",
+      "tone": "coach",
+      "tags": ["marche", "dopamine"],
+      "text": "Marche 7 minutes dehors. Le mouvement casse le cycle de l’envie."
+    },
+    {
+      "id": "A006",
+      "category": "cigs",
+      "tone": "neutre",
+      "tags": ["micro-objectif"],
+      "text": "Repousse ta prochaine cigarette de 10 minutes. Mets un minuteur."
+    },
+    {
+      "id": "A007",
+      "category": "weed",
+      "tone": "direct",
+      "tags": ["dosage", "réduction"],
+      "text": "Si tu consommes : réduis la taille du joint et espace les taffes. Objectif : −30%."
+    },
+    {
+      "id": "A008",
+      "category": "alcohol",
+      "tone": "coach",
+      "tags": ["rythme", "verre-d-eau"],
+      "text": "Alterne 1 boisson sans alcool entre deux verres. Règle simple, effet immédiat."
+    },
+    {
+      "id": "A009",
+      "category": "general",
+      "tone": "neutre",
+      "tags": ["écriture", "journaling"],
+      "text": "Note en une phrase : « Qu’est-ce qui déclenche mon envie là, tout de suite ? »"
+    },
+    {
+      "id": "A010",
+      "category": "cigs",
+      "tone": "coach",
+      "tags": ["mains", "oralité"],
+      "text": "Occupe la bouche/mains : chewing-gum sans sucre, cure-dents, balle anti-stress."
+    },
+    {
+      "id": "A011",
+      "category": "weed",
+      "tone": "direct",
+      "tags": ["tolérance", "pause"],
+      "text": "Teste une ‘pause 24 h’. Observe sommeil, appétit, humeur. Note le résultat."
+    },
+    {
+      "id": "A012",
+      "category": "alcohol",
+      "tone": "neutre",
+      "tags": ["cadre", "limites"],
+      "text": "Fixe ton plafond du jour AVANT de sortir. Exemple : 2 verres max, fin à 22h."
+    },
+    {
+      "id": "A013",
+      "category": "general",
+      "tone": "coach",
+      "tags": ["fierté", "renforcement"],
+      "text": "Valide une mini-victoire dans l’app (bouton +). Le cumul construit la motivation."
+    },
+    {
+      "id": "A014",
+      "category": "cigs",
+      "tone": "direct",
+      "tags": ["coût", "visualisation"],
+      "text": "Regarde le coût journalier dans Stats. Visualiser l’argent économisé aide."
+    },
+    {
+      "id": "A015",
+      "category": "weed",
+      "tone": "neutre",
+      "tags": ["routine-soir"],
+      "text": "Remplace le joint du soir par tisane + série courte. Dors 30 min plus tôt."
+    },
+    {
+      "id": "A016",
+      "category": "alcohol",
+      "tone": "coach",
+      "tags": ["repas", "prévention"],
+      "text": "Mange avant de boire : protéines + féculents = montée plus lente, envie moindre."
+    },
+    {
+      "id": "A017",
+      "category": "general",
+      "tone": "direct",
+      "tags": ["SOS", "urgence-envie"],
+      "text": "Crise d’envie ? Déclenche le ‘Plan 3 actions’ : eau + respiration + marche."
+    },
+    {
+      "id": "A018",
+      "category": "cigs",
+      "tone": "neutre",
+      "tags": ["habitudes", "café"],
+      "text": "Change le rituel café : bois-le dans un autre endroit, sans téléphone."
+    },
+    {
+      "id": "A019",
+      "category": "weed",
+      "tone": "coach",
+      "tags": ["pairs", "social"],
+      "text": "Préviens un proche que tu réduis. Demande-lui 1 message d’encouragement."
+    },
+    {
+      "id": "A020",
+      "category": "alcohol",
+      "tone": "neutre",
+      "tags": ["sorties", "pré-commit"],
+      "text": "Annonce à l’avance : « Je conduis » ou « je fais soft ». Les autres s’ajustent."
+    },
+    {
+      "id": "A021",
+      "category": "general",
+      "tone": "coach",
+      "tags": ["sommeil", "récupération"],
+      "text": "Va au lit 30 min plus tôt ce soir. Sommeil = moins d’envies demain."
+    },
+    {
+      "id": "A022",
+      "category": "cigs",
+      "tone": "direct",
+      "tags": ["patch", "substituts"],
+      "text": "Tu peux tester substituts nicotiniques (patch/gomme). Demande conseil pro."
+    },
+    {
+      "id": "A023",
+      "category": "weed",
+      "tone": "neutre",
+      "tags": ["mise-à-distance"],
+      "text": "Range le matériel hors vue. Friction ↑ = consommation ↓."
+    },
+    {
+      "id": "A024",
+      "category": "alcohol",
+      "tone": "coach",
+      "tags": ["déclencheurs", "émotions"],
+      "text": "Colère/tristesse ? Écris 3 lignes avant de boire. L’émotion redescend."
+    }
+  ]
+}
