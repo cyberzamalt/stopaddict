@@ -1,186 +1,244 @@
 /* web/js/state.js
-   — Store central (localStorage + events) — v2.4.4
-   — Pas d’opérateur ?. ou ?? pour compatibilité WebView anciennes
+   État central + pub/sub + historique + undo — v2
 */
-const STORAGE_KEY = "sa_v244_state";
+import { $, $$, clamp, formatYMD, startOfDay, startOfWeek, startOfMonth, loadJSON, saveJSON } from "./utils.js";
 
-// ----------------------------------------------
-// Event bus (via document) — simple et robuste
-// ----------------------------------------------
-export function on(name, handler) {
-  document.addEventListener(name, handler, false);
-  return function off() { document.removeEventListener(name, handler, false); };
-}
-export function emit(name, detail) {
-  try { document.dispatchEvent(new CustomEvent(name, { detail: detail })); }
-  catch (e) { console.error("[state.emit]", e); }
-}
+const LS_HISTORY_KEY = "sa:history:v2";
+const LS_MODULES_KEY = "sa:modules:v2";
+const LS_UNDO_KEY    = "sa:undo:v2";
 
-// ----------------------------------------------
-// Helpers date
-// ----------------------------------------------
-export function todayKey(d) {
-  const t = d ? new Date(d) : new Date();
-  const y = t.getFullYear();
-  const m = String(t.getMonth() + 1).padStart(2, "0");
-  const dd = String(t.getDate()).padStart(2, "0");
-  return y + "-" + m + "-" + dd;
+const listeners = new Map(); // evt -> Set(fn)
+
+function emit(evt, payload) {
+  const set = listeners.get(evt);
+  if (set) for (const fn of set) { try { fn(payload); } catch(e){} }
+}
+export function on(evt, fn) {
+  if (!listeners.has(evt)) listeners.set(evt, new Set());
+  listeners.get(evt).add(fn);
+  return () => off(evt, fn);
+}
+export function off(evt, fn) {
+  const set = listeners.get(evt);
+  if (set) set.delete(fn);
 }
 
-// ----------------------------------------------
-// Lecture / Écriture storage
-// ----------------------------------------------
-function readRaw() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    const obj = JSON.parse(raw);
-    return obj && typeof obj === "object" ? obj : {};
-  } catch (e) {
-    console.error("[state.readRaw]", e);
-    return {};
+// ------------------------- ÉTAT & PERSISTANCE -------------------------
+const modulesDefault = { cigs:true, weed:true, alcohol:true };
+let modules = Object.assign({}, modulesDefault, loadJSON(LS_MODULES_KEY, modulesDefault));
+
+let history = loadJSON(LS_HISTORY_KEY, {}); // { "YYYY-MM-DD": { cigs:0, weed:0, alcohol:{total:0, beer:0, strong:0, liquor:0} } }
+if (!history || typeof history !== "object") history = {};
+
+let undoStack = loadJSON(LS_UNDO_KEY, []); // [{date,key,delta,subKey?}]
+
+function persist() {
+  saveJSON(LS_HISTORY_KEY, history);
+  saveJSON(LS_MODULES_KEY, modules);
+  saveJSON(LS_UNDO_KEY, undoStack);
+}
+
+function ensureDayObj(dateStr) {
+  if (!history[dateStr]) {
+    history[dateStr] = {
+      cigs: 0,
+      weed: 0,
+      alcohol: { total:0, beer:0, strong:0, liquor:0 }
+    };
+  } else if (!history[dateStr].alcohol || typeof history[dateStr].alcohol !== "object") {
+    // migration ancienne structure
+    const tot = Number(history[dateStr].alcohol || 0) || 0;
+    history[dateStr].alcohol = { total: tot, beer:0, strong:0, liquor:0 };
   }
-}
-function writeRaw(next) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next || {}));
-  } catch (e) {
-    console.error("[state.writeRaw]", e);
-  }
+  return history[dateStr];
 }
 
-// ----------------------------------------------
-// État par défaut
-// ----------------------------------------------
-function defaultState() {
+export function exportHistory() {
+  return JSON.parse(JSON.stringify(history));
+}
+export function importHistory(obj, merge = true) {
+  if (!obj || typeof obj !== "object") return false;
+  history = merge ? Object.assign({}, history, obj) : obj;
+  persist();
+  emit("sa:history-imported", null);
+  emit("sa:counts-updated", null);
+  emit("sa:history-changed", null);
+  return true;
+}
+
+// ------------------------- MODULES (activation) -------------------------
+export function isModuleEnabled(key) {
+  return !!modules[key];
+}
+export function setModuleEnabled(key, enabled) {
+  if (!Object.prototype.hasOwnProperty.call(modules, key)) return;
+  modules[key] = !!enabled;
+  persist();
+  emit("sa:modules-changed", { key, enabled: !!enabled });
+  emit("sa:counts-updated", null); // pour recalculs éventuels côté UI/graphs
+}
+
+// ------------------------- ACTIONS + UNDO -------------------------
+function pushUndo(rec) {
+  undoStack.push(rec);
+  if (undoStack.length > 100) undoStack.shift();
+  persist();
+}
+export function canUndo() { return undoStack.length > 0; }
+export function undoLast() {
+  const rec = undoStack.pop();
+  if (!rec) return false;
+  const d = ensureDayObj(rec.date);
+  if (rec.key === "alcohol") {
+    const a = d.alcohol;
+    a.total = clamp(a.total - rec.delta, 0, 1e9);
+    if (rec.subKey && a[rec.subKey] != null) {
+      a[rec.subKey] = clamp(a[rec.subKey] - rec.delta, 0, 1e9);
+    }
+  } else {
+    d[rec.key] = clamp((Number(d[rec.key])||0) - rec.delta, 0, 1e9);
+  }
+  persist();
+  emit("sa:counts-updated", null);
+  emit("sa:history-changed", null);
+  return true;
+}
+
+function adjust(key, delta = 1, subKey = null, date = new Date()) {
+  const dateStr = formatYMD(date);
+  const d = ensureDayObj(dateStr);
+
+  if (key === "alcohol") {
+    const a = d.alcohol;
+    a.total = clamp(a.total + delta, 0, 1e9);
+    if (subKey && a[subKey] != null) {
+      a[subKey] = clamp(a[subKey] + delta, 0, 1e9);
+    }
+    pushUndo({ date: dateStr, key, delta, subKey: subKey || null });
+  } else {
+    const cur = Number(d[key] || 0);
+    d[key] = clamp(cur + delta, 0, 1e9);
+    pushUndo({ date: dateStr, key, delta });
+  }
+
+  persist();
+  emit("sa:counts-updated", { date: dateStr, key, delta, subKey });
+  emit("sa:history-changed", { date: dateStr });
+}
+
+export function inc(key, subKey = null, step = 1, date = new Date()) {
+  adjust(key, Math.abs(step), subKey, date);
+}
+export function dec(key, subKey = null, step = 1, date = new Date()) {
+  adjust(key, -Math.abs(step), subKey, date);
+}
+
+// ------------------------- LECTURE / AGRÉGATS -------------------------
+export function getDay(date = new Date()) {
+  return ensureDayObj(formatYMD(date));
+}
+export function getDayByKey(dateStr) {
+  return ensureDayObj(dateStr);
+}
+export function todayTotals() {
+  const d = getDay(new Date());
   return {
-    version: "2.4.4",
-    entries: {}, // { "YYYY-MM-DD": { cigs, weed, alcohol } }
-    config: {
-      modules: { cigs: true, weed: true, alcohol: true },
-      limits: { cigs: 20, weed: 3, beer: 2, fort: 1, liqueur: 1 },
-      prices: { cigs: 0, weed: 0, alcohol: 0 }
+    cigs: Number(d.cigs || 0),
+    weed: Number(d.weed || 0),
+    alcohol: Number(d.alcohol?.total || 0),
+    alcoholDetail: {
+      beer: Number(d.alcohol?.beer || 0),
+      strong: Number(d.alcohol?.strong || 0),
+      liquor: Number(d.alcohol?.liquor || 0),
     }
   };
 }
-
-// ----------------------------------------------
-// Accès haut-niveau
-// ----------------------------------------------
-function ensureDay(obj, dayKey) {
-  if (!obj.entries) obj.entries = {};
-  if (!obj.entries[dayKey]) obj.entries[dayKey] = { cigs: 0, weed: 0, alcohol: 0 };
-  const d = obj.entries[dayKey];
-  if (typeof d.cigs !== "number") d.cigs = 0;
-  if (typeof d.weed !== "number") d.weed = 0;
-  if (typeof d.alcohol !== "number") d.alcohol = 0;
-  return d;
+export function getHistory() {
+  return history;
 }
 
-function loadState() {
-  const cur = readRaw();
-  if (!cur || typeof cur !== "object") return defaultState();
-  // Merge minimal
-  const base = defaultState();
-  cur.version = base.version;
-  if (!cur.config) cur.config = base.config;
-  if (!cur.config.modules) cur.config.modules = base.config.modules;
-  if (!cur.config.limits) cur.config.limits = base.config.limits;
-  if (!cur.config.prices) cur.config.prices = base.config.prices;
-  if (!cur.entries) cur.entries = {};
-  return cur;
-}
-function saveState(next) { writeRaw(next); emit("sa:state-saved", { state: next }); }
-
-let MEM = loadState();
-let LAST_ACTION = null; // pour Undo
-
-export function getState() { return loadState(); }
-export function getConfig() { MEM = loadState(); return MEM.config; }
-export function setConfigPatch(patch) {
-  MEM = loadState();
-  const cfg = MEM.config || (MEM.config = {});
-  for (var k in patch) { cfg[k] = patch[k]; }
-  saveState(MEM);
+// Renvoie agrégats entre dates (inclusives)
+export function totalsBetween(fromDate, toDate) {
+  const from = startOfDay(fromDate);
+  const to = startOfDay(toDate);
+  const res = { cigs:0, weed:0, alcohol:0, beer:0, strong:0, liquor:0 };
+  const cur = new Date(from);
+  while (cur <= to) {
+    const k = formatYMD(cur);
+    const d = history[k];
+    if (d) {
+      res.cigs   += Number(d.cigs || 0);
+      res.weed   += Number(d.weed || 0);
+      const a = d.alcohol || {};
+      res.alcohol += Number(a.total || 0);
+      res.beer    += Number(a.beer || 0);
+      res.strong  += Number(a.strong || 0);
+      res.liquor  += Number(a.liquor || 0);
+    }
+    cur.setDate(cur.getDate()+1);
+  }
+  return res;
 }
 
-export function isModuleEnabled(type) {
-  MEM = loadState();
-  const m = MEM.config && MEM.config.modules ? MEM.config.modules : {};
-  return !!m[type];
-}
-export function setModuleEnabled(type, enabled) {
-  MEM = loadState();
-  if (!MEM.config) MEM.config = {};
-  if (!MEM.config.modules) MEM.config.modules = {};
-  MEM.config.modules[type] = !!enabled;
-  saveState(MEM);
-  emit("sa:modules-changed", { modules: MEM.config.modules });
-}
+export function rangeData(range /* "day"|"week"|"month"|"year" */, anchor = new Date()) {
+  const labels = [];
+  const cigs = [], weed = [], alcohol = [];
+  const costs = []; // laissé pour usage éventuel par charts/stats (rempli ailleurs si besoin)
+  const ecos  = [];
 
-// ----------------------------------------------
-// Données jour
-// ----------------------------------------------
-export function getDaily(date) {
-  MEM = loadState();
-  const dkey = todayKey(date);
-  const d = ensureDay(MEM, dkey);
-  return { cigs: d.cigs, weed: d.weed, alcohol: d.alcohol, date: dkey };
-}
+  const A = startOfDay(anchor);
+  const tmp = new Date(A);
 
-export function setDailyCounts(date, counts) {
-  MEM = loadState();
-  const dkey = todayKey(date);
-  const d = ensureDay(MEM, dkey);
-  d.cigs = Math.max(0, parseInt(counts.cigs || 0, 10));
-  d.weed = Math.max(0, parseInt(counts.weed || 0, 10));
-  d.alcohol = Math.max(0, parseInt(counts.alcohol || 0, 10));
-  saveState(MEM);
-  emit("sa:counts-updated", { date: dkey, counts: { cigs: d.cigs, weed: d.weed, alcohol: d.alcohol } });
-  return { cigs: d.cigs, weed: d.weed, alcohol: d.alcohol };
-}
+  const addPoint = (d) => {
+    const k = formatYMD(d);
+    labels.push(k);
+    const obj = history[k] || {};
+    cigs.push(Number(obj.cigs || 0));
+    weed.push(Number(obj.weed || 0));
+    const a = obj.alcohol || {};
+    alcohol.push(Number(a.total || 0));
+    costs.push(0);
+    ecos.push(0);
+  };
 
-export function addEntry(type, amount, date) {
-  MEM = loadState();
-  const n = Math.max(1, Math.abs(parseInt(amount || 1, 10)));
-  const dkey = todayKey(date);
-  const d = ensureDay(MEM, dkey);
-  const before = { cigs: d.cigs, weed: d.weed, alcohol: d.alcohol };
-  if (type === "cigs") d.cigs += n;
-  else if (type === "weed") d.weed += n;
-  else if (type === "alcohol") d.alcohol += n;
+  if (range === "day") {
+    addPoint(tmp);
+  } else if (range === "week") {
+    const start = startOfWeek(A, 1);
+    for (let i=0;i<7;i++) {
+      const d = new Date(start); d.setDate(start.getDate()+i);
+      addPoint(d);
+    }
+  } else if (range === "month") {
+    const m0 = startOfMonth(A);
+    const m1 = new Date(m0.getFullYear(), m0.getMonth()+1, 0); // fin mois
+    for (let d=new Date(m0); d<=m1; d.setDate(d.getDate()+1)) addPoint(d);
+  } else if (range === "year") {
+    // 12 points (mois) = somme par mois
+    for (let m=0; m<12; m++) {
+      const first = new Date(A.getFullYear(), m, 1);
+      const last  = new Date(A.getFullYear(), m+1, 0);
+      const agg = totalsBetween(first, last);
+      labels.push(String(m+1).padStart(2,"0") + "/" + A.getFullYear());
+      cigs.push(agg.cigs); weed.push(agg.weed); alcohol.push(agg.alcohol);
+      costs.push(0); ecos.push(0);
+    }
+  } else {
+    addPoint(tmp);
+  }
 
-  saveState(MEM);
-  LAST_ACTION = { kind: "add", type: type, n: n, date: dkey, before: before };
-  emit("sa:counts-updated", { date: dkey, counts: { cigs: d.cigs, weed: d.weed, alcohol: d.alcohol } });
-}
-
-export function removeEntry(type, amount, date) {
-  MEM = loadState();
-  const n = Math.max(1, Math.abs(parseInt(amount || 1, 10)));
-  const dkey = todayKey(date);
-  const d = ensureDay(MEM, dkey);
-  const before = { cigs: d.cigs, weed: d.weed, alcohol: d.alcohol };
-  if (type === "cigs") d.cigs = Math.max(0, d.cigs - n);
-  else if (type === "weed") d.weed = Math.max(0, d.weed - n);
-  else if (type === "alcohol") d.alcohol = Math.max(0, d.alcohol - n);
-
-  saveState(MEM);
-  LAST_ACTION = { kind: "remove", type: type, n: n, date: dkey, before: before };
-  emit("sa:counts-updated", { date: dkey, counts: { cigs: d.cigs, weed: d.weed, alcohol: d.alcohol } });
+  return { labels, cigs, weed, alcohol, costs, ecos };
 }
 
-export function canUndo() { return !!LAST_ACTION; }
-export function undoLast() {
-  if (!LAST_ACTION) return false;
-  MEM = loadState();
-  const dkey = LAST_ACTION.date;
-  const d = ensureDay(MEM, dkey);
-  d.cigs = LAST_ACTION.before.cigs;
-  d.weed = LAST_ACTION.before.weed;
-  d.alcohol = LAST_ACTION.before.alcohol;
-  saveState(MEM);
-  emit("sa:counts-updated", { date: dkey, counts: { cigs: d.cigs, weed: d.weed, alcohol: d.alcohol } });
-  LAST_ACTION = null;
-  return true;
-}
+// Expose modules pour lecture externe
+export const state = {
+  get modules(){ return Object.assign({}, modules); }
+};
+
+// Émission initiale pour synchro UIs tardives
+setTimeout(() => {
+  emit("sa:modules-changed", null);
+  emit("sa:counts-updated", null);
+}, 0);
+
+export { emit }; // optionnel pour modules internes
