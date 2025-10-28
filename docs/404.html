@@ -1,9 +1,28 @@
 <!doctype html>
+<html lang="fr">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Redirection…</title>
 <meta http-equiv="refresh" content="0; url=/stopaddict/web/index.html">
+
+<body>
 <script>
-  if (!location.pathname.startsWith('/stopaddict/web/')) {
-    location.replace('/stopaddict/web/index.html' + location.search + location.hash);
-  }
+  (function () {
+    // Point d'entrée unique de l’app sur GitHub Pages (projet /stopaddict)
+    var BASE = "/stopaddict/web/index.html";
+    var p = location.pathname || "";
+    // Si on n'est pas déjà sur /stopaddict/web/* => redirige en conservant ? et #
+    if (!p.startsWith("/stopaddict/web/")) {
+      var target = BASE + (location.search || "") + (location.hash || "");
+      // replace() évite de polluer l'historique
+      location.replace(target);
+    }
+  })();
 </script>
+
+<noscript>
+  <meta http-equiv="refresh" content="0; url=/stopaddict/web/index.html">
+  <p>Redirection vers <a href="/stopaddict/web/index.html">/stopaddict/web/index.html</a>…</p>
+</noscript>
+</body>
+</html>
