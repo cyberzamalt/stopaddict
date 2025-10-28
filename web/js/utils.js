@@ -1,46 +1,46 @@
 // web/js/utils.js
 // Helpers génériques, zéro dépendance.
-// ⚠️ Conserve l'API existante ; ajouts non-intrusifs pour dates/formatters/ranges.
+// ⚠️ Rétro-compat: conserve $, $$, clamp, pad2, isSameDay, startOfDay,
+// startOfWeek, startOfMonth, formatYMD, parseYMD, toCurrency,
+// loadJSON, saveJSON, throttle.
 
-//
-// Sélecteurs DOM
-//
-export const $ = (sel, root = document) => root.querySelector(sel);
+// ---------- Sélecteurs ----------
+export const $  = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
-//
-// Nombres / bornes
-//
-export function clamp(n, min, max) { return Math.min(max, Math.max(min, n)); }
-export function pad2(n) { return String(n).padStart(2, "0"); }
-
-export function toFixedSafe(n, digits = 2) {
-  const v = Number.isFinite(n) ? n : 0;
-  return Number(v.toFixed(digits));
+// ---------- Nombres / bornes ----------
+export function clamp(n, min, max) {
+  return Math.min(max, Math.max(min, n));
 }
-export function formatNumber(n, locale = "fr-FR") {
-  return (Number.isFinite(n) ? n : 0).toLocaleString(locale);
+export function round2(n) {
+  return Math.round(n * 100) / 100;
 }
-export function sum(arr = []) { return arr.reduce((a, b) => a + (Number(b) || 0), 0); }
-export function avg(arr = []) { return arr.length ? sum(arr) / arr.length : 0; }
-export function uniq(arr = []) { return Array.from(new Set(arr)); }
-
-//
-// Dates de base
-//
-export function isSameDay(a, b) {
-  return a.getFullYear() === b.getFullYear()
-    && a.getMonth() === b.getMonth()
-    && a.getDate() === b.getDate();
-}
-export function isSameMonth(a, b) {
-  return a.getFullYear() === b.getFullYear()
-    && a.getMonth() === b.getMonth();
+export function pad2(n) {
+  return String(n).padStart(2, "0");
 }
 
+// ---------- Dates ----------
 export function startOfDay(d = new Date()) {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
+  return x;
+}
+export function isSameDay(a, b) {
+  return a.getFullYear() === b.getFullYear()
+      && a.getMonth() === b.getMonth()
+      && a.getDate() === b.getDate();
+}
+// Lundi = 1 par défaut
+export function startOfWeek(d = new Date(), weekStartsOn = 1) {
+  const x = startOfDay(d);
+  const day = x.getDay(); // 0..6 (0 = dimanche)
+  const diff = (day - weekStartsOn + 7) % 7;
+  x.setDate(x.getDate() - diff);
+  return x;
+}
+export function startOfMonth(d = new Date()) {
+  const x = startOfDay(d);
+  x.setDate(1);
   return x;
 }
 export function endOfDay(d = new Date()) {
@@ -48,128 +48,64 @@ export function endOfDay(d = new Date()) {
   x.setHours(23, 59, 59, 999);
   return x;
 }
-
-// 1 = lundi (FR)
-export function startOfWeek(d = new Date(), weekStartsOn = 1) {
-  const x = startOfDay(d);
-  const day = x.getDay(); // 0..6 (0=dim)
-  const diff = (day - weekStartsOn + 7) % 7;
-  x.setDate(x.getDate() - diff);
-  return x;
-}
-export function endOfWeek(d = new Date(), weekStartsOn = 1) {
-  const s = startOfWeek(d, weekStartsOn);
-  const x = new Date(s);
-  x.setDate(s.getDate() + 6);
-  return endOfDay(x);
-}
-
-export function startOfMonth(d = new Date()) {
-  const x = startOfDay(d);
-  x.setDate(1);
-  return x;
-}
-export function endOfMonth(d = new Date()) {
-  const x = startOfDay(d);
-  x.setMonth(x.getMonth() + 1, 0); // jour 0 = dernier jour du mois précédent
-  return endOfDay(x);
-}
-
-export function startOfYear(d = new Date()) {
-  const x = startOfDay(d);
-  x.setMonth(0, 1);
-  return x;
-}
-export function endOfYear(d = new Date()) {
-  const x = startOfDay(d);
-  x.setMonth(11, 31);
-  return endOfDay(x);
-}
-
-export function addDays(d = new Date(), n = 0) {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  return x;
-}
-export function addMonths(d = new Date(), n = 0) {
-  const x = new Date(d);
-  x.setMonth(x.getMonth() + n);
-  return x;
-}
-export function daysBetween(a, b) {
-  const A = startOfDay(a).getTime();
-  const B = startOfDay(b).getTime();
-  const ONE = 24 * 60 * 60 * 1000;
-  return Math.round((B - A) / ONE);
-}
-export function rangeDays(start, end) {
-  const out = [];
-  let cur = startOfDay(start);
-  const last = startOfDay(end);
-  while (cur <= last) {
-    out.push(new Date(cur));
-    cur = addDays(cur, 1);
-  }
-  return out;
-}
-
-//
-// Formats YMD
-//
 export function formatYMD(d = new Date()) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 export function parseYMD(s) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  // "YYYY-MM-DD" -> Date à minuit
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ""));
   if (!m) return null;
   const dt = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   dt.setHours(0, 0, 0, 0);
   return dt;
 }
-// Alias pratique
-export const ymd = formatYMD;
-
-//
-// Formats lisibles FR (pour UI / légendes)
-//
-const JOURS_COURT = ["dim", "lun", "mar", "mer", "jeu", "ven", "sam"];
-const MOIS_LONG = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
-
-export function formatShortFR(d = new Date()) {
-  return `${JOURS_COURT[d.getDay()]} ${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`;
+export function todayYMD() {
+  return formatYMD(new Date());
 }
-export function formatMonthFR(d = new Date()) {
-  return `${MOIS_LONG[d.getMonth()]} ${d.getFullYear()}`;
+export function rangeDays(dStart, dEnd) {
+  // Entrées: Date|YMD. Retour: tableau de YMD inclusifs.
+  const a = (dStart instanceof Date) ? startOfDay(dStart) : parseYMD(dStart);
+  const b = (dEnd   instanceof Date) ? startOfDay(dEnd)   : parseYMD(dEnd);
+  if (!a || !b) return [];
+  const out = [];
+  const cur = new Date(a);
+  while (cur <= b) {
+    out.push(formatYMD(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
 }
 
-//
-// Monnaie / texte
-//
+// ---------- Monnaie / format ----------
 export function toCurrency(n, cur = "€") {
-  if (!isFinite(n)) return `0${cur}`;
-  return `${(Math.round(n * 100) / 100).toLocaleString()}${cur}`;
+  const v = Number.isFinite(n) ? round2(n) : 0;
+  // Pas d’Intl ici pour rester ultra-léger et offline-friendly
+  return `${v.toLocaleString()}${cur}`;
+}
+export function formatInt(n) {
+  const v = Number.isFinite(n) ? Math.trunc(n) : 0;
+  return v.toLocaleString();
 }
 
-//
-// Stockage JSON simple (conservé pour compat)
-// (Note: des fonctions plus évoluées existent dans web/js/storage.js)
-//
+// ---------- localStorage JSON safe (garde compat ascendante) ----------
 export function loadJSON(key, def = null) {
   try {
     const v = localStorage.getItem(key);
     return v ? JSON.parse(v) : def;
-  } catch { return def; }
+  } catch {
+    return def;
+  }
 }
 export function saveJSON(key, obj) {
   try {
     localStorage.setItem(key, JSON.stringify(obj));
     return true;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
-//
-// Throttle / Debounce
-//
+// ---------- Throttle / Debounce ----------
 export function throttle(fn, wait = 100) {
   let pending = false;
   let lastArgs = null;
@@ -185,23 +121,48 @@ export function throttle(fn, wait = 100) {
   };
 }
 export function debounce(fn, wait = 200) {
-  let t = 0;
+  let t = null;
   return (...args) => {
     clearTimeout(t);
     t = setTimeout(() => fn(...args), wait);
   };
 }
 
-//
-// Utilitaires divers
-//
-export function groupBy(arr = [], keyFn = (x) => x) {
-  const map = new Map();
-  for (const item of arr) {
-    const k = keyFn(item);
-    const bucket = map.get(k);
-    if (bucket) bucket.push(item);
-    else map.set(k, [item]);
+// ---------- Fichiers (utiles aux imports/exports) ----------
+export function downloadText(filename, text) {
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+export function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result || ""));
+    fr.onerror = () => reject(fr.error || new Error("readFileAsText failed"));
+    fr.readAsText(file);
+  });
+}
+
+// ---------- Divers ----------
+export const noop = () => {};
+export const wait = (ms) => new Promise(r => setTimeout(r, ms));
+export function safeParseJSON(s, def = null) {
+  try { return JSON.parse(s); } catch { return def; }
+}
+export function mergeDeep(target, patch) {
+  // Petit merge profond sans dépendances
+  if (patch && typeof patch === "object" && !Array.isArray(patch)) {
+    const out = { ...(target || {}) };
+    for (const k of Object.keys(patch)) {
+      const v = patch[k];
+      out[k] = (v && typeof v === "object" && !Array.isArray(v))
+        ? mergeDeep(out[k], v)
+        : v;
+    }
+    return out;
   }
-  return map;
+  return patch;
 }
