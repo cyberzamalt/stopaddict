@@ -1,9 +1,8 @@
 /* ============================================================
-   app.css — Compléments légers (PHASE 2)
-   — pas de tests, uniquement styles utiles
+   app.css — Compléments légers (PHASE 2) — additif, non cassant
    ============================================================ */
 
-/* Consolide la zone des actions sous les graphiques */
+/* Actions sous les graphiques */
 .chart-actions{
   display:flex;
   gap:8px;
@@ -13,18 +12,18 @@
 }
 .chart-actions .btn{ min-width:180px; }
 
-/* Bloc KPI vert au milieu de l'écran Stats */
+/* Bloc KPI au milieu de l'écran Stats */
 .kpi-block{ background:#ecfdf5; border:1px solid #6ee7b7; border-radius:12px; padding:10px; margin:8px 0; }
 .kpi-block h3{ margin:0 0 6px; font-size:14px; color:#065f46; }
 .kpi-line{ display:flex; align-items:center; justify-content:space-between; padding:4px 0; }
 .kpi-label{ font-weight:700; color:#064e3b; }
 .kpi-value{ font-weight:900; font-size:16px; color:#052e2b; }
 
-/* Correction responsive pour les canvas */
+/* Zone graphiques : canvases responsives */
 .chart-block{ position:relative; height:520px; }
 .chart-block canvas{ display:block; width:100%; height:240px; }
 
-/* Debug console : si activée, reste lisible */
+/* Console debug visible si activée */
 #debug-console{
   font:12px/1.4 monospace;
   background:#111; color:#0f0;
@@ -38,6 +37,12 @@
 /* Petites aides visuelles */
 .banner.green .val{ color:#065f46; }
 .banner.orange .val{ color:#9a3412; }
+
+/* Calendrier (compléments, sans écraser) */
+.cal-cell{ transition:transform .15s ease; }
+.cal-cell:hover{ transform:scale(1.05); }
+.cal-cell.has-data{ background:#ecfdf5; }
+.cal-cell.today{ border-color:#3b82f6; border-width:2px; }
 
 /* Petits écrans */
 @media (max-width: 360px){
