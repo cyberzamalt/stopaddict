@@ -1,293 +1,172 @@
 // web/js/calendar.js
-// Vue Calendrier (mensuelle) + modale jour
-// - Affiche un mois avec pastilles (cigarettes/joints/alcool) si > 0
-// - Ouvre une modale pour consulter/ajuster un jour
-// - Défensif: fonctionne même si certaines APIs de state.js/storage/utils n'existent pas
-// - Ne casse rien : n’écrit que via l’API state.js si dispo, sinon fallback localStorage "sa:history"
+// Rendu du calendrier + pastilles par consommation + jalons
+// Modale "jour" avec +/- et RAZ, sauvegarde directe dans l'historique LS (clé robuste)
+// Émet "sa:history-changed" et "sa:counts-updated" après modif pour rafraîchir le reste
 
-import { $, $$, formatYMD, startOfMonth, startOfDay, loadJSON, saveJSON, pad2 } from './utils.js';
+import { $, $$, startOfMonth, formatYMD } from "./utils.js";
 
-// ---- Fallbacks sûrs (au cas où certaines fonctions n'existent pas) ----
-function safeOn(evt, cb) {
-  try { window.addEventListener(evt, cb); } catch {}
+const LS_HISTORY_KEYS = ["sa:history","sa_history","SA_HISTORY","history"];
+
+function getJSONFromKeys(keys, def=null){
+  for (const k of keys){
+    try {
+      const v = localStorage.getItem(k);
+      if (v) return JSON.parse(v);
+    } catch(e){}
+  }
+  return def;
 }
-function emit(evt, detail) {
-  try { window.dispatchEvent(new CustomEvent(evt, { detail })); } catch {}
-}
-
-// On tente de charger state.js s’il expose des helpers utiles (optionnel)
-let stateAPI = null;
-try {
-  // @ts-ignore
-  stateAPI = await import('./state.js');
-} catch { /* no-op */ }
-
-// Clés & structure minimale pour le fallback
-const LS_KEY = 'sa:history'; // { "YYYY-MM-DD": { c:0, j:0, a:0, beer:0, strong:0, liqueur:0 } }
-function readHistory() { return loadJSON(LS_KEY, {}); }
-function writeHistory(db) { saveJSON(LS_KEY, db); }
-
-// Lecture d’un jour (privilégie state.js si dispo)
-function readDay(date) {
-  const ymd = formatYMD(date);
-  // 1) API state (si dispo)
-  try {
-    if (stateAPI && typeof stateAPI.getDay === 'function') {
-      const d = stateAPI.getDay(date); // libre (doit renvoyer quelque chose)
-      if (d) return normalizeDay(d);
-    }
-  } catch {}
-  // 2) Fallback local
-  const db = readHistory();
-  return normalizeDay(db[ymd] || {});
+function setJSONFirstKey(keys, obj){
+  try { localStorage.setItem(keys[0], JSON.stringify(obj)); } catch(e){}
 }
 
-// Écriture d’un jour (privilégie state.js si dispo)
-function writeDay(date, patch) {
-  const ymd = formatYMD(date);
-  // 1) API state (si dispo)
-  try {
-    if (stateAPI && typeof stateAPI.setDay === 'function') {
-      stateAPI.setDay(date, patch);
-      emit('sa:counts-updated', { scope: 'calendar', ymd });
-      return;
-    }
-    if (stateAPI && typeof stateAPI.mutate === 'function') {
-      // liberté d’implémentation: mutate({type, date, delta}) si existait
-      // ici on force un set total par sécurité
-      stateAPI.mutate({ type: 'calendar:setDay', date, patch });
-      emit('sa:counts-updated', { scope: 'calendar', ymd });
-      return;
-    }
-  } catch {}
-  // 2) Fallback local
-  const db = readHistory();
-  const cur = normalizeDay(db[ymd] || {});
-  db[ymd] = { ...cur, ...patch };
-  writeHistory(db);
-  emit('sa:counts-updated', { scope: 'calendar', ymd });
+function normDayEntry(raw){
+  if (!raw || typeof raw!=="object") return { c:0,j:0,a:0 };
+  const c = raw.c ?? raw.cigs ?? raw.clopes ?? raw.cl ?? 0;
+  const j = raw.j ?? raw.weed ?? raw.joints ?? raw.jt ?? 0;
+  let a  = raw.a ?? raw.alcool ?? raw.alcohol ?? 0;
+  const beer   = raw.beer ?? raw.biere ?? 0;
+  const strong = raw.strong ?? raw.fort ?? 0;
+  const liquor = raw.liquor ?? raw.liqueur ?? 0;
+  if (beer||strong||liquor) a = (Number(a)||0)+beer+strong+liquor;
+  return { c:Number(c)||0, j:Number(j)||0, a:Number(a)||0 };
 }
 
-// Normalise la forme d’un jour pour éviter les undefined
-function normalizeDay(d) {
-  return {
-    c: toInt(d.c ?? d.cigs ?? d.clopes ?? 0),
-    j: toInt(d.j ?? d.joints ?? 0),
-    a: toInt(d.a ?? d.alcool ?? d.alcohol ?? 0),
-    beer: toInt(d.beer ?? 0),
-    strong: toInt(d.strong ?? 0),
-    liqueur: toInt(d.liqueur ?? d.liquor ?? 0),
-  };
-}
-function toInt(x) {
-  const n = Number(x);
-  return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
-}
+function loadHistory(){ return getJSONFromKeys(LS_HISTORY_KEYS, {}) || {}; }
 
-// -------------------------------------------------------------
-
-let curMonth = startOfMonth(new Date());
-let selectedDay = startOfDay(new Date());
-
-function qs() {
-  return {
-    titre: $('#cal-titre'),
-    grid: $('#cal-grid'),
-    btnPrev: $('#cal-prev'),
-    btnNext: $('#cal-next'),
-
-    modal: $('#cal-jour'),
-    mTitle: $('#cal-jour-titre'),
-
-    vC: $('#cal-jour-cl'),
-    vJ: $('#cal-jour-j'),
-    vA: $('#cal-jour-a'),
-
-    segC: $('#cal-jour-seg-cl'),
-    segA: $('#cal-jour-seg-a'),
-
-    bCPlus: $('#cal-cl-plus'),
-    bCMoins: $('#cal-cl-moins'),
-    bJPlus: $('#cal-j-plus'),
-    bJMoins: $('#cal-j-moins'),
-    bAPlus: $('#cal-a-plus'),
-    bAMoins: $('#cal-a-moins'),
-
-    bRAZ: $('#cal-jour-raz'),
-    bClose: $('#cal-jour-fermer'),
-  };
+function monthMeta(d){
+  const som = startOfMonth(d);
+  const year = som.getFullYear();
+  const month= som.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const next     = new Date(year, month+1, 1);
+  const days = [];
+  for (let dt = new Date(firstDay); dt < next; dt.setDate(dt.getDate()+1)){
+    days.push(new Date(dt));
+  }
+  const label = firstDay.toLocaleString("fr-FR", { month:"long", year:"numeric" });
+  return { days, label };
 }
 
-function labelMonth(d) {
-  const mois = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
-  return `${mois[d.getMonth()]} ${d.getFullYear()}`;
-}
+function renderGrid(baseDate){
+  const grid = $("#cal-grid");
+  const title = $("#cal-titre");
+  if (!grid || !title) return;
 
-function endOfMonth(d) {
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0);
-}
+  const meta = monthMeta(baseDate);
+  title.textContent = meta.label[0].toUpperCase()+meta.label.slice(1);
 
-function sameYMD(a, b) {
-  return a.getFullYear() === b.getFullYear()
-      && a.getMonth() === b.getMonth()
-      && a.getDate() === b.getDate();
-}
+  grid.innerHTML = "";
+  const todayYMD = formatYMD(new Date());
+  const history = loadHistory();
 
-// Construit/rafraîchit la grille du mois
-function renderMonth() {
-  const { titre, grid } = qs();
-  if (!grid || !titre) return;
-  titre.textContent = labelMonth(curMonth);
+  for (const dt of meta.days){
+    const ymd = formatYMD(dt);
+    const e = normDayEntry(history[ymd] || {});
+    const cell = document.createElement("div");
+    cell.className = "cal-cell";
+    if (ymd===todayYMD) cell.classList.add("today");
+    if ((e.c||0) + (e.j||0) + (e.a||0) > 0) cell.classList.add("has-data");
 
-  // Vide la grille
-  grid.innerHTML = '';
+    const num = document.createElement("div");
+    num.className = "cal-num";
+    num.textContent = String(dt.getDate());
+    cell.appendChild(num);
 
-  const first = new Date(curMonth.getFullYear(), curMonth.getMonth(), 1);
-  const last = endOfMonth(curMonth);
-  // On aligne sur lundi (1) : range = 6 lignes x 7 colonnes
-  const firstDow = (first.getDay() + 6) % 7; // 0=lundi … 6=dimanche
-  const totalDays = last.getDate();
-  const today = startOfDay(new Date());
+    // Dots conso
+    const dots = document.createElement("div");
+    if (e.c>0){ const d=document.createElement("span"); d.className="dot c"; dots.appendChild(d); }
+    if (e.j>0){ const d=document.createElement("span"); d.className="dot j"; dots.appendChild(d); }
+    if (e.a>0){ const d=document.createElement("span"); d.className="dot a"; dots.appendChild(d); }
+    cell.appendChild(dots);
 
-  // On veut exactement 42 cellules pour une grille stable
-  const cells = 42;
-  for (let i = 0; i < cells; i++) {
-    const cell = document.createElement('div');
-    cell.className = 'cal-cell';
-
-    const dayNum = i - firstDow + 1;
-    const inMonth = dayNum >= 1 && dayNum <= totalDays;
-
-    if (!inMonth) {
-      cell.style.opacity = '0.4';
-      cell.style.pointerEvents = 'none';
-      cell.innerHTML = `<div class="cal-num">—</div>`;
-      grid.appendChild(cell);
-      continue;
-    }
-
-    const d = new Date(curMonth.getFullYear(), curMonth.getMonth(), dayNum);
-    const ymd = formatYMD(d);
-    cell.dataset.date = ymd;
-
-    const data = readDay(d);
-    const hasC = data.c > 0;
-    const hasJ = data.j > 0;
-    const hasA = (data.a > 0) || (data.beer + data.strong + data.liqueur > 0);
-
-    if (hasC || hasJ || hasA) cell.classList.add('has-data');
-    if (sameYMD(d, today)) cell.classList.add('today');
-
-    cell.innerHTML = `
-      <div class="cal-num">${dayNum}</div>
-      <div>
-        ${hasC ? '<span class="dot c" title="Cigarettes"></span>' : ''}
-        ${hasJ ? '<span class="dot j" title="Joints"></span>' : ''}
-        ${hasA ? '<span class="dot a" title="Alcool"></span>' : ''}
-      </div>
-    `;
-
-    cell.addEventListener('click', () => openDay(d));
+    cell.addEventListener("click", ()=> openDayModal(ymd));
     grid.appendChild(cell);
   }
 }
 
-function openDay(d) {
-  selectedDay = startOfDay(d);
-  const { modal, mTitle } = qs();
-  if (!modal || !mTitle) return;
-  mTitle.textContent = `Bilan du ${formatFR(selectedDay)}`;
-  syncModalValues();
-  showModal(true);
-}
+let currentMonth = new Date();
 
-function formatFR(d) {
-  const jours = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
-  const mois = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
-  return `${jours[d.getDay()]} ${d.getDate()} ${mois[d.getMonth()]} ${d.getFullYear()}`;
-}
-
-function syncModalValues() {
-  const { vC, vJ, vA, segC, segA } = qs();
-  const data = readDay(selectedDay);
-  if (vC) vC.textContent = String(data.c);
-  if (vJ) vJ.textContent = String(data.j);
-  if (vA) vA.textContent = String(data.a || (data.beer + data.strong + data.liqueur));
-
-  // Segments (10 pas visuels)
-  renderSegments(segC, data.c, (val) => setValue('c', val));
-  renderSegments(segA, data.a, (val) => setValue('a', val));
-}
-
-function renderSegments(container, current, onSet) {
-  if (!container) return;
-  container.innerHTML = '';
-  const max = 10;
-  for (let i = 0; i <= max; i++) {
-    const b = document.createElement('div');
-    b.className = 'seg' + (i === current ? ' actif' : '');
-    b.textContent = i;
-    b.title = `Fixer à ${i}`;
-    b.addEventListener('click', () => onSet(i));
-    container.appendChild(b);
-  }
-}
-
-function setValue(kind, val) {
-  const patch = {};
-  if (kind === 'c') patch.c = toInt(val);
-  if (kind === 'j') patch.j = toInt(val);
-  if (kind === 'a') patch.a = toInt(val);
-  writeDay(selectedDay, patch);
-  syncModalValues();
-  renderMonth();
-}
-
-function addValue(kind, delta) {
-  const cur = readDay(selectedDay);
-  const patch = {};
-  if (kind === 'c') patch.c = toInt(cur.c + delta);
-  if (kind === 'j') patch.j = toInt(cur.j + delta);
-  if (kind === 'a') patch.a = toInt((cur.a || 0) + delta);
-  writeDay(selectedDay, patch);
-  syncModalValues();
-  renderMonth();
-}
-
-function showModal(yes) {
-  const { modal } = qs();
+function openDayModal(ymd){
+  const modal = $("#cal-jour");
   if (!modal) return;
-  if (yes) modal.classList.add('show');
-  else modal.classList.remove('show');
+
+  const t = $("#cal-jour-titre");
+  if (t) t.textContent = new Date(ymd).toLocaleDateString("fr-FR", { weekday:"long", day:"2-digit", month:"long", year:"numeric" });
+
+  const history = loadHistory();
+  const e = normDayEntry(history[ymd] || {});
+  const elC = $("#cal-jour-cl"); if (elC) elC.textContent = e.c;
+  const elJ = $("#cal-jour-j");  if (elJ) elJ.textContent = e.j;
+  const elA = $("#cal-jour-a");  if (elA) elA.textContent = e.a;
+
+  // segments (si besoin)
+  const segCl = $("#cal-jour-seg-cl"); if (segCl) segCl.innerHTML = "";
+  const segA  = $("#cal-jour-seg-a");  if (segA)  segA.innerHTML  = "";
+
+  // Bind +/- et RAZ
+  const bind = (id, delta, key) => {
+    const btn = $(id);
+    if (!btn) return;
+    btn.onclick = ()=>{
+      const hist = loadHistory();
+      const cur  = normDayEntry(hist[ymd] || {});
+      cur[key] = Math.max(0, (Number(cur[key])||0) + delta);
+      hist[ymd] = cur;
+      setJSONFirstKey(LS_HISTORY_KEYS, hist);
+      // maj UI
+      openDayModal(ymd);
+      // signale
+      window.dispatchEvent(new CustomEvent("sa:history-changed", {detail:{ymd}}));
+      window.dispatchEvent(new CustomEvent("sa:counts-updated"));
+      // rafraîchit grille
+      renderGrid(currentMonth);
+    };
+  };
+  bind("#cal-cl-plus",  +1, "c");
+  bind("#cal-cl-moins", -1, "c");
+  bind("#cal-j-plus",   +1, "j");
+  bind("#cal-j-moins",  -1, "j");
+  bind("#cal-a-plus",   +1, "a");
+  bind("#cal-a-moins",  -1, "a");
+
+  const raz = $("#cal-jour-raz");
+  if (raz) raz.onclick = ()=>{
+    const hist = loadHistory();
+    hist[ymd] = { c:0, j:0, a:0 };
+    setJSONFirstKey(LS_HISTORY_KEYS, hist);
+    openDayModal(ymd);
+    window.dispatchEvent(new CustomEvent("sa:history-changed", {detail:{ymd}}));
+    window.dispatchEvent(new CustomEvent("sa:counts-updated"));
+    renderGrid(currentMonth);
+  };
+
+  const close = $("#cal-jour-fermer");
+  if (close) close.onclick = ()=>{ modal.classList.remove("show"); modal.setAttribute("aria-hidden","true"); };
+
+  modal.classList.add("show");
+  modal.setAttribute("aria-hidden","false");
 }
 
-function bindUI() {
-  const { btnPrev, btnNext, bCPlus, bCMoins, bJPlus, bJMoins, bAPlus, bAMoins, bRAZ, bClose } = qs();
+export function initCalendar(){
+  // boutons mois
+  const prev = $("#cal-prev");
+  const next = $("#cal-next");
+  const grid = $("#cal-grid");
+  if (!grid) return;
 
-  if (btnPrev) btnPrev.addEventListener('click', () => { curMonth = new Date(curMonth.getFullYear(), curMonth.getMonth() - 1, 1); renderMonth(); });
-  if (btnNext) btnNext.addEventListener('click', () => { curMonth = new Date(curMonth.getFullYear(), curMonth.getMonth() + 1, 1); renderMonth(); });
+  renderGrid(currentMonth);
 
-  if (bCPlus)  bCPlus.addEventListener('click',  () => addValue('c', +1));
-  if (bCMoins) bCMoins.addEventListener('click', () => addValue('c', -1));
+  if (prev) prev.addEventListener("click", ()=>{
+    currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth()-1, 1);
+    renderGrid(currentMonth);
+  });
+  if (next) next.addEventListener("click", ()=>{
+    currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth()+1, 1);
+    renderGrid(currentMonth);
+  });
 
-  if (bJPlus)  bJPlus.addEventListener('click',  () => addValue('j', +1));
-  if (bJMoins) bJMoins.addEventListener('click', () => addValue('j', -1));
-
-  if (bAPlus)  bAPlus.addEventListener('click',  () => addValue('a', +1));
-  if (bAMoins) bAMoins.addEventListener('click', () => addValue('a', -1));
-
-  if (bRAZ)    bRAZ.addEventListener('click', () => { writeDay(selectedDay, { c:0, j:0, a:0 }); syncModalValues(); renderMonth(); });
-  if (bClose)  bClose.addEventListener('click', () => showModal(false));
-
-  // Rerender si les données changent ailleurs dans l’app
-  safeOn('sa:counts-updated', () => renderMonth());
-}
-
-export function initCalendar() {
-  try {
-    bindUI();
-    renderMonth();
-  } catch (e) {
-    console.warn('[calendar.init] ', e);
-  }
+  // Rafraîchir si import / maj
+  window.addEventListener("sa:storage-imported", ()=> renderGrid(currentMonth));
+  window.addEventListener("sa:history-changed",  ()=> renderGrid(currentMonth));
 }
