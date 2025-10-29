@@ -1,118 +1,102 @@
 // web/js/charts.js
-// Instancie 2 graphiques Chart.js et écoute l’événement "sa:chart-data" produit par stats.js.
+// 2 graphiques : consommations (cigs/weed/alcool) et coûts/économies
+// Grouped bars, labels alignés à la plage, MAJ via événement "sa:chart-update"
 
-let chartCons = null;
-let chartCost = null;
+import { $, } from "./utils.js";
 
-function byId(id) { return document.getElementById(id); }
+let chart1 = null;
+let chart2 = null;
 
-function ensureCtx(id) {
-  const el = byId(id);
-  if (!el) return null;
-  const ctx = el.getContext("2d");
-  return ctx || null;
-}
-
-function makeConsChart(ctx) {
-  // Barres empilées par catégorie
-  return new Chart(ctx, {
+function makeBarConfig(labels, datasets, opts={}){
+  return {
     type: "bar",
-    data: {
-      labels: [],
-      datasets: [
-        { label: "Cigarettes", data: [], borderWidth: 1, backgroundColor: "rgba(59,130,246,0.5)" },
-        { label: "Joints", data: [], borderWidth: 1, backgroundColor: "rgba(16,185,129,0.5)" },
-        { label: "Alcool", data: [], borderWidth: 1, backgroundColor: "rgba(245,158,11,0.5)" }
-      ]
-    },
+    data: { labels, datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { position: "bottom" }, tooltip: { mode: "index", intersect: false } },
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { position: "top" },
+        tooltip: { enabled: true },
+        title: { display: false }
+      },
       scales: {
-        x: { stacked: true, ticks: { autoSkip: true, maxRotation: 0 } },
-        y: { stacked: true, beginAtZero: true, title: { display: true, text: "Unités" } }
-      }
+        x: { stacked: false, grid: { display: true } },
+        y: { beginAtZero: true, grid: { display: true } }
+      },
+      ...opts
     }
-  });
+  };
 }
 
-function makeCostChart(ctx) {
-  // Courbes coût / économies
-  return new Chart(ctx, {
-    type: "line",
-    data: {
-      labels: [],
-      datasets: [
-        { label: "Coût (€)", data: [], borderWidth: 2, tension: 0.25 },
-        { label: "Économies (€)", data: [], borderWidth: 2, tension: 0.25 }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { position: "bottom" }, tooltip: { mode: "index", intersect: false } },
-      scales: {
-        x: { ticks: { autoSkip: true, maxRotation: 0 } },
-        y: { beginAtZero: true, title: { display: true, text: "€" } }
-      }
-    }
-  });
-}
+function ensureCharts(){
+  const c1 = $("#chart-consommations");
+  const c2 = $("#chart-cout-eco");
+  if (!c1 || !c2) return { ok:false };
 
-function resizeCanvasToContainer(id, minH = 220) {
-  const canvas = byId(id);
-  if (!canvas) return;
-  const parent = canvas.parentElement;
-  if (parent) {
-    const h = Math.max(minH, parent.clientWidth * 0.45);
-    canvas.style.width = "100%";
-    canvas.style.height = h + "px";
+  // Hauteurs confort (le canvas a déjà une hauteur dans le HTML)
+  c1.parentElement.style.minHeight = "260px";
+  c2.parentElement.style.minHeight = "220px";
+
+  // Instancie si pas encore
+  if (!chart1){
+    chart1 = new Chart(c1.getContext("2d"), makeBarConfig([], []));
   }
-}
-
-function applyConsData(chart, labels, cigs, joints, alcohol) {
-  chart.data.labels = labels;
-  chart.data.datasets[0].data = cigs;
-  chart.data.datasets[1].data = joints;
-  chart.data.datasets[2].data = alcohol;
-  chart.update();
-}
-
-function applyCostData(chart, labels, cost, eco) {
-  chart.data.labels = labels;
-  chart.data.datasets[0].data = cost;
-  chart.data.datasets[1].data = eco;
-  chart.update();
-}
-
-export function initCharts() {
-  // init charts (si canvases présents)
-  const ctx1 = ensureCtx("chart-consommations");
-  const ctx2 = ensureCtx("chart-cout-eco");
-
-  if (ctx1) {
-    resizeCanvasToContainer("chart-consommations", 260);
-    chartCons = makeConsChart(ctx1);
+  if (!chart2){
+    chart2 = new Chart(c2.getContext("2d"), makeBarConfig([], []));
   }
-  if (ctx2) {
-    resizeCanvasToContainer("chart-cout-eco", 220);
-    chartCost = makeCostChart(ctx2);
-  }
+  return { ok:true };
+}
 
-  // écoute des données poussées par stats.js
-  document.addEventListener("sa:chart-data", (e) => {
+function palette(){
+  // Sans fixer précisément (Chart.js choisira), mais on force une cohérence soft
+  return {
+    cigs: "rgba(59,130,246,0.7)",   // bleu
+    weed: "rgba(34,197,94,0.7)",    // vert
+    alco: "rgba(245,158,11,0.7)",   // orange
+    cost: "rgba(17,24,39,0.8)",     // gris foncé
+    eco:  "rgba(16,185,129,0.8)",   // vert éco
+  };
+}
+
+function buildDatasets(series, range){
+  const p = palette();
+  const barThickness = (range==="day")? 12 : undefined;
+
+  const ds1 = [
+    { label:"Cigarettes", data: series.cigs||[], backgroundColor:p.cigs, borderColor:p.cigs, borderWidth:0, barThickness },
+    { label:"Joints",     data: series.weed||[], backgroundColor:p.weed, borderColor:p.weed, borderWidth:0, barThickness },
+    { label:"Alcool",     data: series.alcohol||[], backgroundColor:p.alco, borderColor:p.alco, borderWidth:0, barThickness },
+  ];
+  const ds2 = [
+    { label:"Coût estimé (€)", data: series.cost||[], backgroundColor:p.cost, borderColor:p.cost, borderWidth:0, barThickness },
+    { label:"Économies (€)",   data: series.eco||[],  backgroundColor:p.eco,  borderColor:p.eco,  borderWidth:0, barThickness },
+  ];
+  return { ds1, ds2 };
+}
+
+function updateCharts(range, labels, series){
+  if (!ensureCharts().ok) return;
+
+  const { ds1, ds2 } = buildDatasets(series, range);
+
+  // Graph 1 : conso
+  chart1.data.labels   = labels;
+  chart1.data.datasets = ds1;
+  chart1.update("none");
+
+  // Graph 2 : coût / économies
+  chart2.data.labels   = labels;
+  chart2.data.datasets = ds2;
+  chart2.update("none");
+}
+
+export function initCharts(){
+  ensureCharts();
+
+  // Écoute standard : stats.js publie cet event
+  window.addEventListener("sa:chart-update", (e)=>{
     const d = e.detail || {};
-    const { labels = [], cigs = [], joints = [], alcohol = [], cost = [], eco = [] } = d;
-    if (chartCons) applyConsData(chartCons, labels, cigs, joints, alcohol);
-    if (chartCost) applyCostData(chartCost, labels, cost, eco);
-  });
-
-  // simple responsive (orientations)
-  window.addEventListener("resize", () => {
-    resizeCanvasToContainer("chart-consommations", 260);
-    resizeCanvasToContainer("chart-cout-eco", 220);
-    chartCons && chartCons.resize();
-    chartCost && chartCost.resize();
+    updateCharts(d.range, d.labels||[], d.series||{});
   });
 }
