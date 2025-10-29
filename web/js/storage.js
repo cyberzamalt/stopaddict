@@ -1,169 +1,117 @@
 // web/js/storage.js
-// Enveloppe de stockage + import/export unifié (JSON/CSV) pour StopAddict.
-// Reste minimaliste, offline-friendly, et rétro-compatible avec l’existant.
+// Export / Import unifiés (JSON) + utilitaires CSV optionnels.
+// N'émet JAMAIS de listeners DOM ici : on expose des fonctions pures.
+// Événement émis après import : "sa:storage-imported" (payload { keys, replaced }).
 
-import { loadJSON, saveJSON, formatYMD, parseYMD, todayYMD, safeParseJSON } from "./utils.js";
+import { /* facultatif selon state.js */ emit as _emit } from "./state.js";
 
-// ----- NAMESPACE & KEYS -----
-const NS = "sa:";
-export const KEYS = {
-  HISTORY:   NS + "history",   // { [ymd]: { c,j,a, beer,strong,liqueur, ... } }
-  SETTINGS:  NS + "settings",  // { prices, modules, advice, charts, locale, ... }
-  LIMITS:    NS + "limits",    // { perDay: {...} }
-  HABITS:    NS + "habits",    // { baseline: {...} }
-  FLAGS:     NS + "flags",     // { warnAccepted, warnHidden, ... }
-  DATES:     NS + "dates"      // { milestones: {...} }
-};
-
-// ----- API bas niveau (clé/valeur) -----
-export function get(key, def = null) { return loadJSON(key, def); }
-export function set(key, val) { return saveJSON(key, val); }
-export function del(key) { try { localStorage.removeItem(key); return true; } catch { return false; } }
-export function keys(prefix = NS) {
-  return Object.keys(localStorage).filter(k => k.startsWith(prefix));
-}
-export function clearAll(prefix = NS) {
-  keys(prefix).forEach(k => localStorage.removeItem(k));
+// --- Event bus safe (si state.js n'exporte pas emit, on fallback noop) ---
+function emit(evt, detail) {
+  try { (_emit || window.dispatchEvent.bind(window, new CustomEvent(evt, { detail })))?.(evt, detail); }
+  catch { /* noop */ }
 }
 
-// ----- HISTORY helpers -----
-export function getHistory() {
-  return get(KEYS.HISTORY, {}); // { ymd: { c, j, a, ... } }
+// --- Helpers ---
+function tryParseJSON(text) {
+  try { return JSON.parse(text); } catch { return null; }
 }
-export function setHistory(histObj) {
-  return set(KEYS.HISTORY, histObj || {});
+function safeStringify(obj) {
+  try { return JSON.stringify(obj); } catch { return "{}"; }
 }
-export function mergeHistory(patch) {
-  const base = getHistory();
-  for (const ymd of Object.keys(patch || {})) {
-    base[ymd] = { ...(base[ymd] || {}), ...(patch[ymd] || {}) };
-  }
-  return setHistory(base);
-}
-export function getCountsFor(ymd = todayYMD()) {
-  const h = getHistory();
-  return { c:0, j:0, a:0, ...h[ymd] }; // cigs, joints, alcool (total ou sous-catégories)
-}
-export function setCountsFor(ymd, counts) {
-  const h = getHistory();
-  h[ymd] = { ...(h[ymd] || {}), ...(counts || {}) };
-  return setHistory(h);
-}
+function isObject(v) { return v && typeof v === "object" && !Array.isArray(v); }
 
-// ----- SETTINGS / LIMITS / HABITS / FLAGS / DATES -----
-export const getSettings = () => get(KEYS.SETTINGS, {});
-export const setSettings = (s) => set(KEYS.SETTINGS, s || {});
-
-export const getLimits = () => get(KEYS.LIMITS, {});
-export const setLimits = (l) => set(KEYS.LIMITS, l || {});
-
-export const getHabits = () => get(KEYS.HABITS, {});
-export const setHabits = (h) => set(KEYS.HABITS, h || {});
-
-export const getFlags = () => get(KEYS.FLAGS, {});
-export const setFlags = (f) => set(KEYS.FLAGS, f || {});
-
-export const getDates = () => get(KEYS.DATES, {});
-export const setDates = (d) => set(KEYS.DATES, d || {});
-
-// ----- EXPORT / IMPORT (JSON) -----
-export function exportAllObject() {
-  // Instantané complet — sans dépendre des autres modules
-  return {
-    meta: {
-      app: "StopAddict",
-      version: "2.4.4",
-      exportedAt: new Date().toISOString()
-    },
-    data: {
-      history:  getHistory(),
-      settings: getSettings(),
-      limits:   getLimits(),
-      habits:   getHabits(),
-      flags:    getFlags(),
-      dates:    getDates()
+// --- Collecte générique : prend toutes les clés localStorage utiles ---
+export function collectAll({ prefixes = ["sa:", "i18n:", "app:"], includeOthers = [] } = {}) {
+  const out = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if (prefixes.some(p => k.startsWith(p)) || includeOthers.includes(k)) {
+        const raw = localStorage.getItem(k);
+        const val = tryParseJSON(raw) ?? raw;
+        out[k] = val;
+      }
     }
+  } catch { /* noop */ }
+  return {
+    __schema: "stopaddict-export",
+    __version: "2.4.4",
+    __exportedAt: new Date().toISOString(),
+    data: out
   };
 }
-export function exportAllJSON(pretty = true) {
-  const obj = exportAllObject();
-  return pretty ? JSON.stringify(obj, null, 2) : JSON.stringify(obj);
-}
-export function importAllObject(payload, { merge = true } = {}) {
-  const obj = (typeof payload === "string") ? safeParseJSON(payload, null) : payload;
-  if (!obj || !obj.data) throw new Error("Import invalide");
 
-  const { history, settings, limits, habits, flags, dates } = obj.data;
-
-  if (merge) {
-    if (history) mergeHistory(history);
-    if (settings) setSettings({ ...getSettings(), ...settings });
-    if (limits)   setLimits({   ...getLimits(),   ...limits   });
-    if (habits)   setHabits({   ...getHabits(),   ...habits   });
-    if (flags)    setFlags({    ...getFlags(),    ...flags    });
-    if (dates)    setDates({    ...getDates(),    ...dates    });
-  } else {
-    if (history) setHistory(history);
-    if (settings) setSettings(settings);
-    if (limits)   setLimits(limits);
-    if (habits)   setHabits(habits);
-    if (flags)    setFlags(flags);
-    if (dates)    setDates(dates);
+// --- Écriture générique : remplace (ou fusionne si objet) les clés présentes ---
+export function restoreAll(payload, { mode = "replace" } = {}) {
+  if (!payload || !isObject(payload) || !isObject(payload.data)) {
+    throw new Error("Fichier d’import invalide (format inattendu).");
   }
-  return true;
-}
+  const keys = Object.keys(payload.data);
+  let replaced = 0;
 
-// ----- CSV (HISTORY uniquement) -----
-// Colonnes: date,c,j,a,beer,strong,liqueur
-export function exportHistoryCSV() {
-  const h = getHistory();
-  const rows = [["date","c","j","a","beer","strong","liqueur"]];
-  const dates = Object.keys(h).sort();
-  for (const ymd of dates) {
-    const v = h[ymd] || {};
-    rows.push([
-      ymd,
-      Number(v.c || 0),
-      Number(v.j || 0),
-      Number(v.a || 0),
-      Number(v.beer || 0),
-      Number(v.strong || 0),
-      Number(v.liqueur || 0),
-    ].join(","));
-  }
-  return rows.map(r => Array.isArray(r) ? r : [r]).join("\n");
-}
-export function importHistoryCSV(csvText, { merge = true } = {}) {
-  const lines = String(csvText || "").split(/\r?\n/).filter(Boolean);
-  if (lines.length === 0) return 0;
-
-  // Header (souple sur l’ordre, mais attend les noms connus)
-  const header = lines[0].split(",").map(s => s.trim().toLowerCase());
-  const idx = Object.fromEntries(header.map((h, i) => [h, i]));
-  const want = ["date","c","j","a","beer","strong","liqueur"];
-  if (!want.every(k => k in idx)) {
-    throw new Error("CSV invalide: colonnes attendues: " + want.join(", "));
+  keys.forEach(k => {
+    const incoming = payload.data[k];
+    if (mode === "merge") {
+      const current = tryParseJSON(localStorage.getItem(k));
+      const merged = (isObject(current) && isObject(incoming))
+        ? { ...current, ...incoming }
+        : incoming;
+      localStorage.setItem(k, safeStringify(merged));
+    } else {
+      localStorage.setItem(k, safeStringify(incoming));
     }
+    replaced++;
+  });
 
-  const patch = {};
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(",");
-    const ymd  = cols[idx.date]?.trim();
-    const d    = parseYMD(ymd);
-    if (!d) continue;
+  emit("sa:storage-imported", { keys, replaced });
+  return { keys, replaced };
+}
 
-    patch[ymd] = {
-      c:        Number(cols[idx.c] || 0),
-      j:        Number(cols[idx.j] || 0),
-      a:        Number(cols[idx.a] || 0),
-      beer:     Number(cols[idx.beer] || 0),
-      strong:   Number(cols[idx.strong] || 0),
-      liqueur:  Number(cols[idx.liqueur] || 0),
-    };
-  }
+// --- Téléchargement JSON (utilisé par stats.js ou un bouton extérieur) ---
+export function downloadJSON(filename, obj) {
+  const blob = new Blob([safeStringify(obj)], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename || "stopaddict-export.json";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 500);
+}
 
-  if (merge) mergeHistory(patch);
-  else       setHistory(patch);
+// --- Lecture d’un File (input type=file) et import ---
+export async function importFromFile(file, { mode = "replace" } = {}) {
+  const text = await file.text();
+  const json = tryParseJSON(text);
+  if (!json) throw new Error("Impossible de parser le JSON importé.");
+  return restoreAll(json, { mode });
+}
 
-  return Object.keys(patch).length;
+// --- Optionnel : génération CSV à partir d’un historique normalisé ---
+// Attendu: rows = [{ date:"YYYY-MM-DD", hour?:"HH:mm", cigs:0, weed:0, alcohol:0, cost?:0, note?:"" }, ...]
+export function buildCSV(rows) {
+  const header = ["date","hour","cigs","weed","alcohol","cost","note"];
+  const lines = [header.join(";")];
+  (rows || []).forEach(r => {
+    const line = [
+      r.date ?? "",
+      r.hour ?? "",
+      String(r.cigs ?? 0),
+      String(r.weed ?? 0),
+      String(r.alcohol ?? 0),
+      String(r.cost ?? 0),
+      (r.note ?? "").replace(/[\r\n;]+/g, " ").trim()
+    ].join(";");
+    lines.push(line);
+  });
+  return lines.join("\n");
+}
+
+// --- Optionnel : téléchargement CSV ---
+export function downloadCSV(filename, csvText) {
+  const blob = new Blob([csvText || ""], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename || "stopaddict-export.csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 500);
 }
