@@ -1,14 +1,12 @@
 // web/js/debug.js
-// Overlay console activable (+ réutilise #debug-console s'il existe)
-// – Activer via ?debug=1, #debug, localStorage['sa:debug']="1" ou Alt+D
-// – API: enableDebugOverlay(), disableDebugOverlay(), toggleDebugOverlay(),
-//        installGlobalErrorHooks(), setPersist(true|false), logDebug(msg, type)
+// Overlay console : toggle par 5 clics rapides sur le header, persistance, safe avec ton hook existant.
+// Exporte initDebug(); n'affecte rien si #debug-console n'est pas présent.
 
-let _enabled = false;
-let _installed = false;
-let _orig = null;
+const LS_KEY = "sa.debug.shown";
+let clickCount = 0;
+let clickTimer = null;
 
-function getPane() {
+function ensureConsoleEl() {
   let el = document.getElementById("debug-console");
   if (!el) {
     el = document.createElement("div");
@@ -19,134 +17,64 @@ function getPane() {
   return el;
 }
 
-function ts() {
-  const d = new Date();
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  const ss = String(d.getSeconds()).padStart(2, "0");
-  return `[${hh}:${mm}:${ss}]`;
+function showConsole(show) {
+  const el = ensureConsoleEl();
+  el.classList[show ? "add" : "remove"]("show");
+  el.style.display = show ? "block" : "none";
+  try { localStorage.setItem(LS_KEY, show ? "1" : "0"); } catch {}
 }
 
-function append(line, type = "log") {
-  try {
-    const el = getPane();
-    el.style.display = "block";
-    el.classList.add("show");
-    el.textContent += `\n${ts()} [${type}] ${line}`;
-    el.scrollTop = el.scrollHeight;
-    // Trim basique si trop long
-    if (el.textContent.length > 200_000) {
-      el.textContent = el.textContent.slice(-150_000);
-    }
-  } catch { /* noop */ }
+function toggleConsole() {
+  const el = ensureConsoleEl();
+  const visible = el.classList.contains("show");
+  showConsole(!visible);
 }
 
-export function logDebug(msg, type = "log") {
-  append(typeof msg === "string" ? msg : JSON.stringify(msg), type);
-}
-
-function wrapConsole() {
-  if (_orig) return;
-  _orig = {
-    log: console.log.bind(console),
-    info: console.info.bind(console),
-    warn: console.warn.bind(console),
-    error: console.error.bind(console),
-  };
-  console.log = (...a) => { try { _orig.log(...a); } finally { append(a.map(String).join(" "), "log"); } };
-  console.info = (...a) => { try { _orig.info(...a); } finally { append(a.map(String).join(" "), "info"); } };
-  console.warn = (...a) => { try { _orig.warn(...a); } finally { append(a.map(String).join(" "), "warn"); } };
-  console.error = (...a) => { try { _orig.error(...a); } finally { append(a.map(String).join(" "), "error"); } };
-}
-
-function unwrapConsole() {
-  if (!_orig) return;
-  console.log = _orig.log;
-  console.info = _orig.info;
-  console.warn = _orig.warn;
-  console.error = _orig.error;
-  _orig = null;
-}
-
-export function installGlobalErrorHooks() {
-  if (_installed) return;
-  _installed = true;
-
-  // Évite double-install
-  if (window.__sa_err_hooks_installed) return;
-  window.__sa_err_hooks_installed = true;
-
-  window.addEventListener("error", (e) => {
-    const msg = (e && e.message) || "error";
-    const file = (e && e.filename) || "";
-    const line = (e && e.lineno) || "";
-    append(`${msg} @ ${file}:${line}`, "error");
-  });
-  window.addEventListener("unhandledrejection", (e) => {
-    const r = e && e.reason;
-    const msg = (r && (r.message || r.stack)) || String(r);
-    append(`UnhandledRejection: ${msg}`, "error");
-  });
-
-  // Raccourci clavier Alt+D
-  window.addEventListener("keydown", (ev) => {
-    if (ev.altKey && (ev.key === "d" || ev.key === "D")) {
-      toggleDebugOverlay();
+function bindSecretTap() {
+  const header = document.querySelector(".header") || document.body;
+  header.addEventListener("click", () => {
+    clickCount++;
+    clearTimeout(clickTimer);
+    clickTimer = setTimeout(() => { clickCount = 0; }, 1200);
+    if (clickCount >= 5) {
+      clickCount = 0;
+      toggleConsole();
+      try { console.log("[debug] overlay toggled"); } catch {}
     }
   });
 }
 
-export function enableDebugOverlay({ captureConsole = true } = {}) {
-  _enabled = true;
-  const el = getPane();
-  el.style.display = "block";
-  el.classList.add("show");
-  if (captureConsole) wrapConsole();
-  append("✅ Debug overlay ON");
-}
-
-export function disableDebugOverlay() {
-  _enabled = false;
-  const el = getPane();
-  el.classList.remove("show");
-  el.style.display = "none";
-  unwrapConsole();
-  append("⛔ Debug overlay OFF");
-}
-
-export function toggleDebugOverlay() {
-  if (_enabled) disableDebugOverlay(); else enableDebugOverlay();
-}
-
-export function isEnabled() { return _enabled; }
-
-export function setPersist(flag) {
+function restorePersisted() {
   try {
-    if (flag) localStorage.setItem("sa:debug", "1");
-    else localStorage.removeItem("sa:debug");
-  } catch { /* noop */ }
+    const v = localStorage.getItem(LS_KEY);
+    if (v === "1") showConsole(true);
+  } catch {}
 }
 
-// Auto-activation si demandé
-export function autoEnableIfRequested() {
+export function initDebug() {
   try {
-    const qs = new URLSearchParams(location.search);
-    const byQuery = qs.get("debug") && qs.get("debug") !== "0";
-    const byHash = location.hash.toLowerCase().includes("debug");
-    const byLS = localStorage.getItem("sa:debug") === "1";
-    if (byQuery || byHash || byLS) enableDebugOverlay();
-  } catch { /* noop */ }
-}
+    ensureConsoleEl();
+    restorePersisted();
+    bindSecretTap();
 
-// Expose minimal global pour tests manuels
-// window.saDebug.enable(), .disable(), .toggle(), .persist(true)
-if (!window.saDebug) {
-  window.saDebug = {
-    enable: enableDebugOverlay,
-    disable: disableDebugOverlay,
-    toggle: toggleDebugOverlay,
-    persist: setPersist,
-    log: logDebug,
-    isEnabled
-  };
+    // petite API globale optionnelle
+    window.SA_DEBUG = function(msg, type = "info") {
+      try {
+        const el = ensureConsoleEl();
+        el.classList.add("show");
+        el.style.display = "block";
+        const t = new Date().toTimeString().slice(0,8);
+        el.textContent += `\n[${t}] [${type}] ${String(msg)}`;
+        el.scrollTop = el.scrollHeight;
+      } catch {}
+    };
+
+    // Events externes pour forcer l’affichage/masquage au besoin
+    window.addEventListener("sa:debug:show", () => showConsole(true));
+    window.addEventListener("sa:debug:hide", () => showConsole(false));
+
+    console.log("[debug] ✓ ready");
+  } catch (e) {
+    console.warn("[debug.init] error:", e);
+  }
 }
