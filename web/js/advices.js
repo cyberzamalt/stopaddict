@@ -1,135 +1,105 @@
-/* web/js/advices.js
-   Conseils rotatifs filtrés selon modules & usages — v2
-*/
-import { $, loadJSON, saveJSON } from "./utils.js";
-import { on, todayTotals, isModuleEnabled } from "./state.js";
+// web/js/advices.js
+// Carte “Conseil du jour” : chargement JSON (fallback interne),
+// navigation ◀, pause ⏸ (toggle play/stop), personnalisation basique possible si besoin.
+// Aucune dépendance forte : si settings/state indisponibles, on affiche une liste par défaut.
 
-const LS_ADV_IDX   = "sa:adv:index";
-const LS_ADV_PAUSE = "sa:adv:paused";
-const DATA_URL     = "./data/advices.json";
+import { $ } from "./utils.js";
+import { on as _on } from "./state.js";
+
+const on = _on || ((evt, cb) => window.addEventListener(evt, e => cb(e.detail)));
 
 let advices = [];
-let timer   = null;
-let idx     = Number(localStorage.getItem(LS_ADV_IDX) || 0) || 0;
-let paused  = localStorage.getItem(LS_ADV_PAUSE) === "1";
+let idx = 0;
+let timer = null;
+let playing = true;
 
-function setPaused(p) {
-  paused = !!p;
-  localStorage.setItem(LS_ADV_PAUSE, paused ? "1":"0");
-}
+// Fallback local si fetch échoue
+const FALLBACK = [
+  "Buvez un verre d’eau et respirez 10 secondes avant d’allumer la prochaine cigarette.",
+  "Marchez 3 minutes : micro-pause = micro-victoire.",
+  "Notez votre dernière envie (0-10) : observer réduit déjà l’envie.",
+  "Repoussez de 5 minutes : le délai casse l’automatisme.",
+  "Une clope en moins aujourd’hui, c’est déjà une vraie économie demain."
+];
 
-function pickPool() {
-  // Filtrage très tolérant : si le JSON contient des tags, on filtre par modules actifs.
-  const active = [];
-  if (isModuleEnabled("cigs")) active.push("cigs","cigarettes","tabac");
-  if (isModuleEnabled("weed")) active.push("weed","cannabis","joint","joints");
-  if (isModuleEnabled("alcohol")) active.push("alcohol","alcool","drink");
-
-  const t = todayTotals();
-
-  const pool = advices.filter(a => {
-    if (!a || typeof a !== "object") return false;
-    // tags optionnels
-    if (Array.isArray(a.tags) && a.tags.length) {
-      const hasCommon = a.tags.some(tag => active.includes(String(tag).toLowerCase()) || String(tag).toLowerCase()==="generic");
-      if (!hasCommon) return false;
-    }
-    // seuils optionnels
-    if (a.minCigs != null && t.cigs < Number(a.minCigs)) return false;
-    if (a.minWeed != null && t.weed < Number(a.minWeed)) return false;
-    if (a.minAlcohol != null && t.alcohol < Number(a.minAlcohol)) return false;
-    return true;
-  });
-
-  // fallback si pool vide
-  if (!pool.length) {
-    return advices.filter(a => Array.isArray(a.tags) ? a.tags.includes("generic") : true);
-  }
-  return pool;
-}
-
-function show(idxToShow) {
-  const el = $("#conseil-texte");
-  if (!el) return;
-  const pool = pickPool();
-  if (!pool.length) {
-    el.textContent = "Conseil bien-être : note tes réussites d’aujourd’hui. Même petites, elles comptent.";
-    return;
-  }
-  const i = ((idxToShow % pool.length) + pool.length) % pool.length;
-  const a = pool[i];
-
-  // Support {text} ou {html} ou simple string
-  if (typeof a === "string") {
-    el.textContent = a;
-  } else if (a && a.html) {
-    el.innerHTML = a.html;
-  } else if (a && a.text) {
-    el.textContent = a.text;
-  } else {
-    el.textContent = String(a);
-  }
-}
-
-function next() {
-  idx++;
-  localStorage.setItem(LS_ADV_IDX, String(idx));
-  show(idx);
-}
-function prev() {
-  idx--;
-  localStorage.setItem(LS_ADV_IDX, String(idx));
-  show(idx);
-}
-
-function startLoop() {
-  clearInterval(timer);
-  timer = setInterval(() => {
-    if (!paused) next();
-  }, 12000); // 12 s
-}
-
+// --- Chargement JSON (advices + resources facultatif) ---
 async function loadAdvices() {
   try {
-    const res = await fetch(DATA_URL, { cache:"no-store" });
-    if (!res.ok) throw new Error(res.statusText);
-    const j = await res.json();
-    if (Array.isArray(j)) advices = j;
-    else if (Array.isArray(j?.advices)) advices = j.advices;
-  } catch (e) {
-    // Fallback générique
-    advices = [
-      { text:"Hydrate-toi régulièrement et note une envie que tu as su éviter aujourd’hui.", tags:["generic"] },
-      { text:"Une baisse durable vaut mieux qu’un arrêt brutal si tu ne te sens pas prêt. Fixe un petit objectif atteignable.", tags:["generic"] },
-      { text:"Marche 10 minutes quand l’envie monte : bouger change l’état interne et l’attente diminue.", tags:["generic"] },
-      { text:"Note ton heure de dernière consommation : visualiser l’écart renforce la motivation.", tags:["generic"] },
-    ];
+    const res = await fetch("./data/advices.json", { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const list = await res.json();
+    if (Array.isArray(list) && list.length) {
+      advices = list;
+      return;
+    }
+  } catch { /* noop */ }
+  advices = FALLBACK.slice();
+}
+
+// --- Rendu ---
+function showCurrent() {
+  const el = $("#conseil-texte");
+  if (!el) return;
+  if (!advices.length) { el.textContent = "—"; return; }
+  const a = advices[idx % advices.length];
+  el.textContent = (typeof a === "string") ? a : (a && a.text) ? a.text : String(a);
+}
+
+// --- Lecture automatique ---
+function startAuto() {
+  stopAuto();
+  timer = setInterval(() => {
+    if (!playing) return;
+    idx = (idx + 1) % (advices.length || 1);
+    showCurrent();
+  }, 8000);
+}
+function stopAuto() {
+  if (timer) clearInterval(timer);
+  timer = null;
+}
+
+// --- Actions UI ---
+function bindControls() {
+  const btnPrev  = $("#adv-prev");
+  const btnPause = $("#adv-pause");
+  if (btnPrev) {
+    btnPrev.addEventListener("click", () => {
+      if (!advices.length) return;
+      idx = (idx - 1 + advices.length) % advices.length;
+      showCurrent();
+    });
+  }
+  if (btnPause) {
+    btnPause.addEventListener("click", () => {
+      playing = !playing;
+      // changer l’icône ⏸/▶ en fonction de l’état
+      btnPause.textContent = playing ? "⏸" : "▶";
+    });
   }
 }
 
-function bindControls() {
-  const bPrev = $("#adv-prev");
-  const bPause = $("#adv-pause");
-
-  if (bPrev) bPrev.addEventListener("click", () => { prev(); });
-  if (bPause) bPause.addEventListener("click", () => {
-    setPaused(!paused);
-    // feedback minimal visuel
-    bPause.textContent = paused ? "▶" : "⏸";
+// --- Personnalisation simple (facultatif) ---
+// Ici on écoute les changements globaux, et on peut choisir une "catégorie" d’astuces.
+// Par défaut, on garde la liste telle quelle (sans filtrer).
+function bindPersonalizationHooks() {
+  on("sa:counts-updated", () => {
+    // Exemple minimal : rien à faire ici pour l’instant.
+    // Tu pourras filtrer/surclasser 'advices' selon settings/habitudes si besoin.
+  });
+  on("sa:toggle-changed", () => { /* idem */ });
+  on("sa:storage-imported", () => {
+    // Après import, on réaffiche proprement
+    idx = 0; showCurrent();
   });
 }
 
+// --- Entrée publique ---
 export async function initAdvices() {
-  // Si l’UI n’est pas présente, on ne fait rien
-  const card = $("#conseil-card");
-  if (!card) return;
-
   await loadAdvices();
   bindControls();
-  show(idx);
-  startLoop();
-
-  // Refiltrer à chaque MAJ de compteurs ou modules
-  on("sa:counts-updated", () => show(idx));
-  on("sa:modules-changed", () => show(idx));
+  bindPersonalizationHooks();
+  showCurrent();
+  startAuto();
+  console.log("[advices] ✓ ready");
 }
