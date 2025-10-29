@@ -1,119 +1,157 @@
 // web/js/pages.js
-// Gestion des pages modales (manuel / mentions / CGV / ressources)
-// ➜ Sans dépendance externe ; utilise utils seulement si présent.
+// Pages modales : Manuel / CGV / Mentions / Ressources (data/resources.json).
+// Exporte initPages() + openPage(id).
 
-let RES_CACHE = null;
+import { $ } from "./utils.js";
 
-function $(sel, root = document) { return root.querySelector(sel); }
-function $$(sel, root = document) { return Array.from(root.querySelectorAll(sel)); }
+const MODAL_ID = "modal-page";
+const TITLE_ID = "page-title";
+const CONTENT_ID = "page-content";
+const BTN_CLOSE_ID = "btn-page-close";
 
-function openModal() {
-  const m = $("#modal-page");
-  if (!m) return;
-  m.classList.add("show");
-  m.setAttribute("aria-hidden", "false");
-}
-function closeModal() {
-  const m = $("#modal-page");
-  if (!m) return;
-  m.classList.remove("show");
-  m.setAttribute("aria-hidden", "true");
-}
-
-function setPageContent(title, html) {
-  const t = $("#page-title");
-  const c = $("#page-content");
-  if (t) t.textContent = title || "—";
-  if (c) c.innerHTML = html || "<p style='color:#777'>Aucun contenu.</p>";
-}
-
-async function loadResourcesJSON() {
-  if (RES_CACHE) return RES_CACHE;
-  try {
-    const res = await fetch("./data/resources.json", { cache: "no-store" });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    RES_CACHE = await res.json();
-  } catch (e) {
-    RES_CACHE = { title: "Ressources utiles", items: [] };
-  }
-  return RES_CACHE;
-}
-
-function makeResourcesHTML(data) {
-  const items = (data && data.items) || [];
-  if (!items.length) {
-    return "<p style='color:#777'>Aucune ressource disponible pour le moment.</p>";
-  }
-  const rows = items.map((it) => {
-    const lab = it.label || "Ressource";
-    const phone = it.phone ? `<div><strong>☎</strong> <a href="tel:${it.phone}">${it.phone}</a></div>` : "";
-    const web = it.url ? `<div><strong>🌐</strong> <a href="${it.url}" target="_blank" rel="noopener">${it.url}</a></div>` : "";
-    const desc = it.desc ? `<div style="color:#555">${it.desc}</div>` : "";
-    return `<div class="banner" style="margin:8px 0">
-      <div class="banner-title">${lab}</div>
-      ${desc}${phone}${web}
-    </div>`;
-  }).join("");
-  return rows;
-}
-
-// Pages simples intégrées (fallback minimal)
-const SIMPLE_PAGES = {
-  manuel: {
-    title: "Manuel d’utilisation",
-    html: `
-      <div class="banner"><div class="banner-title">Bienvenue dans StopAddict</div>
-      <p>Ajoutez vos consommations via <strong>+1 / −1</strong>. Consultez vos <strong>stats</strong>, exportez/importez votre
-      historique, et utilisez le <strong>calendrier</strong> pour corriger un jour.</p></div>`
-  },
-  mentions: {
-    title: "Mentions légales",
-    html: `<p style="color:#555">Application personnelle non médicale. Données stockées en local sur votre appareil.</p>`
-  },
-  cgv: {
-    title: "CGV",
-    html: `<p style="color:#555">Version gratuite ; aucune transaction intégrée ici. Les termes évolueront si une offre payante est proposée.</p>`
-  }
+const FALLBACKS = {
+  manual: `
+    <h4>Manuel d’utilisation</h4>
+    <p>• Accueil : ajoute/retire tes consommations du jour.<br>
+       • Statistiques : change l’échelle (Jour/Semaine/Mois/Année).<br>
+       • Calendrier : appuie sur un jour pour ajuster manuellement.<br>
+       • Habitudes : renseigne tes limites et habitudes de base.<br>
+       • Réglages : active/désactive les modules, définis prix & dates.</p>
+  `,
+  cgv: `
+    <h4>Conditions Générales</h4>
+    <p>Application fournie « en l’état ». Pas de garantie de résultat. 
+       Aucune promotion de produits nocifs. Utilisation responsable requise.</p>
+  `,
+  legal: `
+    <h4>Mentions légales</h4>
+    <p>StopAddict est une application personnelle d’auto-suivi. 
+       En cas de difficulté, rapprochez-vous d’un professionnel.</p>
+  `,
+  resources: `
+    <h4>Ressources & Numéros utiles</h4>
+    <p>Chargement…</p>
+  `
 };
 
-function wireStaticButtons() {
-  const closeBtn = $("#btn-page-close");
-  if (closeBtn) closeBtn.addEventListener("click", closeModal);
+async function fetchJSON(url) {
+  try {
+    const r = await fetch(url, { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP "+r.status);
+    return await r.json();
+  } catch (e) {
+    console.warn("[pages] fetch fail", url, e);
+    return null;
+  }
+}
 
-  // Ouvre "Ressources" depuis l’avertissement 18+
-  const openResFromWarn = $("#open-ressources-from-warn");
-  if (openResFromWarn) {
-    openResFromWarn.addEventListener("click", async (e) => {
-      e.preventDefault();
-      try { const data = await loadResourcesJSON(); setPageContent(data.title || "Ressources", makeResourcesHTML(data)); }
-      catch { setPageContent("Ressources", "<p>Impossible de charger les ressources.</p>"); }
-      openModal();
+function renderResources(list) {
+  if (!Array.isArray(list) || !list.length) {
+    return `<p>Aucune ressource locale. Ajoute/complète <code>web/data/resources.json</code>.</p>`;
+  }
+  return `
+    <div class="resources">
+      ${list.map(it => `
+        <div class="card" style="margin:8px 0;padding:10px">
+          <div style="font-weight:800">${it.title || "Ressource"}</div>
+          <div style="font-size:13px;color:#555">${it.desc || ""}</div>
+          ${it.phone ? `<div style="margin-top:6px"><a href="tel:${it.phone}" class="btn small">📞 ${it.phone}</a></div>` : ""}
+          ${it.url ? `<div style="margin-top:6px"><a href="${it.url}" target="_blank" rel="noopener" class="btn small alt">🌐 Site</a></div>` : ""}
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+async function buildContent(id) {
+  if (id === "resources") {
+    const data = await fetchJSON("./data/resources.json");
+    return renderResources(data || []);
+  }
+  if (id === "manual") return FALLBACKS.manual;
+  if (id === "cgv")    return FALLBACKS.cgv;
+  if (id === "legal")  return FALLBACKS.legal;
+  return `<p>Page inconnue.</p>`;
+}
+
+function setModalVisible(show) {
+  const modal = document.getElementById(MODAL_ID);
+  if (!modal) return;
+  modal.classList[show ? "add" : "remove"]("show");
+  modal.setAttribute("aria-hidden", show ? "false" : "true");
+}
+
+export async function openPage(id) {
+  try {
+    const modal = document.getElementById(MODAL_ID);
+    const title = document.getElementById(TITLE_ID);
+    const content = document.getElementById(CONTENT_ID);
+    if (!modal || !title || !content) return;
+
+    const labels = {
+      manual: "Manuel",
+      cgv: "Conditions Générales",
+      legal: "Mentions légales",
+      resources: "Ressources & numéros utiles",
+    };
+
+    title.textContent = labels[id] || "Page";
+    content.innerHTML = FALLBACKS[id] || "<p>…</p>";
+    setModalVisible(true);
+
+    // Async enrich (ex: resources)
+    const html = await buildContent(id);
+    content.innerHTML = html;
+  } catch (e) {
+    console.warn("[pages.openPage] error:", e);
+  }
+}
+
+function wireClose() {
+  const btn = document.getElementById(BTN_CLOSE_ID);
+  const modal = document.getElementById(MODAL_ID);
+  if (btn && !btn.__wired) {
+    btn.__wired = true;
+    btn.addEventListener("click", () => setModalVisible(false));
+  }
+  if (modal && !modal.__wiredBackdrop) {
+    modal.__wiredBackdrop = true;
+    modal.addEventListener("click", (ev) => {
+      if (ev.target === modal) setModalVisible(false);
+    });
+  }
+  window.addEventListener("keydown", (e)=> {
+    if (e.key === "Escape") setModalVisible(false);
+  });
+}
+
+function wireKnownOpeners() {
+  // Lien depuis la modale 18+
+  const a = $("#open-ressources-from-warn");
+  if (a && !a.__wired) {
+    a.__wired = true;
+    a.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      openPage("resources");
     });
   }
 
-  // Tout lien portant data-page="manuel|mentions|cgv|ressources"
-  $$("[data-page]").forEach((a) => {
-    a.addEventListener("click", async (e) => {
-      e.preventDefault();
-      const kind = a.getAttribute("data-page");
-      if (kind === "ressources") {
-        const data = await loadResourcesJSON();
-        setPageContent(data.title || "Ressources", makeResourcesHTML(data));
-        openModal();
-        return;
-      }
-      const page = SIMPLE_PAGES[kind];
-      setPageContent(page?.title || "—", page?.html || "");
-      openModal();
-    });
+  // Tout élément portant data-open-page="xxx"
+  document.addEventListener("click", (ev) => {
+    const t = ev.target.closest("[data-open-page]");
+    if (!t) return;
+    ev.preventDefault();
+    const id = t.getAttribute("data-open-page");
+    if (id) openPage(id);
   });
 }
 
 export function initPages() {
-  // Fermer sur clic fond
-  const modal = $("#modal-page");
-  if (modal) {
-    modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
+  try {
+    wireClose();
+    wireKnownOpeners();
+    console.log("[pages] ✓ ready");
+  } catch (e) {
+    console.warn("[pages.init] error:", e);
   }
-  wireStaticButtons();
 }
