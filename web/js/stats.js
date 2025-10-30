@@ -1,204 +1,175 @@
-// web/js/stats.js
-// -------------------------------------------------------------------
-// En-tête "Stats" + bannière dans l'écran Stats.
-// - Met à jour les KPIs globaux (jour/semaine/mois/coût/économies)
-// - Gère les boutons d'échelle (Jour/Semaine/Mois) et notifie charts.js
-// - Met à jour la bannière Stats à partir des totaux du graphe si disponibles
-//   (écoute "charts:totals"); sinon, retombe sur les totaux du jour.
-// -------------------------------------------------------------------
-import { $, startOfWeek, startOfMonth } from "./utils.js";
+// web/js/counters.js
+// STOPADDICT — Accueil : compteurs + toggles modules/sous-modules
+// Rôle : gérer les +/− par catégorie (cigs, weed, beer, strong, liquor) et
+// permettre l’activation/désactivation depuis l’Accueil (grisé = OFF mais réactivable).
+// Dépendances : ./state.js
+
 import {
+  getSettings,
+  setSettings,
   getDaily,
-  totalsHeader,
-  ymd,
-  on,          // bus: écouter les changements d'état
-  emit         // bus: notifier le choix d'échelle
+  addEntry,
 } from "./state.js";
 
-console.log('[Stats] Module chargé');
+const $ = (sel, root = document) => root.querySelector(sel);
 
-function fmtEuros(x) {
-  try {
-    return (Number(x) || 0).toLocaleString("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
-  } catch (e) {
-    console.warn('[Stats] fmtEuros erreur:', e);
-    return `${Number(x) || 0} €`;
+// Définition des segments attendus sur l’Accueil (tous sont optionnels : on ne casse pas si absents)
+const SEGMENTS = [
+  { kind: "cigs",   plus: "#cl-plus",     minus: "#cl-moins",     seg: "#seg-cigs",   toggle: "#toggle-cigs",   count: "#cl-count" },
+  { kind: "weed",   plus: "#j-plus",      minus: "#j-moins",       seg: "#seg-weed",   toggle: "#toggle-weed",   count: "#j-count" },
+  { kind: "beer",   plus: "#beer-plus",   minus: "#beer-moins",    seg: "#seg-beer",   toggle: "#toggle-beer",   count: "#beer-count" },
+  { kind: "strong", plus: "#strong-plus", minus: "#strong-moins",  seg: "#seg-strong", toggle: "#toggle-strong", count: "#strong-count" },
+  { kind: "liquor", plus: "#liquor-plus", minus: "#liquor-moins",  seg: "#seg-liquor", toggle: "#toggle-liquor", count: "#liquor-count" },
+];
+
+/* -------------------------- Helpers état -------------------------- */
+
+function isKindEnabled(kind, s = getSettings()) {
+  if (kind === "cigs")   return !!s.enable_cigs;
+  if (kind === "weed")   return !!s.enable_weed;
+  if (kind === "beer")   return !!s.enable_alcohol && !!s.enable_beer;
+  if (kind === "strong") return !!s.enable_alcohol && !!s.enable_strong;
+  if (kind === "liquor") return !!s.enable_alcohol && !!s.enable_liquor;
+  return false;
+}
+
+function setKindEnabled(kind, on) {
+  const s = getSettings();
+  if (kind === "cigs")   return setSettings({ enable_cigs: !!on });
+  if (kind === "weed")   return setSettings({ enable_weed: !!on });
+  if (kind === "beer") {
+    const patch = { enable_alcohol: !!(on || s.enable_strong || s.enable_liquor), enable_beer: !!on };
+    // si on active un sous-module alcool, on force le global à ON
+    if (on) patch.enable_alcohol = true;
+    return setSettings(patch);
+  }
+  if (kind === "strong") {
+    const patch = { enable_alcohol: !!(on || s.enable_beer || s.enable_liquor), enable_strong: !!on };
+    if (on) patch.enable_alcohol = true;
+    return setSettings(patch);
+  }
+  if (kind === "liquor") {
+    const patch = { enable_alcohol: !!(on || s.enable_beer || s.enable_strong), enable_liquor: !!on };
+    if (on) patch.enable_alcohol = true;
+    return setSettings(patch);
   }
 }
 
-// ---------- KPIs header (si présents au-dessus du contenu) ----------
-function renderKpiHeader() {
-  console.log('[Stats] renderKpiHeader');
-  try {
-    const th = totalsHeader();
-    if (!th) {
-      console.warn('[Stats] totalsHeader() retourne null');
-      return;
-    }
-    console.log('[Stats] Totaux header:', th);
+/* -------------------------- UI refresh --------------------------- */
 
-    const set = (id, val) => { 
-      const el = document.getElementById(id); 
-      if (el) {
-        el.textContent = val;
-        console.log(`[Stats] ${id} = ${val}`);
+function refreshCountsUI() {
+  const rec = getDaily(new Date());
+  const map = {
+    cigs:   +rec.cigs   || 0,
+    weed:   +rec.weed   || 0,
+    beer:   +rec.beer   || 0,
+    strong: +rec.strong || 0,
+    liquor: +rec.liquor || 0,
+  };
+  SEGMENTS.forEach(({ kind, count }) => {
+    const el = $(count);
+    if (el) el.textContent = String(map[kind] ?? 0);
+  });
+}
+
+function refreshSegmentsState() {
+  const s = getSettings();
+  SEGMENTS.forEach(({ kind, seg, plus, minus, toggle }) => {
+    const enabled = isKindEnabled(kind, s);
+
+    // Griser le segment si OFF (mais visible pour pouvoir réactiver)
+    const container = $(seg);
+    if (container) {
+      container.classList.toggle("off", !enabled);
+      container.setAttribute("aria-disabled", String(!enabled));
+    }
+
+    // Désactiver les +/− quand OFF
+    const btnPlus  = $(plus);
+    const btnMinus = $(minus);
+    [btnPlus, btnMinus].forEach((b) => {
+      if (!b) return;
+      b.disabled = !enabled;
+      b.setAttribute("aria-disabled", String(!enabled));
+    });
+
+    // Synchro des toggles Accueil si présents
+    const chk = $(toggle);
+    if (chk && chk.type === "checkbox") {
+      if (kind === "beer" || kind === "strong" || kind === "liquor") {
+        chk.checked = enabled; // reflète le sous-module
+      } else {
+        chk.checked = enabled;
       }
-    };
-
-    set("todayTotal",  String(th.todayTotal ?? 0));
-    set("weekTotal",   String(th.weekTotal ?? 0));
-    set("monthTotal",  String(th.monthTotal ?? 0));
-    set("todayCost",   fmtEuros(th.todayCost ?? 0));
-    set("economies-amount", fmtEuros(th.economiesAmount ?? 0));
-  } catch (e) {
-    console.error('[Stats] renderKpiHeader erreur:', e);
-  }
-}
-
-// ---------- Bannière dans l'écran Stats ----------
-let currentRange = "day"; // "day" | "week" | "month"
-
-function renderStatsBannerFallback() {
-  console.log('[Stats] renderStatsBannerFallback (données du jour)');
-  try {
-    // Fallback si charts.js n'a pas encore envoyé ses totaux : on met le jour courant
-    const todayKey = ymd(new Date());
-    const d = getDaily(todayKey) || {};
-    const cl = Number(d.cigs || 0);
-    const j  = Number(d.weed || 0);
-    const a  = Number(d.alcohol || 0);
-
-    console.log('[Stats] Bannière fallback:', { clopes: cl, joints: j, alcool: a });
-
-    const set = (id, val) => { 
-      const el = document.getElementById(id); 
-      if (el) el.textContent = val; 
-    };
-    set("stats-titre",  "Aujourd'hui");
-    set("stats-clopes", String(cl));
-    set("stats-joints", String(j));
-    const la = document.getElementById("stats-alcool-line");
-    set("stats-alcool", String(a));
-    if (la) la.style.display = a > 0 ? "" : "none";
-  } catch (e) {
-    console.error('[Stats] renderStatsBannerFallback erreur:', e);
-  }
-}
-
-function renderStatsBannerFromCharts(payload) {
-  console.log('[Stats] renderStatsBannerFromCharts:', payload);
-  try {
-    // payload = { range, totals: { cigs, weed, alcohol, cost, economies } }
-    const r = payload?.range || currentRange;
-    const t = payload?.totals || {};
-    const titleByRange = { day: "Aujourd'hui", week: "Cette semaine", month: "Ce mois-ci" };
-
-    const set = (id, val) => { 
-      const el = document.getElementById(id); 
-      if (el) el.textContent = val; 
-    };
-
-    document.getElementById("stats-titre") && (document.getElementById("stats-titre").textContent = titleByRange[r] || "Période");
-    set("stats-clopes", String(Number(t.cigs || 0)));
-    set("stats-joints", String(Number(t.weed || 0)));
-    set("stats-alcool", String(Number(t.alcohol || 0)));
-
-    const alLine = document.getElementById("stats-alcool-line");
-    if (alLine) alLine.style.display = Number(t.alcohol || 0) > 0 ? "" : "none";
-
-    console.log('[Stats] Bannière mise à jour depuis charts:', { range: r, totals: t });
-  } catch (e) {
-    console.error('[Stats] renderStatsBannerFromCharts erreur:', e);
-  }
-}
-
-// ---------- Boutons d'échelle (Jour/Semaine/Mois) ----------
-function wireRangeTabs() {
-  console.log('[Stats] wireRangeTabs: initialisation boutons échelle');
-  try {
-    const holder = document.getElementById("chartRange");
-    if (!holder) {
-      console.warn('[Stats] #chartRange introuvable');
-      return;
     }
+  });
+}
 
-    const buttons = holder.querySelectorAll("button[data-range]");
-    console.log('[Stats] Boutons échelle trouvés:', buttons.length);
+/* -------------------------- Bind events -------------------------- */
 
-    buttons.forEach(btn => {
-      btn.addEventListener("click", () => {
-        const r = btn.dataset.range || "day";
-        if (r === currentRange) {
-          console.log('[Stats] Échelle déjà active:', r);
-          return;
-        }
-        currentRange = r;
-        console.log('[Stats] Nouvelle échelle:', r);
+function bindPlusMinus() {
+  SEGMENTS.forEach(({ kind, plus, minus }) => {
+    const bPlus  = $(plus);
+    const bMinus = $(minus);
 
-        // active visuel
-        holder.querySelectorAll("button[data-range]").forEach(b => b.classList.toggle("active", b === btn));
-
-        // notifier charts.js (il écoute "ui:chart-range")
-        console.log('[Stats] Émission événement ui:chart-range:', r);
-        emit("ui:chart-range", { range: r });
+    if (bPlus) {
+      bPlus.addEventListener("click", () => {
+        if (!isKindEnabled(kind)) return;          // OFF = no-op
+        addEntry(kind, +1, new Date());
+        refreshCountsUI();
+        document.dispatchEvent(new CustomEvent("sa:counts-updated", { detail: { kind, delta: +1 } }));
       });
-    });
-  } catch (e) {
-    console.error('[Stats] wireRangeTabs erreur:', e);
-  }
+    }
+    if (bMinus) {
+      bMinus.addEventListener("click", () => {
+        if (!isKindEnabled(kind)) return;
+        addEntry(kind, -1, new Date());
+        refreshCountsUI();
+        document.dispatchEvent(new CustomEvent("sa:counts-updated", { detail: { kind, delta: -1 } }));
+      });
+    }
+  });
 }
 
-// ---------- init ----------
-export function initStatsHeader() {
-  console.log('[Stats] === INITIALISATION ===');
-  try {
-    // KPIs init
-    renderKpiHeader();
-    // Bannière Stats init (fallback jour)
-    renderStatsBannerFallback();
-    // Tabs
-    wireRangeTabs();
+function bindTogglesAccueil() {
+  SEGMENTS.forEach(({ kind, toggle }) => {
+    const chk = $(toggle);
+    if (!chk || chk.type !== "checkbox") return;
 
-    // Se met à jour à chaque changement d'état
-    console.log('[Stats] Écoute des événements state:*');
-    on("state:changed",  () => { 
-      console.log('[Stats] Événement state:changed reçu');
-      renderKpiHeader(); 
-    });
-    on("state:daily",    () => { 
-      console.log('[Stats] Événement state:daily reçu');
-      renderKpiHeader(); 
-    });
-    on("state:economy",  () => { 
-      console.log('[Stats] Événement state:economy reçu');
-      renderKpiHeader(); 
-    });
-    on("state:settings", () => { 
-      console.log('[Stats] Événement state:settings reçu');
-      renderKpiHeader(); 
-    });
+    chk.addEventListener("change", (e) => {
+      const on = !!e.target.checked;
+      setKindEnabled(kind, on);
 
-    // Quand charts.js a calculé ses totaux, on met à jour la bannière
-    console.log('[Stats] Écoute événement charts:totals');
-    on("charts:totals",  (e) => {
-      console.log('[Stats] Événement charts:totals reçu:', e?.detail);
-      renderStatsBannerFromCharts(e?.detail);
-    });
-
-    // Si on revient sur l'onglet / autre fenêtre a modifié le LS
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) {
-        console.log('[Stats] Page redevenue visible');
-        renderKpiHeader();
+      // Si on vient de couper le dernier sous-module alcool → couper global alcool
+      if ((kind === "beer" || kind === "strong" || kind === "liquor") && !on) {
+        const s = getSettings();
+        if (!s.enable_beer && !s.enable_strong && !s.enable_liquor) {
+          setSettings({ enable_alcohol: false });
+        }
       }
-    });
-    window.addEventListener("storage", () => {
-      console.log('[Stats] Événement storage reçu');
-      renderKpiHeader();
-    });
 
-    console.log('[Stats] === INITIALISATION TERMINÉE ===');
-  } catch (e) {
-    console.error('[Stats] initStatsHeader erreur critique:', e);
-  }
+      refreshSegmentsState();
+      document.dispatchEvent(new CustomEvent("sa:state-changed", { detail: { source: "counters.toggle", kind, on } }));
+    });
+  });
 }
+
+/* -------------------------- API publique ------------------------- */
+
+export async function initCounters() {
+  // Mettre à jour l’état visuel initial (grisé/actif + valeurs)
+  refreshSegmentsState();
+  refreshCountsUI();
+
+  // Attacher les écouteurs
+  bindPlusMinus();
+  bindTogglesAccueil();
+
+  // Quand les réglages changent ailleurs (écran Réglages), resynchroniser l’Accueil
+  document.addEventListener("sa:state-changed", () => {
+    refreshSegmentsState();
+    refreshCountsUI();
+  });
+}
+
+export default { initCounters };
