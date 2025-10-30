@@ -1,204 +1,96 @@
 // web/js/stats.js
-// -------------------------------------------------------------------
-// En-tête "Stats" + bannière dans l'écran Stats.
-// - Met à jour les KPIs globaux (jour/semaine/mois/coût/économies)
-// - Gère les boutons d'échelle (Jour/Semaine/Mois) et notifie charts.js
-// - Met à jour la bannière Stats à partir des totaux du graphe si disponibles
-//   (écoute "charts:totals"); sinon, retombe sur les totaux du jour.
-// -------------------------------------------------------------------
-import { $, startOfWeek, startOfMonth } from "./utils.js";
+// STOPADDICT — Stats (résumés numériques par période)
+// Rôle : afficher des totaux (par catégorie + coût + économies) pour Jour/Semaine/Mois/Année.
+// Dépendances : ./state.js (source de vérité). Charts gérés séparément par charts.js.
+
 import {
-  getDaily,
+  getViewRange,
+  getRangeTotals,
   totalsHeader,
-  ymd,
-  on,          // bus: écouter les changements d'état
-  emit         // bus: notifier le choix d'échelle
 } from "./state.js";
 
-console.log('[Stats] Module chargé');
+const $ = (sel, root = document) => root.querySelector(sel);
 
-function fmtEuros(x) {
+function sum(a = []) {
+  let s = 0;
+  for (let i = 0; i < a.length; i++) s += (+a[i] || 0);
+  return s;
+}
+
+function writeText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = String(value);
+}
+
+function formatMoney(n) {
+  const v = Number.isFinite(+n) ? +n : 0;
   try {
-    return (Number(x) || 0).toLocaleString("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
-  } catch (e) {
-    console.warn('[Stats] fmtEuros erreur:', e);
-    return `${Number(x) || 0} €`;
+    return v.toFixed(2);
+  } catch {
+    return String(v);
   }
 }
 
-// ---------- KPIs header (si présents au-dessus du contenu) ----------
-function renderKpiHeader() {
-  console.log('[Stats] renderKpiHeader');
+// Met à jour : titre, totaux par catégorie, coût total, économies
+function renderStats() {
+  const range = getViewRange() || "day";
+  const now = new Date();
+
+  // 1) Titre période (si l’élément existe ; sinon on ignore)
+  const title = totalsHeader(range, now);
+  writeText("stats-titre", title);
+
+  // 2) Récupère agrégations
+  const agg = getRangeTotals(range, now);
+  // agg.series = { cigs:[], weed:[], beer:[], strong:[], liquor:[], cost:[] }
+  // agg.totalCost, agg.totalEconomy déjà fournis
+
+  const totalCigs   = sum(agg.series.cigs);
+  const totalWeed   = sum(agg.series.weed);
+  const totalBeer   = sum(agg.series.beer);
+  const totalStrong = sum(agg.series.strong);
+  const totalLiquor = sum(agg.series.liquor);
+
+  // 3) Écritures dans le DOM (tous facultatifs)
+  writeText("stat-cigs-total",   totalCigs);
+  writeText("stat-weed-total",   totalWeed);
+  writeText("stat-beer-total",   totalBeer);
+  writeText("stat-strong-total", totalStrong);
+  writeText("stat-liquor-total", totalLiquor);
+
+  writeText("stat-cost-total", formatMoney(agg.totalCost));
+  writeText("stat-eco-total",  formatMoney(agg.totalEconomy));
+
+  // 4) Événement pour les autres modules (ex: charts.js)
   try {
-    const th = totalsHeader();
-    if (!th) {
-      console.warn('[Stats] totalsHeader() retourne null');
-      return;
-    }
-    console.log('[Stats] Totaux header:', th);
-
-    const set = (id, val) => { 
-      const el = document.getElementById(id); 
-      if (el) {
-        el.textContent = val;
-        console.log(`[Stats] ${id} = ${val}`);
-      }
-    };
-
-    set("todayTotal",  String(th.todayTotal ?? 0));
-    set("weekTotal",   String(th.weekTotal ?? 0));
-    set("monthTotal",  String(th.monthTotal ?? 0));
-    set("todayCost",   fmtEuros(th.todayCost ?? 0));
-    set("economies-amount", fmtEuros(th.economiesAmount ?? 0));
+    document.dispatchEvent(new CustomEvent("sa:stats-updated", { detail: { range, agg } }));
   } catch (e) {
-    console.error('[Stats] renderKpiHeader erreur:', e);
+    console.warn("[stats] sa:stats-updated event failed:", e);
   }
 }
 
-// ---------- Bannière dans l'écran Stats ----------
-let currentRange = "day"; // "day" | "week" | "month"
+// ------- API publique -------
+export function initStats() {
+  // Première peinture
+  renderStats();
 
-function renderStatsBannerFallback() {
-  console.log('[Stats] renderStatsBannerFallback (données du jour)');
-  try {
-    // Fallback si charts.js n'a pas encore envoyé ses totaux : on met le jour courant
-    const todayKey = ymd(new Date());
-    const d = getDaily(todayKey) || {};
-    const cl = Number(d.cigs || 0);
-    const j  = Number(d.weed || 0);
-    const a  = Number(d.alcohol || 0);
+  // Quand la vue (Jour/Semaine/Mois/Année) change via app.js
+  document.addEventListener("sa:view-range-changed", renderStats);
 
-    console.log('[Stats] Bannière fallback:', { clopes: cl, joints: j, alcool: a });
+  // Quand on modifie des comptes (Accueil +/−)
+  document.addEventListener("sa:counts-updated", renderStats);
 
-    const set = (id, val) => { 
-      const el = document.getElementById(id); 
-      if (el) el.textContent = val; 
-    };
-    set("stats-titre",  "Aujourd'hui");
-    set("stats-clopes", String(cl));
-    set("stats-joints", String(j));
-    const la = document.getElementById("stats-alcool-line");
-    set("stats-alcool", String(a));
-    if (la) la.style.display = a > 0 ? "" : "none";
-  } catch (e) {
-    console.error('[Stats] renderStatsBannerFallback erreur:', e);
+  // Quand des réglages changent (modules ON/OFF, prix, baselines)
+  document.addEventListener("sa:state-changed", renderStats);
+
+  // Optionnel : rafraîchir quand on revient sur l’onglet Stats via la nav
+  const navStats = document.getElementById("nav-stats");
+  if (navStats) {
+    navStats.addEventListener("click", () => {
+      // Petite latence pour laisser d’autres modules mettre à jour
+      setTimeout(renderStats, 0);
+    });
   }
 }
 
-function renderStatsBannerFromCharts(payload) {
-  console.log('[Stats] renderStatsBannerFromCharts:', payload);
-  try {
-    // payload = { range, totals: { cigs, weed, alcohol, cost, economies } }
-    const r = payload?.range || currentRange;
-    const t = payload?.totals || {};
-    const titleByRange = { day: "Aujourd'hui", week: "Cette semaine", month: "Ce mois-ci" };
-
-    const set = (id, val) => { 
-      const el = document.getElementById(id); 
-      if (el) el.textContent = val; 
-    };
-
-    document.getElementById("stats-titre") && (document.getElementById("stats-titre").textContent = titleByRange[r] || "Période");
-    set("stats-clopes", String(Number(t.cigs || 0)));
-    set("stats-joints", String(Number(t.weed || 0)));
-    set("stats-alcool", String(Number(t.alcohol || 0)));
-
-    const alLine = document.getElementById("stats-alcool-line");
-    if (alLine) alLine.style.display = Number(t.alcohol || 0) > 0 ? "" : "none";
-
-    console.log('[Stats] Bannière mise à jour depuis charts:', { range: r, totals: t });
-  } catch (e) {
-    console.error('[Stats] renderStatsBannerFromCharts erreur:', e);
-  }
-}
-
-// ---------- Boutons d'échelle (Jour/Semaine/Mois) ----------
-function wireRangeTabs() {
-  console.log('[Stats] wireRangeTabs: initialisation boutons échelle');
-  try {
-    const holder = document.getElementById("chartRange");
-    if (!holder) {
-      console.warn('[Stats] #chartRange introuvable');
-      return;
-    }
-
-    const buttons = holder.querySelectorAll("button[data-range]");
-    console.log('[Stats] Boutons échelle trouvés:', buttons.length);
-
-    buttons.forEach(btn => {
-      btn.addEventListener("click", () => {
-        const r = btn.dataset.range || "day";
-        if (r === currentRange) {
-          console.log('[Stats] Échelle déjà active:', r);
-          return;
-        }
-        currentRange = r;
-        console.log('[Stats] Nouvelle échelle:', r);
-
-        // active visuel
-        holder.querySelectorAll("button[data-range]").forEach(b => b.classList.toggle("active", b === btn));
-
-        // notifier charts.js (il écoute "ui:chart-range")
-        console.log('[Stats] Émission événement ui:chart-range:', r);
-        emit("ui:chart-range", { range: r });
-      });
-    });
-  } catch (e) {
-    console.error('[Stats] wireRangeTabs erreur:', e);
-  }
-}
-
-// ---------- init ----------
-export function initStatsHeader() {
-  console.log('[Stats] === INITIALISATION ===');
-  try {
-    // KPIs init
-    renderKpiHeader();
-    // Bannière Stats init (fallback jour)
-    renderStatsBannerFallback();
-    // Tabs
-    wireRangeTabs();
-
-    // Se met à jour à chaque changement d'état
-    console.log('[Stats] Écoute des événements state:*');
-    on("state:changed",  () => { 
-      console.log('[Stats] Événement state:changed reçu');
-      renderKpiHeader(); 
-    });
-    on("state:daily",    () => { 
-      console.log('[Stats] Événement state:daily reçu');
-      renderKpiHeader(); 
-    });
-    on("state:economy",  () => { 
-      console.log('[Stats] Événement state:economy reçu');
-      renderKpiHeader(); 
-    });
-    on("state:settings", () => { 
-      console.log('[Stats] Événement state:settings reçu');
-      renderKpiHeader(); 
-    });
-
-    // Quand charts.js a calculé ses totaux, on met à jour la bannière
-    console.log('[Stats] Écoute événement charts:totals');
-    on("charts:totals",  (e) => {
-      console.log('[Stats] Événement charts:totals reçu:', e?.detail);
-      renderStatsBannerFromCharts(e?.detail);
-    });
-
-    // Si on revient sur l'onglet / autre fenêtre a modifié le LS
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) {
-        console.log('[Stats] Page redevenue visible');
-        renderKpiHeader();
-      }
-    });
-    window.addEventListener("storage", () => {
-      console.log('[Stats] Événement storage reçu');
-      renderKpiHeader();
-    });
-
-    console.log('[Stats] === INITIALISATION TERMINÉE ===');
-  } catch (e) {
-    console.error('[Stats] initStatsHeader erreur critique:', e);
-  }
-}
+export default { initStats };
