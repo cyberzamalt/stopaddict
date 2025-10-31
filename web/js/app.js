@@ -1,7 +1,7 @@
 // web/js/app.js
 // STOPADDICT — Boot principal & navigation (orchestrateur)
 // Branche tous les modules (core + utilitaires) en mode tolérant.
-// Dépendances directes : ./state.js + ./settings.js
+// NB: i18n (JSON externes) est initialisé AVANT l’affichage pour éviter le flash de langue.
 
 "use strict";
 
@@ -129,15 +129,37 @@ async function safeInit(path, exportName) {
 // ------- Boot principal -------
 async function boot() {
   try {
-    // État
+    // État de base
     load();
     ensureToday();
 
-    // Core utilitaires (tolérants si absents)
-    await safeInit("./i18n.js",    "initI18n");     // langue
-    await safeInit("./currency.js","initCurrency"); // symbole monnaie
+    // i18n & monnaie AVANT rendu (évitons le "flash" de traduction)
+    try {
+      const i18n = await import("./i18n.js");
+      await (i18n.initI18n ? i18n.initI18n() : i18n.default?.initI18n?.());
+    } catch (e) {
+      console.warn("[app] i18n init failed (fallback FR/EN embarqué utilisé)", e);
+    }
+    let curMod = null;
+    try {
+      curMod = await import("./currency.js");
+      await (curMod.initCurrency ? curMod.initCurrency() : curMod.default?.initCurrency?.());
+    } catch (e) {
+      console.warn("[app] currency init failed", e);
+    }
 
-    // Écran Réglages (injecte le formulaire si vide)
+    // Si un fichier de langue suggère une devise (event), on relaie vers currency
+    document.addEventListener("sa:currency-suggest", (ev) => {
+      try {
+        const detail = ev?.detail || {};
+        if (window.SA_CURRENCY && (detail.symbol || detail.position)) {
+          // Application tolérante : l’utilisateur pourra toujours changer ensuite dans Réglages
+          window.SA_CURRENCY.set(detail);
+        }
+      } catch {}
+    });
+
+    // Injecter / préparer l’écran Réglages
     try { initSettings(); } catch (e) { console.warn("[app] initSettings() a échoué:", e); }
 
     // Nav & stats-range
@@ -151,7 +173,7 @@ async function boot() {
     updateTopBar();
     showScreen("ecran-accueil");
 
-    // Modules cœur (tolérants)
+    // Modules cœur (tolérants si absents)
     await safeInit("./counters.js", "initCounters");
     await safeInit("./stats.js",    "initStats");
     await safeInit("./charts.js",   "initCharts");
@@ -174,6 +196,9 @@ async function boot() {
     });
     document.addEventListener("sa:counts-updated", () => {
       updateTopBar();
+    });
+    document.addEventListener("sa:view-range-changed", () => {
+      updateStatsHeader();
     });
     document.addEventListener("sa:lang-changed", () => {
       updateStatsHeader();
