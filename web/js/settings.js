@@ -1,246 +1,277 @@
 // web/js/settings.js
-// STOPADDICT — Écran Réglages (zéro par défaut)
-// But : afficher/renseigner les options (modules, sous-modules alcool, prix, baselines) et les persister.
-// Dépendances : ./state.js (source de vérité)
+// STOPADDICT — Écran Réglages (modules, prix, langue, devise, profil)
+// - Injecte un panneau complet dans #ecran-params
+// - Sauvegarde via setSettings() et émet les évènements standards
+// - Tolérant : fonctionne même si i18n/currency ne sont pas présents
 
-import {
-  getSettings,
-  setSettings,
-} from './state.js';
+"use strict";
 
-function $(sel, root = document) { return root.querySelector(sel); }
-function $all(sel, root = document) { return Array.from(root.querySelectorAll(sel)); }
-function toNumber(v) {
-  const n = parseFloat(String(v).replace(',', '.'));
-  return Number.isFinite(n) ? n : 0;
+import { getSettings, setSettings } from "./state.js";
+import { getAvailable as i18nGetAvailable, setLang as i18nSetLang, getLang as i18nGetLang } from "./i18n.js";
+
+const $  = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+function nz(n) {
+  const v = Number.parseFloat(n);
+  return Number.isFinite(v) && v >= 0 ? v : 0;
 }
 
-function templateHTML() {
+function ensureShape(s) {
+  s.enable_cigs   ??= true;
+  s.enable_weed   ??= true;
+  s.enable_alcohol??= true;
+  s.enable_beer   ??= true;
+  s.enable_strong ??= true;
+  s.enable_liquor ??= true;
+  s.prices   ??= { cig:0, weed:0, beer:0, strong:0, liquor:0 };
+  s.baselines??= { cig:0, weed:0, beer:0, strong:0, liquor:0 };
+  s.dates    ??= { quit_all:"", quit_cigs:"", quit_weed:"", quit_alcohol:"" };
+  s.profile  ??= { name:"" };
+  return s;
+}
+
+function currentCurrency() {
+  try {
+    if (window.SA_CURRENCY) {
+      const g = window.SA_CURRENCY.get();
+      return { symbol: g.symbol, position: g.position };
+    }
+  } catch {}
+  return { symbol: "€", position: "after" };
+}
+
+function tpl(s, langs, curCurrency) {
+  const langOptions = (langs || [{code:"fr",label:"Français"},{code:"en",label:"English"}])
+    .map(({code,label}) => `<option value="${code}">${label || code}</option>`).join("");
+
+  const alcoholDisabled = !s.enable_alcohol;
+  const subDisabledAttr = alcoholDisabled ? "disabled" : "";
+
   return `
-    <div class="sa-settings space-y-6">
-      <!-- Modules -->
-      <section class="card">
-        <h3>Modules</h3>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-12">
-          <label class="flex items-center gap-8">
-            <input id="chk-enable-cigs" type="checkbox" />
-            <span>Cigarettes</span>
-          </label>
-          <label class="flex items-center gap-8">
-            <input id="chk-enable-weed" type="checkbox" />
-            <span>Joints</span>
-          </label>
-          <label class="flex items-center gap-8">
-            <input id="chk-enable-alcohol" type="checkbox" />
-            <span>Alcool (global)</span>
-          </label>
-        </div>
-
-        <div id="block-sub-alcohol" class="mt-16 pl-8 border-l">
-          <div class="text-sm opacity-80 mb-8">Sous-modules alcool (activables depuis Réglages et Accueil)</div>
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-12">
-            <label class="flex items-center gap-8">
-              <input id="chk-enable-beer" type="checkbox" />
-              <span>Bière</span>
-            </label>
-            <label class="flex items-center gap-8">
-              <input id="chk-enable-strong" type="checkbox" />
-              <span>Alcool fort</span>
-            </label>
-            <label class="flex items-center gap-8">
-              <input id="chk-enable-liquor" type="checkbox" />
-              <span>Liqueur</span>
-            </label>
-          </div>
-        </div>
-      </section>
-
-      <!-- Prix unitaires -->
-      <section class="card">
-        <h3>Prix unitaires (€)</h3>
-        <div class="grid grid-cols-1 md:grid-cols-5 gap-12">
-          <label class="flex items-center gap-8">
-            <span class="w-40">Cigarette</span>
-            <input id="price-cigs" type="number" step="0.01" inputmode="decimal" class="input" placeholder="0,00" />
-          </label>
-          <label class="flex items-center gap-8">
-            <span class="w-40">Joint</span>
-            <input id="price-weed" type="number" step="0.01" inputmode="decimal" class="input" placeholder="0,00" />
-          </label>
-          <label class="flex items-center gap-8">
-            <span class="w-40">Bière</span>
-            <input id="price-beer" type="number" step="0.01" inputmode="decimal" class="input" placeholder="0,00" />
-          </label>
-          <label class="flex items-center gap-8">
-            <span class="w-40">Alcool fort</span>
-            <input id="price-strong" type="number" step="0.01" inputmode="decimal" class="input" placeholder="0,00" />
-          </label>
-          <label class="flex items-center gap-8">
-            <span class="w-40">Liqueur</span>
-            <input id="price-liquor" type="number" step="0.01" inputmode="decimal" class="input" placeholder="0,00" />
-          </label>
-        </div>
-      </section>
-
-      <!-- Baselines / Objectifs par jour -->
-      <section class="card">
-        <h3>Objectifs / Baselines (par jour)</h3>
-        <div class="grid grid-cols-1 md:grid-cols-5 gap-12">
-          <label class="flex items-center gap-8">
-            <span class="w-40">Cigarette</span>
-            <input id="base-cigs" type="number" step="1" inputmode="numeric" class="input" placeholder="0" />
-          </label>
-          <label class="flex items-center gap-8">
-            <span class="w-40">Joint</span>
-            <input id="base-weed" type="number" step="1" inputmode="numeric" class="input" placeholder="0" />
-          </label>
-          <label class="flex items-center gap-8">
-            <span class="w-40">Bière</span>
-            <input id="base-beer" type="number" step="1" inputmode="numeric" class="input" placeholder="0" />
-          </label>
-          <label class="flex items-center gap-8">
-            <span class="w-40">Alcool fort</span>
-            <input id="base-strong" type="number" step="1" inputmode="numeric" class="input" placeholder="0" />
-          </label>
-          <label class="flex items-center gap-8">
-            <span class="w-40">Liqueur</span>
-            <input id="base-liquor" type="number" step="1" inputmode="numeric" class="input" placeholder="0" />
-          </label>
-        </div>
-        <div class="text-xs opacity-70 mt-8">
-          Astuce : Les économies affichées comparent ces objectifs à vos consommations réelles, et uniquement pour les catégories actives.
-        </div>
-      </section>
+  <div class="card">
+    <div class="title">Profil</div>
+    <div class="grid-2" style="gap:.75rem">
+      <label class="col">
+        <span class="muted">Prénom (facultatif)</span>
+        <input id="st-name" type="text" class="btn" placeholder="Ex. Nico" value="${s.profile?.name || ""}" />
+      </label>
+      <label class="col">
+        <span class="muted">Langue</span>
+        <select id="st-lang" class="btn">${langOptions}</select>
+      </label>
     </div>
+  </div>
+
+  <div class="card">
+    <div class="title">Devise (affichage)</div>
+    <div class="grid-3" style="gap:.75rem">
+      <label class="col">
+        <span class="muted">Symbole</span>
+        <input id="st-curr-symbol" type="text" class="btn" maxlength="6" value="${curCurrency.symbol}" />
+      </label>
+      <div class="col">
+        <span class="muted">Position</span>
+        <div class="row" style="gap:.5rem;align-items:center">
+          <label><input type="radio" name="st-curr-pos" id="st-curr-before" ${curCurrency.position==="before"?"checked":""}/> Avant (ex: €12.00)</label>
+          <label><input type="radio" name="st-curr-pos" id="st-curr-after"  ${curCurrency.position!=="before"?"checked":""}/> Après (ex: 12.00 €)</label>
+        </div>
+      </div>
+      <div class="col">
+        <span class="muted">Actions</span>
+        <div class="row" style="gap:.5rem">
+          <button id="btn-curr-apply" class="btn">Appliquer</button>
+        </div>
+      </div>
+    </div>
+    <p class="muted" style="margin-top:.5rem">Seul le <b>symbole</b> change. Les calculs restent identiques.</p>
+  </div>
+
+  <div class="card">
+    <div class="title">Modules</div>
+    <div class="grid-3" style="gap:.75rem">
+      <label class="col"><input id="st-enable-cigs"   type="checkbox" ${s.enable_cigs? "checked":""}/> Cigarettes</label>
+      <label class="col"><input id="st-enable-weed"   type="checkbox" ${s.enable_weed? "checked":""}/> Joints</label>
+      <label class="col"><input id="st-enable-alcohol"type="checkbox" ${s.enable_alcohol? "checked":""}/> Alcool (global)</label>
+    </div>
+    <div class="grid-3" style="gap:.75rem; margin-top:.5rem">
+      <label class="col"><input id="st-enable-beer"   type="checkbox" ${s.enable_beer? "checked":""} ${subDisabledAttr}/> Bière</label>
+      <label class="col"><input id="st-enable-strong" type="checkbox" ${s.enable_strong? "checked":""} ${subDisabledAttr}/> Alcool fort</label>
+      <label class="col"><input id="st-enable-liquor" type="checkbox" ${s.enable_liquor? "checked":""} ${subDisabledAttr}/> Liqueur</label>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="title">Prix unitaires</div>
+    <div class="grid-5" style="gap:.75rem">
+      <label class="col"><span class="muted">Cigarette</span>
+        <input id="st-price-cig"    type="number" min="0" step="0.01" value="${nz(s.prices?.cig)}" class="btn"/>
+      </label>
+      <label class="col"><span class="muted">Joint</span>
+        <input id="st-price-weed"   type="number" min="0" step="0.01" value="${nz(s.prices?.weed)}" class="btn"/>
+      </label>
+      <label class="col"><span class="muted">Bière</span>
+        <input id="st-price-beer"   type="number" min="0" step="0.01" value="${nz(s.prices?.beer)}" class="btn" ${subDisabledAttr}/>
+      </label>
+      <label class="col"><span class="muted">Alcool fort</span>
+        <input id="st-price-strong" type="number" min="0" step="0.01" value="${nz(s.prices?.strong)}" class="btn" ${subDisabledAttr}/>
+      </label>
+      <label class="col"><span class="muted">Liqueur</span>
+        <input id="st-price-liquor" type="number" min="0" step="0.01" value="${nz(s.prices?.liquor)}" class="btn" ${subDisabledAttr}/>
+      </label>
+    </div>
+    <div class="row" style="gap:.5rem; margin-top:.75rem">
+      <button id="btn-save-settings" class="btn">Enregistrer</button>
+      <button id="btn-reset-prices"  class="btn">Réinitialiser prix</button>
+    </div>
+    <p class="muted" style="margin-top:.5rem">Astuce : renseigner les prix permet des coûts/économies plus parlants.</p>
+  </div>
   `;
 }
 
-function refreshUI(root) {
-  const s = getSettings();
+async function render() {
+  const host = document.getElementById("ecran-params");
+  if (!host) return;
 
-  // Modules
-  $('#chk-enable-cigs', root).checked = !!s.enable_cigs;
-  $('#chk-enable-weed', root).checked = !!s.enable_weed;
-  $('#chk-enable-alcohol', root).checked = !!s.enable_alcohol;
+  const s = ensureShape({ ...getSettings() });
+  let langs = [];
+  try { langs = await i18nGetAvailable(); } catch { langs = []; }
+  const curCurrency = currentCurrency();
 
-  // Sous-modules alcool
-  $('#chk-enable-beer', root).checked = !!s.enable_beer;
-  $('#chk-enable-strong', root).checked = !!s.enable_strong;
-  $('#chk-enable-liquor', root).checked = !!s.enable_liquor;
+  host.innerHTML = tpl(s, langs, curCurrency);
 
-  // Prix
-  $('#price-cigs', root).value   = s.prices?.cig ?? 0;
-  $('#price-weed', root).value   = s.prices?.weed ?? 0;
-  $('#price-beer', root).value   = s.prices?.beer ?? 0;
-  $('#price-strong', root).value = s.prices?.strong ?? 0;
-  $('#price-liquor', root).value = s.prices?.liquor ?? 0;
+  // Sélection de langue : positionner la valeur
+  const selLang = $("#st-lang", host);
+  if (selLang) {
+    const cur = (s.lang || i18nGetLang() || "fr");
+    if ([...selLang.options].some(o => o.value === cur)) selLang.value = cur;
+  }
 
-  // Baselines
-  $('#base-cigs', root).value   = s.baselines?.cig ?? 0;
-  $('#base-weed', root).value   = s.baselines?.weed ?? 0;
-  $('#base-beer', root).value   = s.baselines?.beer ?? 0;
-  $('#base-strong', root).value = s.baselines?.strong ?? 0;
-  $('#base-liquor', root).value = s.baselines?.liquor ?? 0;
-
-  // Accessibilité des sous-modules alcool
-  enableAlcoholSubsection(root, !!s.enable_alcohol);
+  bind(host);
 }
 
-function enableAlcoholSubsection(root, enabled) {
-  const sub = $('#block-sub-alcohol', root);
-  sub.style.opacity = enabled ? '1' : '0.5';
+function bind(root) {
+  // --- PROFIL / LANGUE ---
+  const nameInp = $("#st-name", root);
+  const langSel = $("#st-lang", root);
+  if (langSel) {
+    langSel.addEventListener("change", async () => {
+      const code = langSel.value || "fr";
+      setSettings({ lang: code });
+      try { await i18nSetLang(code); } catch {}
+    });
+  }
+  if (nameInp) {
+    nameInp.addEventListener("change", () => {
+      setSettings({ profile: { name: nameInp.value.trim() } });
+    });
+  }
 
-  const toggles = [
-    '#chk-enable-beer',
-    '#chk-enable-strong',
-    '#chk-enable-liquor',
-  ];
+  // --- CURRENCY ---
+  const sym = $("#st-curr-symbol", root);
+  const posBefore = $("#st-curr-before", root);
+  const posAfter  = $("#st-curr-after", root);
+  const btnCurr   = $("#btn-curr-apply", root);
 
-  toggles.forEach(id => {
-    const el = $(id, root);
-    el.disabled = !enabled;
-  });
+  if (btnCurr) {
+    btnCurr.addEventListener("click", () => {
+      try {
+        if (window.SA_CURRENCY) {
+          const position = posBefore?.checked ? "before" : "after";
+          window.SA_CURRENCY.set({ symbol: (sym?.value || "€").trim(), position });
+        }
+      } catch {}
+    });
+  }
+
+  // --- MODULES ---
+  const cbCigs   = $("#st-enable-cigs", root);
+  const cbWeed   = $("#st-enable-weed", root);
+  const cbAlc    = $("#st-enable-alcohol", root);
+  const cbBeer   = $("#st-enable-beer", root);
+  const cbStrong = $("#st-enable-strong", root);
+  const cbLiquor = $("#st-enable-liquor", root);
+
+  function syncSubAlcoholDisabled(disabled) {
+    [cbBeer, cbStrong, cbLiquor].forEach(el => {
+      if (!el) return;
+      el.disabled = !!disabled;
+    });
+    ["#st-price-beer", "#st-price-strong", "#st-price-liquor"].forEach(sel => {
+      const el = $(sel, root);
+      if (el) el.disabled = !!disabled;
+    });
+  }
+
+  if (cbAlc) {
+    cbAlc.addEventListener("change", () => {
+      const enable_alcohol = !!cbAlc.checked;
+      setSettings({ enable_alcohol });
+      syncSubAlcoholDisabled(!enable_alcohol);
+    });
+  }
+  if (cbCigs) cbCigs.addEventListener("change", () => setSettings({ enable_cigs: !!cbCigs.checked }));
+  if (cbWeed) cbWeed.addEventListener("change", () => setSettings({ enable_weed: !!cbWeed.checked }));
+  if (cbBeer) cbBeer.addEventListener("change", () => setSettings({ enable_beer: !!cbBeer.checked }));
+  if (cbStrong) cbStrong.addEventListener("change", () => setSettings({ enable_strong: !!cbStrong.checked }));
+  if (cbLiquor) cbLiquor.addEventListener("change", () => setSettings({ enable_liquor: !!cbLiquor.checked }));
+
+  // Init état disabled des sous-modules alcool
+  syncSubAlcoholDisabled(!(cbAlc?.checked));
+
+  // --- PRIX ---
+  const pCig    = $("#st-price-cig", root);
+  const pWeed   = $("#st-price-weed", root);
+  const pBeer   = $("#st-price-beer", root);
+  const pStrong = $("#st-price-strong", root);
+  const pLiquor = $("#st-price-liquor", root);
+
+  const btnSave = $("#btn-save-settings", root);
+  if (btnSave) {
+    btnSave.addEventListener("click", () => {
+      setSettings({
+        prices: {
+          cig:    nz(pCig?.value),
+          weed:   nz(pWeed?.value),
+          beer:   nz(pBeer?.value),
+          strong: nz(pStrong?.value),
+          liquor: nz(pLiquor?.value),
+        }
+      });
+    });
+  }
+
+  const btnResetPrices = $("#btn-reset-prices", root);
+  if (btnResetPrices) {
+    btnResetPrices.addEventListener("click", () => {
+      setSettings({ prices: { cig:0, weed:0, beer:0, strong:0, liquor:0 } });
+      // rafraîchir visuel
+      if (pCig)    pCig.value = "0";
+      if (pWeed)   pWeed.value = "0";
+      if (pBeer)   pBeer.value = "0";
+      if (pStrong) pStrong.value = "0";
+      if (pLiquor) pLiquor.value = "0";
+    });
+  }
 }
 
-function bindEvents(root) {
-  // Modules
-  $('#chk-enable-cigs', root).addEventListener('change', (e) => {
-    setSettings({ enable_cigs: !!e.target.checked });
-  });
-
-  $('#chk-enable-weed', root).addEventListener('change', (e) => {
-    setSettings({ enable_weed: !!e.target.checked });
-  });
-
-  $('#chk-enable-alcohol', root).addEventListener('change', (e) => {
-    const val = !!e.target.checked;
-    setSettings({ enable_alcohol: val });
-    // Activer/désactiver visuel sous-modules
-    enableAlcoholSubsection(root, val);
-    // Si OFF, state.setSettings() remettra aussi beer/strong/liquor à false (cohérence)
-    refreshUI(root);
-  });
-
-  // Sous-modules alcool
-  $('#chk-enable-beer', root).addEventListener('change', (e) => {
-    setSettings({ enable_beer: !!e.target.checked });
-  });
-  $('#chk-enable-strong', root).addEventListener('change', (e) => {
-    setSettings({ enable_strong: !!e.target.checked });
-  });
-  $('#chk-enable-liquor', root).addEventListener('change', (e) => {
-    setSettings({ enable_liquor: !!e.target.checked });
-  });
-
-  // Prix
-  $('#price-cigs', root).addEventListener('input', (e) => {
-    setSettings({ prices: { cig: toNumber(e.target.value) } });
-  });
-  $('#price-weed', root).addEventListener('input', (e) => {
-    setSettings({ prices: { weed: toNumber(e.target.value) } });
-  });
-  $('#price-beer', root).addEventListener('input', (e) => {
-    setSettings({ prices: { beer: toNumber(e.target.value) } });
-  });
-  $('#price-strong', root).addEventListener('input', (e) => {
-    setSettings({ prices: { strong: toNumber(e.target.value) } });
-  });
-  $('#price-liquor', root).addEventListener('input', (e) => {
-    setSettings({ prices: { liquor: toNumber(e.target.value) } });
-  });
-
-  // Baselines
-  $('#base-cigs', root).addEventListener('input', (e) => {
-    setSettings({ baselines: { cig: Math.max(0, Math.trunc(toNumber(e.target.value))) } });
-  });
-  $('#base-weed', root).addEventListener('input', (e) => {
-    setSettings({ baselines: { weed: Math.max(0, Math.trunc(toNumber(e.target.value))) } });
-  });
-  $('#base-beer', root).addEventListener('input', (e) => {
-    setSettings({ baselines: { beer: Math.max(0, Math.trunc(toNumber(e.target.value))) } });
-  });
-  $('#base-strong', root).addEventListener('input', (e) => {
-    setSettings({ baselines: { strong: Math.max(0, Math.trunc(toNumber(e.target.value))) } });
-  });
-  $('#base-liquor', root).addEventListener('input', (e) => {
-    setSettings({ baselines: { liquor: Math.max(0, Math.trunc(toNumber(e.target.value))) } });
-  });
-}
-
-// -------- API publique --------
+/* ---------- API publique ---------- */
 export function initSettings() {
-  const root = document.getElementById('ecran-params');
-  if (!root) {
-    console.error('[settings.init] #ecran-params introuvable');
-    return;
-  }
-  // Injecter le template si vide
-  if (!root.firstElementChild) {
-    root.innerHTML = templateHTML();
-  }
-  refreshUI(root);
-  bindEvents(root);
+  render();
+
+  // Se re-rendre quand la langue change (libellés)
+  document.addEventListener("sa:lang-changed", () => render());
+
+  // Si d’autres modules modifient les réglages, refléter ici
+  document.addEventListener("sa:state-changed", (e) => {
+    const src = e?.detail?.source || "";
+    // Éviter boucle : on rerend large (léger, c’est un écran)
+    if (src !== "settings") render();
+  });
+
+  // Rafraîchir si on arrive sur l’onglet Réglages
+  const nav = document.getElementById("nav-params");
+  if (nav) nav.addEventListener("click", () => setTimeout(render, 0));
 }
 
-// Optionnel : exposer pour debug
-try { window.SA_SETTINGS = { initSettings }; } catch {}
+export default { initSettings };
