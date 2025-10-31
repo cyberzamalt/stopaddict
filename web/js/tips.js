@@ -1,39 +1,22 @@
 // web/js/tips.js
-// STOPADDICT — Conseils adaptatifs (Accueil)
-// Affiche 1 à 3 messages courts dans #tips-box selon : modules actifs, prix saisis,
-// objectifs/baselines et consommation du jour. Tolérant si éléments manquent.
-// Dépendances : ./state.js (aucune autre).
+// STOPADDICT — Conseils adaptatifs (Accueil, bandeau bas)
+// - Analyse la journée (comptes, objectifs, prix) et affiche 2–4 conseils utiles.
+// - Personnalise avec le prénom (Réglages > Profil).
+// - Respecte l’activation/désactivation des catégories et l’absence de prix.
+// - Rafraîchit sur changements (comptes, réglages, langue, devise).
+// Cibles DOM (tolérant) :
+//   * #tips-box        (prioritaire, si présent dans la page)
+//   * [data-tips]      (fallback sémantique)
+//   * crée <div id="tips-box"> dans #ecran-accueil sinon.
 
-import {
-  getSettings,
-  getDaily,
-  getRangeTotals,
-  calculateDayCost,
-} from "./state.js";
+"use strict";
 
-const $ = (sel, root = document) => root.querySelector(sel);
+import { getSettings, getDaily, calculateDayCost } from "./state.js";
+import { t, categoryLabel } from "./i18n.js";
 
-// -------- Helpers --------
-function moneySym() {
-  // Compatible avec un futur currency.js (expose window.SA_CURRENCY.symbol)
-  try { return (window.SA_CURRENCY && window.SA_CURRENCY.symbol) || "€"; } catch { return "€"; }
-}
-function fmt(n) {
-  const v = Number.isFinite(+n) ? +n : 0;
-  try { return v.toFixed(2); } catch { return String(v); }
-}
-function sum(arr = []) {
-  let s = 0; for (let i = 0; i < arr.length; i++) s += (+arr[i] || 0); return s;
-}
+const $  = (sel, root = document) => root.querySelector(sel);
 
-const LABEL = {
-  cigs: "cigarettes",
-  weed: "joints",
-  beer: "bières",
-  strong: "alcools forts",
-  liquor: "liqueurs",
-};
-
+// --- Utilitaires locaux ---
 function enabledKinds(s) {
   const out = [];
   if (s.enable_cigs) out.push("cigs");
@@ -43,152 +26,129 @@ function enabledKinds(s) {
   if (s.enable_alcohol && s.enable_liquor) out.push("liquor");
   return out;
 }
-
-function todayCounts(rec) {
-  return {
-    cigs:   +rec.cigs   || 0,
-    weed:   +rec.weed   || 0,
-    beer:   +rec.beer   || 0,
-    strong: +rec.strong || 0,
-    liquor: +rec.liquor || 0,
-  };
+function moneySymbol() {
+  try { return window.SA_CURRENCY?.get()?.symbol || "€"; } catch { return "€"; }
+}
+function listLabels(kinds) {
+  return kinds.map(categoryLabel).join(", ");
+}
+function integer(n) {
+  const v = Number.parseInt(n, 10);
+  return Number.isFinite(v) && v >= 0 ? v : 0;
 }
 
-function pricesFor(s) {
-  const p = s.prices || {};
-  return {
-    cigs:   +p.cig    || 0,
-    weed:   +p.weed   || 0,
-    beer:   +p.beer   || 0,
-    strong: +p.strong || 0,
-    liquor: +p.liquor || 0,
-  };
-}
-
-function baselinesFor(s) {
-  const b = s.baselines || {};
-  return {
-    cigs:   Math.max(0, +b.cig    || 0),
-    weed:   Math.max(0, +b.weed   || 0),
-    beer:   Math.max(0, +b.beer   || 0),
-    strong: Math.max(0, +b.strong || 0),
-    liquor: Math.max(0, +b.liquor || 0),
-  };
-}
-
-// -------- Règles de conseils --------
+// --- Génération des messages ---
 function buildTips() {
   const s = getSettings();
+  const today = getDaily(new Date());
   const kinds = enabledKinds(s);
-  const tips = [];
+  const msgs = [];
 
-  // 0) Rien n'est actif → inciter à activer un module
-  if (kinds.length === 0) {
-    tips.push("Active une ou plusieurs catégories dans Réglages pour commencer le suivi.");
-    return tips;
-  }
+  // 0) Personnalisation (accroche douce si prénom)
+  const name = (s.profile?.name || "").trim();
+  const hello = name ? `👋 ${name} — ` : "";
 
-  const rec = getDaily(new Date());
-  const cnt = todayCounts(rec);
-  const base = baselinesFor(s);
-  const prices = pricesFor(s);
-  const sym = moneySym();
-
-  // 1) Prix manquants pour catégories actives → inciter à les renseigner
-  const missing = kinds.filter(k => prices[k] === 0);
+  // 1) Prix manquants (uniquement parmi les catégories actives)
+  const prices = s.prices || {};
+  const missing = kinds.filter(k =>
+    (k === "cigs"   && !+prices.cig)   ||
+    (k === "weed"   && !+prices.weed)  ||
+    (k === "beer"   && !+prices.beer)  ||
+    (k === "strong" && !+prices.strong)||
+    (k === "liquor" && !+prices.liquor)
+  );
   if (missing.length) {
-    const list = missing.map(k => LABEL[k]).join(", ");
-    tips.push(`Renseigne le prix de ${list} dans Réglages pour voir des coûts/économies réalistes.`);
+    msgs.push(t("tip.fill_prices", { list: listLabels(missing) }));
   }
 
-  // 2) Zéro conso aujourd’hui (sur toutes les catégories actives)
-  const todayTotal = kinds.reduce((a,k) => a + (cnt[k] || 0), 0);
-  if (todayTotal === 0) {
-    tips.push("🎯 Zéro aujourd’hui — parfait ! Garde ce rythme.");
+  // 2) Coût du jour (toujours utile, avec devise)
+  const cost = calculateDayCost(today, s);
+  msgs.push(hello + t("cost.today", { n: cost.toFixed(2), sym: moneySymbol() }));
+
+  // 3) Zéro aujourd’hui ?
+  const totalToday = kinds.reduce((acc, k) => acc + integer(today[k]), 0);
+  if (totalToday === 0) {
+    msgs.push(t("tip.zero_today"));
   }
 
-  // 3) Par rapport aux objectifs du jour (baselines)
-  //    - si sous l’objectif sur ≥1 catégorie → bravo ciblé
-  //    - si au-dessus sur ≥1 catégorie → micro-objectif (-1)
-  const below = kinds.filter(k => base[k] > 0 && cnt[k] < base[k]);
-  const above = kinds.filter(k => base[k] > 0 && cnt[k] > base[k]);
-
-  if (below.length) {
-    const list = below.map(k => `${LABEL[k]} (${cnt[k]}/${base[k]})`).join(", ");
-    tips.push(`Bien joué : en dessous de l’objectif pour ${list}.`);
-  }
-
-  if (above.length) {
-    const k = above[0];
-    tips.push(`Micro-objectif 💡: ${LABEL[k]} — vise ${Math.max(0, cnt[k] - 1)} (−1) au prochain passage.`);
-  }
-
-  // 4) Coût du jour “visible”
-  const costToday = calculateDayCost(rec, s);
-  if (costToday > 0) {
-    tips.push(`Coût du jour : ${fmt(costToday)} ${sym}. Un pas de moins réduit la note dès aujourd’hui.`);
-  }
-
-  // 5) Momentum semaine (si disponible)
-  try {
-    const aggW = getRangeTotals("week", new Date());
-    const sumCons = sum(aggW.series?.cigs) + sum(aggW.series?.weed) + sum(aggW.series?.beer) + sum(aggW.series?.strong) + sum(aggW.series?.liquor);
-    if (sumCons > 0 && todayTotal === 0) tips.push("Semaine en bonne voie : garde un jour off de plus si possible.");
-  } catch { /* optionnel */ }
-
-  // Limiter à 3 messages, privilégier : prix manquants, objectifs, coût
-  const priority = [];
-  // prix
-  const priceTip = tips.find(t => t.includes("Renseigne le prix"));
-  if (priceTip) priority.push(priceTip);
-  // objectifs
-  const objBelow = tips.find(t => t.startsWith("Bien joué"));
-  const objAbove = tips.find(t => t.startsWith("Micro-objectif"));
-  if (objBelow) priority.push(objBelow);
-  if (objAbove) priority.push(objAbove);
-  // coût
-  const costTip = tips.find(t => t.startsWith("Coût du jour"));
-  if (costTip) priority.push(costTip);
-  // autres
-  if (priority.length < 3) {
-    tips.forEach(t => { if (!priority.includes(t) && priority.length < 3) priority.push(t); });
-  }
-  return priority.slice(0, 3);
-}
-
-// -------- Rendu --------
-function renderTips() {
-  const box = $("#tips-box");
-  if (!box) return;
-
-  const lines = buildTips();
-  if (!lines.length) {
-    box.textContent = "Conseils à venir…";
-    return;
-  }
-
-  const ul = document.createElement("ul");
-  ul.style.margin = "0";
-  ul.style.padding = "0 0 0 1.1rem";
-  lines.forEach(t => {
-    const li = document.createElement("li");
-    li.textContent = t;
-    ul.appendChild(li);
+  // 4) En dessous de l’objectif ?
+  const base = s.baselines || {};
+  const below = kinds.filter(k => {
+    const b =
+      k === "cigs" ? +base.cig :
+      k === "weed" ? +base.weed :
+      k === "beer" ? +base.beer :
+      k === "strong" ? +base.strong :
+      k === "liquor" ? +base.liquor : 0;
+    return Number.isFinite(b) && integer(today[k]) < b;
   });
-  box.innerHTML = "";
-  box.appendChild(ul);
+  if (below.length) {
+    msgs.push(t("tip.below_goal", { list: listLabels(below) }));
+  }
+
+  // 5) Micro-objectif (proposition simple sur la catégorie la plus haute aujourd’hui)
+  let maxKind = null, maxVal = -1;
+  for (const k of kinds) {
+    const v = integer(today[k]);
+    if (v > maxVal) { maxVal = v; maxKind = k; }
+  }
+  if (maxKind && maxVal > 0) {
+    const target = Math.max(0, maxVal - 1);
+    msgs.push(t("tip.micro_goal", { label: categoryLabel(maxKind), n: target }));
+  }
+
+  // Limiter à 3–4 messages pour rester lisible
+  return msgs.slice(0, 4);
 }
 
-// -------- API --------
+// --- Rendu DOM ---
+function ensureHost() {
+  let host = document.getElementById("tips-box");
+  if (host) return host;
+
+  host = document.querySelector("[data-tips]");
+  if (host) return host;
+
+  // Fallback : créer un bandeau minimal si rien n’existe
+  const home = document.getElementById("ecran-accueil") || document.body;
+  host = document.createElement("div");
+  host.id = "tips-box";
+  // styles légers si aucun style global
+  host.style.background = "#f59e0b1a";
+  host.style.borderTop = "1px solid #f59e0b55";
+  host.style.padding = ".5rem .75rem";
+  host.style.marginTop = "0.5rem";
+  home.appendChild(host);
+  return host;
+}
+
+function render() {
+  const host = ensureHost();
+  const tips = buildTips();
+
+  // Structure simple : liste de paragraphes
+  host.innerHTML = "";
+  tips.forEach(txt => {
+    const p = document.createElement("p");
+    p.className = "tip-line";
+    p.textContent = txt;
+    host.appendChild(p);
+  });
+}
+
+// --- API publique ---
 export function initTips() {
-  renderTips();
+  render();
 
-  document.addEventListener("sa:counts-updated", renderTips);
-  document.addEventListener("sa:state-changed",  renderTips);
+  // Rafraîchir si la journée/les réglages changent
+  document.addEventListener("sa:counts-updated", render);
+  document.addEventListener("sa:state-changed", render);
+  document.addEventListener("sa:lang-changed", render);
+  document.addEventListener("sa:currency-changed", render);
 
-  // rafraîchir quand on revient sur Accueil
+  // Rafraîchir quand on revient sur l’Accueil
   const nav = document.getElementById("nav-accueil");
-  if (nav) nav.addEventListener("click", () => setTimeout(renderTips, 0));
+  if (nav) nav.addEventListener("click", () => setTimeout(render, 0));
 }
 
 export default { initTips };
