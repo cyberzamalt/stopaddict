@@ -1,547 +1,263 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8" />
+  <title>StopAddict — Suivi conso</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-<title>StopAddict – Compteur Tabac, Cannabis & Alcool (v2.4.4 PHASE 2)</title>
-<meta name="application-name" content="StopAddict">
-<meta name="apple-mobile-web-app-title" content="StopAddict">
-<meta name="theme-color" content="#2c3e50">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="apple-touch-icon" href="./icons/icon-192.png">
-<link rel="manifest" href="./manifest.webmanifest">
+  <style>
+    /* UI minimale pour tester les fonctionnalités */
+    :root { --bg:#0b1220; --card:#111a2e; --text:#e5e7eb; --muted:#9ca3af; --accent:#3b82f6; --ok:#10b981; --err:#ef4444; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color:var(--text); background:var(--bg); }
+    header { position:sticky; top:0; background:#0d1526; border-bottom:1px solid #1f2a44; z-index:10; }
+    nav { display:flex; gap:.5rem; padding:.75rem; overflow:auto; }
+    nav button { background:#17233f; color:var(--text); border:1px solid #22315a; padding:.5rem .75rem; border-radius:.5rem; cursor:pointer; }
+    nav button.actif { background:var(--accent); border-color:var(--accent); }
 
-<!-- CSP -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:;
-               img-src 'self' data: blob:;
-               style-src 'self' 'unsafe-inline';
-               script-src 'self' 'unsafe-inline';
-               connect-src 'self';
-               object-src 'none';
-               base-uri 'none';
-               form-action 'self'">
+    main { padding:1rem; }
+    .screen { display:none; }
+    .card { background:var(--card); border:1px solid #1f2a44; border-radius:.75rem; padding:1rem; margin-bottom:1rem; }
+    .row { display:flex; gap:.75rem; align-items:center; flex-wrap:wrap; }
+    .col { display:flex; flex-direction:column; gap:.5rem; }
+    .grid-3 { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.75rem; }
+    .grid-2 { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem; }
+    .grid-5 { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:.5rem; }
+    .seg { border:1px dashed #2a3a68; border-radius:.75rem; padding:.75rem; min-width:230px; }
+    .seg.off { opacity:.5; filter:grayscale(.7); }
+    .count { font-size:1.75rem; font-weight:700; }
+    .btn { background:#1a2647; color:var(--text); border:1px solid #243463; border-radius:.5rem; padding:.4rem .6rem; cursor:pointer; }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    .title { font-size:1.25rem; font-weight:700; margin:0 0 .5rem; }
+    .muted { color:var(--muted); }
+    .bar { display:flex; gap:1rem; flex-wrap:wrap; }
 
-<!-- ✅ PHASE 2 : Chargement de app.css externe -->
-<link rel="stylesheet" href="./css/app.css">
+    /* Stats controls */
+    .ranges { display:flex; gap:.5rem; flex-wrap:wrap; }
+    .ranges button { background:#17233f; border:1px solid #22315a; border-radius:.5rem; padding:.4rem .6rem; color:var(--text); }
+    .ranges button.actif { background:var(--accent); border-color:var(--accent); }
 
-<style>
-  :root{
-    --bg1:#667eea; --bg2:#764ba2;
-    --ink:#1f2937; --muted:#6b7280; --card:#ffffff;
-    --ok:#22c55e; --warn:#f59e0b; --danger:#ef4444; --info:#3b82f6;
-    --chip:#f3f4f6; --divider:#e5e7eb;
-  }
-  *{box-sizing:border-box}
-  html,body{height:100%}
-  body{
-    margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    color:var(--ink); background:linear-gradient(180deg,var(--bg1),var(--bg2));
-    -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
-  }
-  .container{max-width:460px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; background:#f8fafc; position:relative;}
+    /* Charts */
+    .chartbox { height:260px; }
 
-  /* Header */
-  .header{position:sticky; top:0; z-index:3; background:linear-gradient(135deg,#2c3e50,#34495e); color:#fff; padding:10px 14px; text-align:center}
-  .brand{display:flex; align-items:center; gap:8px; justify-content:center; margin-bottom:2px}
-  .brand img{width:24px; height:24px; border-radius:6px; object-fit:cover}
-  .brand-name{font-weight:900; letter-spacing:.2px}
-  .brand-ver{opacity:.8; font-size:12px; margin-left:4px}
-  .date{font-weight:800; font-size:18px}
-  .heure{opacity:.95; font-size:13px; margin-top:2px}
+    /* Calendar */
+    .cal-head, .cal-row { display:grid; grid-template-columns:repeat(7,1fr); gap:.25rem; }
+    .cal-head { margin-bottom:.25rem; font-size:.85rem; color:var(--muted); }
+    .cal-head-cell { text-align:center; }
+    #cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:.25rem; }
+    .cal-cell { border:1px solid #22315a; border-radius:.5rem; padding:.35rem; min-height:70px; background:#0e172b; display:flex; flex-direction:column; }
+    .cal-out { opacity:.45; }
+    .cal-today { outline:2px solid var(--accent); }
+    .cal-daynum { font-weight:700; opacity:.9; }
+    .cal-info { margin-top:.25rem; font-size:.85rem; color:var(--muted); }
 
-  /* Stats rapides (jour courant) */
-  .stats-rapides{background:#fff; display:grid; grid-template-columns:repeat(4,1fr); gap:8px; padding:10px; border-bottom:1px solid var(--divider)}
-  .stat-item{text-align:center; padding:6px}
-  .stat-val{font-weight:900; font-size:20px; color:var(--ink)}
-  .stat-lbl{font-size:11px; color:#6b7280; margin-top:2px}
+    /* Debug */
+    #debug-console { display:none; position:fixed; left:0; right:0; bottom:0; max-height:30vh; overflow:auto;
+      background:#000; color:#0f0; font:12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; padding:.5rem; border-top:2px solid #222; z-index:50; }
+    footer { padding:2rem 1rem 4.5rem; color:#6b7280; text-align:center; }
 
-  /* Bandeau KPIs (totaux & économies) utilisé par stats.js */
-  .stats-header{background:#fff; display:grid; grid-template-columns:repeat(5,1fr); gap:8px; padding:8px 10px; border-bottom:1px solid var(--divider)}
-  .kpi{background:#f9fafb; border:1px solid var(--divider); border-radius:10px; padding:6px; text-align:center}
-  .kpi .kpi-val{font-weight:900; font-size:16px; color:#111827}
-  .kpi .kpi-lbl{font-size:11px; color:#6b7280}
-
-  .content{flex:1; padding:0 0 80px; overflow-y:auto}
-  .ecran{display:none}
-  .ecran.show{display:block; animation:fadeIn .2s ease}
-  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-
-  .card{background:#fff; border-radius:14px; margin:10px; padding:14px; box-shadow:0 2px 8px rgba(0,0,0,.06)}
-  .card.bar-left{border-left:4px solid var(--info)}
-  .card.bar-left.green{border-left-color:var(--ok)}
-  .card.bar-left.orange{border-left-color:var(--warn)}
-
-  .banner{background:#fff; border-radius:14px; margin:10px; padding:12px; border:2px solid var(--divider)}
-  .banner.green{background:#ecfdf5; border-color:#6ee7b7}
-  .banner.orange{background:#fff7ed; border-color:#fdba74}
-  .banner-title{font-weight:900; font-size:15px; margin-bottom:8px}
-
-  .line{display:flex; justify-content:space-between; align-items:center; padding:4px 0}
-  .lbl{font-weight:700; font-size:14px}
-  .val{font-weight:900; font-size:18px; color:#111827}
-
-  /* ✅ Styles pour la console debug toujours visibles si activée */
-  #debug-console{
-    position:fixed; left:0; right:0; bottom:0;
-    max-height:40vh; overflow:auto;
-    background:#111; color:#0f0;
-    padding:8px; font:12px/1.4 monospace;
-    z-index:99999; white-space:pre-wrap;
-    display:none; /* sera forcé à block par le hook ou via .show */
-  }
-  #debug-console.show{ display:block; }
-
-  /* ✅ CORRECTION : Styles pour les toggles (cases à cocher) */
-  .mini-toggle{
-    display:inline-flex;
-    align-items:center;
-    gap:4px;
-  }
-  .mini-toggle input[type="checkbox"]{
-    width:18px;
-    height:18px;
-    cursor:pointer;
-    accent-color:var(--ok);
-  }
-
-  .segment{display:flex; gap:4px; margin:6px 0}
-  .seg{flex:1; height:28px; border-radius:6px; background:#e5e7eb; border:2px solid transparent; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:11px; color:#6b7280; cursor:pointer; transition:all .15s ease}
-  .seg.actif{background:#3b82f6; color:#fff; border-color:#2563eb}
-  .seg:hover{transform:scale(1.05)}
-
-  .pm{display:flex; gap:8px; justify-content:center; margin:8px 0}
-  .btn-round{width:56px; height:56px; border-radius:50%; border:0; background:#f3f4f6; color:#111827; font-size:22px; font-weight:900; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .15s ease}
-  .btn-round:hover{background:#e5e7eb; transform:scale(1.05)}
-  .btn-round.btn-plus{background:var(--ok); color:#fff}
-  .btn-round.btn-plus:hover{background:#16a34a}
-  .btn-round.btn-minus{background:#f3f4f6; color:#6b7280}
-  .btn-round.btn-minus:hover{background:#e5e7eb; color:#374151}
-
-  .conseil{background:#fef3c7; border-left:4px solid var(--warn); padding:12px; border-radius:8px; margin:10px; font-size:14px; line-height:1.5}
-  .adv-ctl{display:flex; align-items:center; gap:6px; justify-content:flex-end}
-  .ctl{background:#fff; color:#111827; border-radius:8px; padding:4px 8px; text-decoration:none; font-weight:900; font-size:12px; cursor:pointer; border:0}
-  .dots{font-size:12px; letter-spacing:3px; opacity:.85}
-
-  .tabs{display:flex; gap:8px; margin-bottom:8px}
-  .tab{flex:1; background:#e6fffa; border:2px solid #b2f5ea; color:#0f766e; border-radius:999px; padding:8px; font-weight:800; font-size:13px; text-align:center; cursor:pointer; transition:all .15s ease}
-  .tab.actif{background:#3b82f6; border-color:#3b82f6; color:#fff}
-  .tab:hover{transform:translateY(-2px)}
-
-  .divider{height:1px; background:var(--divider); margin:10px 0}
-  .stats-block{background:#fff; border-radius:12px; padding:14px}
-
-  .grid-2{display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:center}
-  .grid-2 .param{display:contents}
-  .param label{font-size:13px; color:#374151; font-weight:700}
-  .param input[type="number"], .param input[type="text"], .param input[type="date"]{width:100%; padding:8px 10px; border:2px solid #e5e7eb; border-radius:8px; font-size:14px; background:#f9fafb}
-  .param input[type="checkbox"]{transform:scale(1.1); cursor:pointer}
-  .param .hint{grid-column:1 / -1; font-size:12px; color:#6b7280}
-  .section-title{font-weight:900; font-size:15px; color:#111827; border-bottom:2px solid #eef2f7; padding-bottom:6px; margin-bottom:10px}
-
-  .nav{position:fixed; left:50%; transform:translateX(-50%); bottom:0; width:100%; max-width:460px; background:#fff; border-top:1px solid var(--divider); display:flex; z-index:10}
-  .nav button{flex:1; background:transparent; border:0; padding:10px 6px 8px; color:#64748b; font-size:12px; display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer; transition:all .15s ease}
-  .nav button.actif{color:#3b82f6; background:rgba(59,130,246,.06)}
-  .nav .ico{font-size:18px}
-
-  .snackbar{position:fixed; left:50%; transform:translateX(-50%) translateY(20px); bottom:76px; background:#111827; color:#fff; padding:10px 14px; border-radius:999px; font-size:13px; display:none; gap:10px; align-items:center; z-index:20}
-  .snackbar.show{display:flex; animation:fadeUp .2s ease}
-  .snackbar a{color:#34d399; font-weight:900; text-decoration:none}
-  @keyframes fadeUp{from{opacity:0; transform:translateX(-50%) translateY(40px)} to{opacity:1; transform:translateX(-50%) translateY(20px)}}
-
-  .btn{background:#111827; color:#fff; border:0; border-radius:10px; padding:10px 12px; font-weight:800; cursor:pointer; transition:all .15s ease}
-  .btn:hover{background:#374151; transform:translateY(-1px)}
-  .btn.alt{background:#374151}
-  .btn.alt:hover{background:#4b5563}
-  .btn.warn{background:#ef4444}
-  .btn.warn:hover{background:#dc2626}
-  .btn.small{padding:6px 10px; font-size:13px}
-  .btn:disabled{opacity:.5; cursor:not-allowed; transform:none !important}
-
-  .modal{position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; align-items:flex-end; justify-content:center; z-index:50}
-  .modal.show{display:flex; animation:fadeIn .2s ease}
-  .sheet{background:#fff; width:100%; max-width:460px; border-radius:16px 16px 0 0; padding:16px; max-height:80vh; overflow-y:auto}
-  .sheet h3{margin:0 0 12px; font-size:18px; color:#111827}
-
-  .cal-grid{display:grid; grid-template-columns:repeat(7, 1fr); gap:6px; margin-top:10px}
-  .cal-cell{background:#fff; border:1px solid var(--divider); border-radius:8px; padding:6px; min-height:56px; position:relative; cursor:pointer; font-size:12px; transition:all .15s ease}
-  .cal-cell:hover{background:#f9fafb; transform:scale(1.05)}
-  .cal-cell.today{border-color:#3b82f6; border-width:2px}
-  .cal-cell.has-data{background:#ecfdf5}
-  .cal-num{color:var(--muted); font-weight:800}
-  .dot{width:8px; height:8px; border-radius:50%; display:inline-block; margin:2px}
-  .dot.c{background:var(--info)}
-  .dot.j{background:var(--ok)}
-  .dot.a{background:var(--warn)}
-
-  /* Zone charts (compatible web/js/charts.js) */
-  #chartRange { display:flex; gap:8px; margin:10px 0; }
-  #chartRange .btn.pill { flex:1; background:#e6fffa; border:2px solid #b2f5ea; color:#0f766e; border-radius:999px; padding:8px; font-weight:800; font-size:13px; text-align:center; cursor:pointer; }
-  #chartRange .btn.pill.active { background:#3b82f6; border-color:#3b82f6; color:#fff; }
-
-  @media (max-width: 460px){
-    .container{margin:0; max-width:100%}
-    .card, .banner{margin:6px; padding:12px}
-    .grid-2{grid-template-columns:1fr}
-  }
-</style>
+    /* Bandeau pub (placeholder) */
+    #ad-banner { position:fixed; left:0; right:0; bottom:0; background:#0d1526; border-top:1px solid #1f2a44; padding:.5rem .75rem; text-align:center; color:#8aa1ff; z-index:40; }
+  </style>
 </head>
 <body>
 
-<div class="container">
-  <!-- ======================= HEADER ======================= -->
-  <div class="header">
-    <div class="brand">
-      <span class="brand-name">🚭 StopAddict</span>
-      <span class="brand-ver">v2.4.4 PHASE 2</span>
-    </div>
-    <div class="date" id="date-actuelle">—</div>
-    <div class="heure" id="heure-actuelle">—</div>
-  </div>
+  <header>
+    <nav>
+      <button id="nav-accueil"    data-target="ecran-accueil"    class="actif">Accueil</button>
+      <button id="nav-stats"      data-target="ecran-stats">Stats</button>
+      <button id="nav-calendrier" data-target="ecran-calendrier">Calendrier</button>
+      <button id="nav-habitudes"  data-target="ecran-habitudes">Habitudes</button>
+      <button id="nav-params"     data-target="ecran-params">Réglages</button>
+    </nav>
+  </header>
 
-  <!-- Console debug -->
-  <div class="debug-console" id="debug-console"></div>
+  <main>
 
-  <!-- Stats rapides (jour) -->
-  <div class="stats-rapides">
-    <div class="stat-item">
-      <div class="stat-val" id="bar-clopes">0</div>
-      <div class="stat-lbl">Clopes</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-val" id="bar-joints">0</div>
-      <div class="stat-lbl">Joints</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-val" id="bar-alcool">0</div>
-      <div class="stat-lbl">Alcool</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-val" id="stat-cout-jr">0€</div>
-      <div class="stat-lbl">Coût</div>
-    </div>
-  </div>
-
-  <!-- KPIs header (utilisé par web/js/stats.js) -->
-  <div class="stats-header" id="stats-header">
-    <div class="kpi"><div class="kpi-val" id="todayTotal">0</div><div class="kpi-lbl">Total jour</div></div>
-    <div class="kpi"><div class="kpi-val" id="weekTotal">0</div><div class="kpi-lbl">Total semaine</div></div>
-    <div class="kpi"><div class="kpi-val" id="monthTotal">0</div><div class="kpi-lbl">Total mois</div></div>
-    <div class="kpi"><div class="kpi-val" id="todayCost">0 €</div><div class="kpi-lbl">Coût jour</div></div>
-    <div class="kpi"><div class="kpi-val" id="economies-amount">0 €</div><div class="kpi-lbl">Économies</div></div>
-  </div>
-
-  <div class="content">
-    <!-- ======================= ÉCRAN PRINCIPAL ======================= -->
-    <div class="ecran show" id="ecran-principal" aria-label="SA:ECRAN:ACCUEIL" data-sa="screen-home">
-      <!-- Clopes -->
-      <div id="card-cigs" class="card bar-left">
-        <div class="line">
-          <span class="lbl">🚬 Cigarettes</span>
-          <label class="mini-toggle"><input type="checkbox" id="toggle-cigs" checked aria-label="Activer module"></label>
-          <span class="val" id="note-cigs">0</span>
-        </div>
-        <div class="segment" id="seg-clopes"></div>
-        <div class="pm" aria-label="Actions cigarettes">
-          <button class="btn-round btn-minus" id="cl-moins" type="button">−1</button>
-          <button class="btn-round btn-plus" id="cl-plus" type="button">+1</button>
-        </div>
-      </div>
-
-      <!-- Joints -->
-      <div id="card-weed" class="card bar-left green">
-        <div class="line">
-          <span class="lbl">🌿 Joints</span>
-          <label class="mini-toggle"><input type="checkbox" id="toggle-weed" checked aria-label="Activer module"></label>
-          <span class="val" id="note-weed">0</span>
-        </div>
-        <div class="pm" aria-label="Actions joints">
-          <button class="btn-round btn-minus" id="j-moins" type="button">−1</button>
-          <button class="btn-round btn-plus" id="j-plus" type="button">+1</button>
-        </div>
-      </div>
-
-      <!-- Alcool -->
-      <div id="card-alcool" class="card bar-left orange">
-        <div class="line">
-          <span class="lbl">🍺 Alcool</span>
-          <label class="mini-toggle"><input type="checkbox" id="toggle-alcool" checked aria-label="Activer module"></label>
-          <span class="val" id="note-alcool">0</span>
-        </div>
-        <div class="segment" id="seg-alcool"></div>
-        <div class="pm" aria-label="Actions alcool">
-          <button class="btn-round btn-minus" id="a-moins" type="button">−1</button>
-          <button class="btn-round btn-plus" id="a-plus" type="button">+1</button>
-        </div>
-      </div>
-
-      <!-- Conseil du jour -->
-      <div class="conseil" id="conseil-card">
-        <div id="conseil-texte">—</div>
-        <div class="adv-ctl">
-          <button class="ctl" id="adv-prev" type="button">◀</button>
-          <button class="ctl" id="adv-pause" type="button">⏸</button>
-          <span class="dots">• • •</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- ======================= ÉCRAN STATS (✅ CLASSE .stats AJOUTÉE) ======================= -->
-    <div class="ecran stats" id="ecran-stats" aria-label="SA:ECRAN:STATS" data-sa="screen-stats">
-      <div id="screen-stats">
-        <div class="card">
-          <!-- Boutons d'échelle -->
-          <div class="tabs" role="tablist" id="chartRange">
-            <button class="btn pill active" data-range="day" type="button">Jour</button>
-            <button class="btn pill" data-range="week" type="button">Semaine</button>
-            <button class="btn pill" data-range="month" type="button">Mois</button>
-            <button class="btn pill" data-range="year" type="button">Année</button>
-          </div>
-
-          <!-- ✅ PHASE 2 : Bloc KPI vert (3 lignes toujours visibles) -->
-          <div class="kpi-block">
-            <h3>Consommations</h3>
-            <div class="kpi-line" id="kpi-cigarettes">
-              <span class="kpi-label">🚬 Cigarettes</span>
-              <span class="kpi-value" id="kpi-cigarettes-value">0</span>
-            </div>
-            <div class="kpi-line" id="kpi-joints">
-              <span class="kpi-label">🌿 Joints</span>
-              <span class="kpi-value" id="kpi-joints-value">0</span>
-            </div>
-            <div class="kpi-line" id="kpi-alcohol">
-              <span class="kpi-label">🍺 Alcool</span>
-              <span class="kpi-value" id="kpi-alcohol-value">0</span>
-            </div>
-          </div>
-
-          <!-- ✅ PHASE 2 : Carte agrégée (Total période) -->
-          <div class="summary-cards">
-            <div class="summary-card">
-              <div class="summary-card-label" id="summary-card-period-label">Total jour</div>
-              <div class="summary-card-value" id="summary-card-period-value">0</div>
-            </div>
-          </div>
-
-          <!-- Titre Stats (mis à jour par stats.js) -->
-          <div class="banner green">
-            <div class="banner-title" id="stats-titre">Bilan Jour — Total 0</div>
-            <div class="line"><span class="lbl">Cigarettes</span><span class="val" id="stats-clopes">0</span></div>
-            <div class="line"><span class="lbl">Joints</span><span class="val" id="stats-joints">0</span></div>
-            <!-- ✅ PHASE 2 : Ligne Alcool VISIBLE (plus de display:none) -->
-            <div class="line" id="stats-alcool-line">
-              <span class="lbl">Alcool</span><span class="val" id="stats-alcool">0</span>
-            </div>
-          </div>
-
-          <!-- Canvas graphiques -->
-          <div class="chart-block">
-            <div class="chart-caption">Consommations (unités) / Coût</div>
-            <canvas id="chart-consommations" width="960" height="260"></canvas>
-            <canvas id="chart-cout-eco" width="960" height="220"></canvas>
-          </div>
-
-          <!-- Boutons d'export -->
-          <div class="chart-actions" id="chart-actions">
-            <button class="btn" id="btn-export-csv" type="button">Exporter historique complet (Excel)</button>
-            <button class="btn" id="btn-export-stats" type="button">Exporter la vue actuelle</button>
-            <button class="btn alt" id="btn-import" type="button">Importer (CSV/JSON)</button>
-            <input type="file" id="input-import" accept=".csv,.json" style="display:none">
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ======================= ÉCRAN CALENDRIER ======================= -->
-    <div class="ecran" id="ecran-calendrier" aria-label="SA:ECRAN:CALENDRIER" data-sa="screen-cal">
+    <!-- Accueil -->
+    <section id="ecran-accueil" class="screen" style="display:block">
       <div class="card">
-        <div style="display:flex; gap:8px; margin-bottom:10px; align-items:center; justify-content:space-between">
-          <button class="btn small" id="cal-prev" type="button">◀</button>
-          <div style="font-weight:900; flex:1; text-align:center" id="cal-titre">—</div>
-          <button class="btn small" id="cal-next" type="button">▶</button>
+        <div class="title">Aujourd’hui</div>
+        <div class="bar">
+          <div>Clopes: <strong id="bar-clopes">0</strong></div>
+          <div>Joints: <strong id="bar-joints">0</strong></div>
+          <div>Alcool: <strong id="bar-alcool">0</strong></div>
+          <div>Coût: <strong id="bar-cost">0.00</strong> €</div>
+          <div>Économies: <strong id="bar-eco">0.00</strong> €</div>
         </div>
-        <div class="cal-grid" id="cal-grid"></div>
       </div>
-    </div>
 
-    <!-- ======================= ÉCRAN HABITUDES ======================= -->
-    <div class="ecran" id="ecran-habitudes">
+      <div class="grid-3">
+        <!-- Cigarettes -->
+        <div id="seg-cigs" class="seg">
+          <div class="row" style="justify-content:space-between">
+            <strong>Cigarettes</strong>
+            <label class="row" style="gap:.35rem"><input type="checkbox" id="toggle-cigs"> <span class="muted">Activer</span></label>
+          </div>
+          <div class="row">
+            <button id="cl-moins" class="btn">−</button>
+            <div class="count" id="cl-count">0</div>
+            <button id="cl-plus" class="btn">+</button>
+          </div>
+        </div>
+
+        <!-- Joints -->
+        <div id="seg-weed" class="seg">
+          <div class="row" style="justify-content:space-between">
+            <strong>Joints</strong>
+            <label class="row" style="gap:.35rem"><input type="checkbox" id="toggle-weed"> <span class="muted">Activer</span></label>
+          </div>
+          <div class="row">
+            <button id="j-moins" class="btn">−</button>
+            <div class="count" id="j-count">0</div>
+            <button id="j-plus" class="btn">+</button>
+          </div>
+        </div>
+
+        <!-- Bière -->
+        <div id="seg-beer" class="seg">
+          <div class="row" style="justify-content:space-between">
+            <strong>Bière</strong>
+            <label class="row" style="gap:.35rem"><input type="checkbox" id="toggle-beer"> <span class="muted">Activer</span></label>
+          </div>
+          <div class="row">
+            <button id="beer-moins" class="btn">−</button>
+            <div class="count" id="beer-count">0</div>
+            <button id="beer-plus" class="btn">+</button>
+          </div>
+        </div>
+
+        <!-- Alcool fort -->
+        <div id="seg-strong" class="seg">
+          <div class="row" style="justify-content:space-between">
+            <strong>Alcool fort</strong>
+            <label class="row" style="gap:.35rem"><input type="checkbox" id="toggle-strong"> <span class="muted">Activer</span></label>
+          </div>
+          <div class="row">
+            <button id="strong-moins" class="btn">−</button>
+            <div class="count" id="strong-count">0</div>
+            <button id="strong-plus" class="btn">+</button>
+          </div>
+        </div>
+
+        <!-- Liqueur -->
+        <div id="seg-liquor" class="seg">
+          <div class="row" style="justify-content:space-between">
+            <strong>Liqueur</strong>
+            <label class="row" style="gap:.35rem"><input type="checkbox" id="toggle-liquor"> <span class="muted">Activer</span></label>
+          </div>
+          <div class="row">
+            <button id="liquor-moins" class="btn">−</button>
+            <div class="count" id="liquor-count">0</div>
+            <button id="liquor-plus" class="btn">+</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Conseils adaptatifs (placeholder, à brancher plus tard) -->
       <div class="card">
-        <div class="section-title">⚙️ Limites Consommation/Jour</div>
+        <div class="title">Conseils</div>
+        <div id="tips-box" class="muted">À venir : messages adaptés selon vos réglages et vos progrès.</div>
+      </div>
+
+      <!-- Ressources & numéros utiles (accès) -->
+      <div class="card">
+        <button id="open-ressources" class="btn">Ressources & numéros utiles</button>
+      </div>
+    </section>
+
+    <!-- Stats -->
+    <section id="ecran-stats" class="screen">
+      <div class="card">
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <div id="stats-titre" class="title">Bilan Jour — Total 0</div>
+          <div class="ranges">
+            <button id="btn-range-day"   data-range="day"   class="actif">Jour</button>
+            <button id="btn-range-week"  data-range="week">Semaine</button>
+            <button id="btn-range-month" data-range="month">Mois</button>
+            <button id="btn-range-year"  data-range="year">Année</button>
+          </div>
+        </div>
+
         <div class="grid-2">
-          <div class="param"><label>Cigarettes (max/jour)</label><input type="number" min="0" id="limite-clopes" value="20"></div>
-          <div class="param"><label>Joints (max/jour)</label><input type="number" min="0" id="limite-joints" value="3"></div>
-          <div class="param"><label>Bière (max/jour)</label><input type="number" min="0" id="limite-biere" value="2"></div>
-          <div class="param"><label>Alcool fort (max/jour)</label><input type="number" min="0" id="limite-fort" value="1"></div>
-          <div class="param"><label>Liqueur (max/jour)</label><input type="number" min="0" id="limite-liqueur" value="1"></div>
-          <div class="param hint">Les limites apparaissent en orange quand approchées, rouge quand dépassées.</div>
+          <div class="card">
+            <strong>Totaux</strong>
+            <div class="grid-5" style="margin-top:.5rem">
+              <div>Cigarettes<br><strong id="stat-cigs-total">0</strong></div>
+              <div>Joints<br><strong id="stat-weed-total">0</strong></div>
+              <div>Bière<br><strong id="stat-beer-total">0</strong></div>
+              <div>Alcool fort<br><strong id="stat-strong-total">0</strong></div>
+              <div>Liqueur<br><strong id="stat-liquor-total">0</strong></div>
+            </div>
+            <div class="row" style="margin-top:.75rem">
+              <div>Coût total&nbsp;: <strong id="stat-cost-total">0.00</strong> €</div>
+              <div>Économies&nbsp;: <strong id="stat-eco-total">0.00</strong> €</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <strong>Exports</strong>
+            <div class="row" style="margin-top:.5rem; flex-wrap:wrap">
+              <button id="btn-export-csv"   class="btn">Exporter CSV</button>
+              <button id="btn-export-json"  class="btn">Exporter TOUT (JSON)</button>
+              <button id="btn-import"       class="btn">Importer (JSON)</button>
+              <label class="row" style="gap:.35rem">
+                <input type="checkbox" id="chk-export-images" />
+                <span class="muted">Inclure images des graphiques</span>
+              </label>
+              <input id="file-import" type="file" accept="application/json" style="display:none" />
+            </div>
+          </div>
         </div>
       </div>
 
+      <div class="grid-2">
+        <div class="card chartbox">
+          <canvas id="chart-consos"></canvas>
+        </div>
+        <div class="card chartbox">
+          <canvas id="chart-cost"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Calendrier -->
+    <section id="ecran-calendrier" class="screen">
+      <div class="card row" style="justify-content:space-between; align-items:center;">
+        <button id="cal-prev" class="btn">◀</button>
+        <div id="cal-title" class="title">Mois — Année</div>
+        <button id="cal-next" class="btn">▶</button>
+      </div>
       <div class="card">
-        <div class="section-title">📊 Habitudes Antérieures (Baseline)</div>
-        <div class="grid-2">
-          <div class="param"><label>Clopes classiques (min)</label><input type="number" min="0" id="hab-min-cl-class" value="0"></div>
-          <div class="param"><label>Clopes classiques (max)</label><input type="number" min="0" id="hab-max-cl-class" value="20"></div>
-          <div class="param"><label>Clopes roulées (min)</label><input type="number" min="0" id="hab-min-cl-roul" value="0"></div>
-          <div class="param"><label>Clopes roulées (max)</label><input type="number" min="0" id="hab-max-cl-roul" value="20"></div>
-          <div class="param"><label>Clopes tubes (min)</label><input type="number" min="0" id="hab-min-cl-tube" value="0"></div>
-          <div class="param"><label>Clopes tubes (max)</label><input type="number" min="0" id="hab-max-cl-tube" value="20"></div>
-          <div class="param"><label>Joints (min)</label><input type="number" min="0" id="hab-min-joint" value="0"></div>
-          <div class="param"><label>Joints (max)</label><input type="number" min="0" id="hab-max-joint" value="5"></div>
-          <div class="param"><label>Bière (min)</label><input type="number" min="0" id="hab-min-biere" value="0"></div>
-          <div class="param"><label>Bière (max)</label><input type="number" min="0" id="hab-max-biere" value="3"></div>
-          <div class="param"><label>Alcool fort (min)</label><input type="number" min="0" id="hab-min-fort" value="0"></div>
-          <div class="param"><label>Alcool fort (max)</label><input type="number" min="0" id="hab-max-fort" value="2"></div>
-          <div class="param"><label>Liqueur (min)</label><input type="number" min="0" id="hab-min-liqueur" value="0"></div>
-          <div class="param"><label>Liqueur (max)</label><input type="number" min="0" id="hab-max-liqueur" value="2"></div>
-          <div class="param hint">Utilisées pour calculer les économies estimées. Tout est optionnel.</div>
-        </div>
-        <button class="btn small" id="btn-save-hab" type="button" style="margin-top:10px">Enregistrer</button>
+        <div id="cal-grid"></div>
       </div>
-    </div>
+    </section>
 
-    <div id="ecran-params" class="ecran" style="display:none;">
-      <p style="padding: 20px; text-align: center; color: #999;">Réglages</p>
-    </div>
-  </div>
-
-  <!-- ======================= NAV ======================= -->
-  <div class="nav">
-    <button id="nav-principal" class="actif" type="button"><span class="ico">🏠</span>Accueil</button>
-    <button id="nav-stats" type="button"><span class="ico">📊</span>Stats</button>
-    <button id="nav-calendrier" type="button"><span class="ico">📅</span>Calendrier</button>
-    <button id="nav-habitudes" type="button"><span class="ico">⚙️</span>Habitudes</button>
-    <button id="nav-params" type="button"><span class="ico">⚙️</span>Réglages</button>
-  </div>
-</div>
-
-<!-- ======================= MODALE CALENDRIER JOUR ======================= -->
-<div class="modal" id="cal-jour" aria-hidden="true">
-  <div class="sheet" role="dialog" aria-modal="true">
-    <h3 id="cal-jour-titre">—</h3>
-
-    <div class="line"><span class="lbl">Cigarettes</span> <span id="cal-jour-cl"></span></div>
-    <div class="segment" id="cal-jour-seg-cl"></div>
-    <div class="pm" aria-label="Actions cigarettes (jour)">
-      <button class="btn-round btn-minus" id="cal-cl-moins" type="button">−1</button>
-      <button class="btn-round btn-plus" id="cal-cl-plus" type="button">+1</button>
-    </div>
-
-    <div class="divider" style="margin:10px 0"></div>
-
-    <div class="line"><span class="lbl">Joints</span> <span id="cal-jour-j"></span></div>
-    <div class="pm" aria-label="Actions joints (jour)">
-      <button class="btn-round btn-minus" id="cal-j-moins" type="button">−1</button>
-      <button class="btn-round btn-plus" id="cal-j-plus" type="button">+1</button>
-    </div>
-
-    <div class="divider" style="margin:10px 0"></div>
-
-    <div class="line"><span class="lbl">Alcool</span> <span id="cal-jour-a"></span></div>
-    <div class="segment" id="cal-jour-seg-a"></div>
-    <div class="pm" aria-label="Actions alcool (jour)">
-      <button class="btn-round btn-minus" id="cal-a-moins" type="button">−1</button>
-      <button class="btn-round btn-plus" id="cal-a-plus" type="button">+1</button>
-    </div>
-
-    <div style="display:flex; justify-content:space-between; margin-top:12px">
-      <button class="btn alt" id="cal-jour-raz" type="button">RAZ du jour</button>
-      <button class="btn" id="cal-jour-fermer" type="button">Fermer</button>
-    </div>
-  </div>
-</div>
-
-<!-- Snackbar -->
-<div class="snackbar" id="snackbar">Action enregistrée — <a href="#" id="undo-link">Annuler</a></div>
-
-<!-- ======================= MODALE AVERTISSEMENT (18+) ======================= -->
-<div class="modal" id="modal-warn" aria-hidden="true">
-  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="warn-title">
-    <h3 class="warn-title" id="warn-title">Avertissement – Public majeur (18+)</h3>
-    <div class="warn-box">
-      <p><strong>StopAddict</strong> est une application d'auto-suivi et d'aide à la réduction/arrêt des consommations (tabac, alcool, cannabis).</p>
-      <ul class="warn-list">
-        <li>Réservée aux personnes de 18 ans et plus.</li>
-        <li>Ne fait pas la promotion de ces produits.</li>
-        <li>Ne remplace pas un accompagnement médical, psychologique ou social. En cas de difficulté, consultez un professionnel.</li>
-        <li>Utilisez StopAddict de façon responsable.</li>
-      </ul>
-      <p class="warn-note">Besoin d'aide ? <a href="#" id="open-ressources-from-warn">Ressources et numéros utiles</a></p>
-      <div style="margin-top:8px">
-        <label><input type="checkbox" id="chk-warn-18"> J'ai 18 ans ou plus</label><br>
-        <label><input type="checkbox" id="chk-warn-hide"> Ne plus réafficher ce message</label>
+    <!-- Habitudes (placeholder minimal pour l’instant) -->
+    <section id="ecran-habitudes" class="screen">
+      <div class="card">
+        <div class="title">Habitudes</div>
+        <div class="muted">À venir : objectifs détaillés, dates clés, notes.</div>
       </div>
-      <div class="warn-actions">
-        <button class="btn warn" id="btn-warn-quit" type="button">Quitter</button>
-        <div class="right">
-          <button class="btn alt" id="btn-warn-cancel" type="button">Annuler</button>
-          <button class="btn" id="btn-warn-accept" type="button" disabled>J'accepte et continuer</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+    </section>
 
-<!-- ======================= MODALE PAGES (Manuel / CGV / Mentions / Ressources) ======================= -->
-<div class="modal" id="modal-page" aria-hidden="true">
-  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="page-title">
-    <h3 class="pages-title" id="page-title">—</h3>
-    <div class="page-content" id="page-content">
-      <!-- Contenu injecté par JS -->
-    </div>
-    <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px">
-      <button class="btn alt" id="btn-page-close" type="button">Fermer</button>
-    </div>
-  </div>
-</div>
+    <!-- Réglages : contenu injecté par settings.js -->
+    <section id="ecran-params" class="screen">
+      <!-- settings.js injectera tout le formulaire ici -->
+    </section>
 
-<!-- Hook erreurs: affiche toutes les erreurs JS dans #debug-console (utile sur smartphone) -->
-<script>
-  (function () {
-    function show(msg) {
-      var el = document.getElementById('debug-console');
-      if (!el) {
-        el = document.createElement('div');
-        el.id = 'debug-console';
-        el.style.cssText = 'position:fixed;left:0;right:0;bottom:0;max-height:40vh;overflow:auto;background:#111;color:#0f0;padding:8px;font:12px/1.4 monospace;z-index:99999;white-space:pre-wrap';
-        document.body.appendChild(el);
-      } else {
-        /* ✅ si l’élément existe déjà, s’assurer qu’il a un style lisible */
-        el.style.cssText = 'position:fixed;left:0;right:0;bottom:0;max-height:40vh;overflow:auto;background:#111;color:#0f0;padding:8px;font:12px/1.4 monospace;z-index:99999;white-space:pre-wrap';
-      }
-      el.style.display = 'block';
-      el.textContent += '\n' + msg;
-    }
-    window.addEventListener('error', function (e) {
-      show('[error] ' + (e && e.message ? e.message : '') + ' @ ' +
-           (e && e.filename ? e.filename : '') + ':' +
-           (e && e.lineno ? e.lineno : ''));
-    });
-    window.addEventListener('unhandledrejection', function (e) {
-      var r = (e && e.reason) || {};
-      show('[promise] ' + (r && r.message ? r.message : String(r)));
-    });
-  })();
-</script>
+  </main>
 
-<!-- ✅ Enregistrement du Service Worker -->
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function() {
-      navigator.serviceWorker.register('./service-worker.js', { scope: './' })
-        .then(function(reg){ console.log('[SW] registered:', reg.scope); })
-        .catch(function(err){ console.warn('[SW] registration failed:', err); });
-    });
-  }
-</script>
+  <!-- Bandeau pub (version gratuite) -->
+  <div id="ad-banner">Espace publicitaire (version gratuite)</div>
 
-<!-- Vendor (Chart.js ou fallback local) -->
-<script src="./js/vendor/chart.umd.min.js"></script>
-<!-- App -->
-<script type="module" src="./js/app.js"></script>
-<!-- Router (deeplinks #/stats, #/calendar, #/habits, etc.) -->
-<script type="module" src="./js/router.js"></script>
+  <!-- Debug console (masquée par défaut) -->
+  <div id="debug-console"></div>
+
+  <!-- Chart.js (requis pour les graphiques) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- App (ES modules) -->
+  <script type="module" src="./web/js/app.js"></script>
 </body>
 </html>
