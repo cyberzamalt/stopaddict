@@ -1,8 +1,10 @@
 /* web/js/settings.js
-   Module optionnel de câblage de la page "Réglages".
-   ➜ Exporte mountSettings(ctx) pour brancher tous les champs/boutons.
+   Module de câblage de la page "Réglages" avec exclusivité :
+   - "Alcool global" EXCLUSIF avec "Bière", "Alcool fort", "Liqueur".
+   - Si Alcool global = ON => beer/hard/liqueur OFF + disabled en UI.
+   - Si beer/hard/liqueur => ON => Alcool global forcé à OFF.
 
-   Utilisation (si tu veux un jour séparer depuis app.js) :
+   Utilisation (facultative si tu veux séparer depuis app.js) :
      import { mountSettings } from './settings.js';
      mountSettings({
        S, DefaultState, saveState,
@@ -18,7 +20,7 @@ export function mountSettings(ctx) {
     reflectCounters, dbg
   } = ctx;
 
-  // Helpers locaux (sélecteurs + setters)
+  // ----- Helpers locaux -----
   const $  = (sel) => document.querySelector(sel);
   const setVal = (sel, val, isText=false) => {
     const el = $(sel);
@@ -34,9 +36,9 @@ export function mountSettings(ctx) {
     el?.addEventListener("input", () => { fn(String(el.value||"")); saveState(); });
   };
 
-  /* -----------------------
-     Profil (prénom) + langue
-     ----------------------- */
+  // -------------------------------------------------
+  // Profil + Langue
+  // -------------------------------------------------
   $("#profile-name").value = S.profile.name || "";
   $("#profile-name").addEventListener("input", e => {
     S.profile.name = e.target.value || "";
@@ -45,7 +47,6 @@ export function mountSettings(ctx) {
 
   const langSel = $("#select-language");
   if (langSel) {
-    // Liste minimale (peut être alimentée par i18n externe si besoin)
     if (!langSel.options.length) {
       langSel.innerHTML = `
         <option value="fr">Français</option>
@@ -56,13 +57,13 @@ export function mountSettings(ctx) {
     langSel.addEventListener("change", () => {
       S.profile.language = langSel.value;
       saveState();
-      // (si i18n externe en place : re-hydrater les libellés ici)
+      // (si i18n externe : re-hydrater ici)
     });
   }
 
-  /* -------------
-     Devise (UI)
-     ------------- */
+  // -------------------------------------------------
+  // Devise
+  // -------------------------------------------------
   $("#currency-symbol").value = S.currency.symbol || "€";
   $("#currency-before").checked = !!S.currency.before;
   $("#currency-after").checked  = !S.currency.before;
@@ -77,9 +78,9 @@ export function mountSettings(ctx) {
     dbg?.push?.("Devise appliquée", "ok");
   });
 
-  /* -----------------------------
-     Modules (switches principaux)
-     ----------------------------- */
+  // -------------------------------------------------
+  // Modules (avec EXCLUSIVITÉ Alcool)
+  // -------------------------------------------------
   const modIds = {
     cigs: "#mod-cigs",
     beer: "#mod-beer",
@@ -88,24 +89,101 @@ export function mountSettings(ctx) {
     liqueur: "#mod-liqueur",
     alcoholGlobal: "#mod-alcohol"
   };
-  for (const k in modIds) {
-    const el = $(modIds[k]);
-    if (!el) continue;
-    el.checked = !!S.modules[k];
-    el.addEventListener("change", () => {
-      S.modules[k] = el.checked;
-      // si on désactive un module, on rend la carte du jour inactive aussi
-      if (["cigs","beer","joints","hard","liqueur"].includes(k)) {
-        S.today.active[k] = el.checked;
-        reflectCounters?.();
-      }
-      saveState();
-    });
+
+  const getEl = (key) => $(modIds[key]);
+
+  // Applique l’exclusivité et synchronise l’UI
+  function applyAlcoholExclusivity({persist=true, from=""} = {}) {
+    const elAlcohol = getEl("alcoholGlobal");
+    const elBeer    = getEl("beer");
+    const elHard    = getEl("hard");
+    const elLiq     = getEl("liqueur");
+
+    const alcoholGlobalOn = !!S.modules.alcoholGlobal;
+    const anySubOn = !!(S.modules.beer || S.modules.hard || S.modules.liqueur);
+
+    // Règle d’exclusivité :
+    // 1) Si des sous-modules sont ON -> Alcool global = OFF.
+    if (anySubOn && alcoholGlobalOn) {
+      S.modules.alcoholGlobal = false;
+    }
+
+    // 2) Si Alcool global = ON -> forcer les sous-modules à OFF + désactiver UI
+    if (S.modules.alcoholGlobal) {
+      S.modules.beer = false;
+      S.modules.hard = false;
+      S.modules.liqueur = false;
+
+      // Désactiver cartes du jour correspondantes
+      S.today.active.beer = false;
+      S.today.active.hard = false;
+      S.today.active.liqueur = false;
+
+      // UI
+      if (elBeer) { elBeer.checked = false; elBeer.disabled = true; elBeer.title = "Désactivé car 'Alcool global' est actif"; }
+      if (elHard) { elHard.checked = false; elHard.disabled = true; elHard.title = "Désactivé car 'Alcool global' est actif"; }
+      if (elLiq)  { elLiq.checked  = false; elLiq.disabled  = true; elLiq.title  = "Désactivé car 'Alcool global' est actif"; }
+      if (elAlcohol) { elAlcohol.checked = true; elAlcohol.disabled = false; elAlcohol.title = ""; }
+    } else {
+      // Alcool global = OFF -> on (ré)autorise les sous-modules
+      if (elBeer) { elBeer.disabled = false; elBeer.checked = !!S.modules.beer; elBeer.title = ""; }
+      if (elHard) { elHard.disabled = false; elHard.checked = !!S.modules.hard; elHard.title = ""; }
+      if (elLiq)  { elLiq.disabled  = false; elLiq.checked  = !!S.modules.liqueur; elLiq.title = ""; }
+      if (elAlcohol) { elAlcohol.checked = false; elAlcohol.disabled = false; elAlcohol.title = ""; }
+    }
+
+    // Réflexions UI Accueil + recalcul
+    reflectCounters?.();
+    persistTodayIntoHistory?.();
+    updateHeader?.();
+    renderChart?.();
+
+    if (persist) saveState();
+    dbg?.push?.(`Exclusivité alcool appliquée (${from||'evt'})`, "info");
   }
 
-  /* ------------------------
-     Prix unitaires (fallback)
-     ------------------------ */
+  // Initialiser les cases module selon l’état
+  for (const k in modIds) {
+    const el = getEl(k);
+    if (!el) continue;
+    el.checked = !!S.modules[k];
+  }
+  // Appliquer une première fois l’exclusivité pour que l’UI soit cohérente au chargement
+  applyAlcoholExclusivity({persist:false, from:"init"});
+
+  // Listeners modules (général)
+  const setModule = (key, checked) => {
+    S.modules[key] = checked;
+    if (["cigs","beer","joints","hard","liqueur"].includes(key)) {
+      S.today.active[key] = checked; // reflète l’état sur les cartes du jour
+      reflectCounters?.();
+    }
+    saveState();
+  };
+
+  // Listener Alcool global
+  getEl("alcoholGlobal")?.addEventListener("change", (e) => {
+    setModule("alcoholGlobal", e.target.checked);
+    applyAlcoholExclusivity({from:"mod-alcoholGlobal"});
+  });
+
+  // Listeners sous-modules Alcool
+  ["beer","hard","liqueur"].forEach(k => {
+    getEl(k)?.addEventListener("change", (e) => {
+      setModule(k, e.target.checked);
+      // Si un sous-module passe à ON -> couper Alcool global
+      if (e.target.checked && S.modules.alcoholGlobal) {
+        S.modules.alcoholGlobal = false;
+        const elAlcohol = getEl("alcoholGlobal");
+        if (elAlcohol) elAlcohol.checked = false;
+      }
+      applyAlcoholExclusivity({from:`mod-${k}`});
+    });
+  });
+
+  // -------------------------------------------------
+  // Prix unitaires (fallback)
+  // -------------------------------------------------
   $("#price-cigarette").value = S.prices.cigarette ?? 0;
   $("#price-joint").value     = S.prices.joint ?? 0;
   $("#price-beer").value      = S.prices.beer ?? 0;
@@ -139,18 +217,17 @@ export function mountSettings(ctx) {
     dbg?.push?.("Prix unitaires réinitialisés", "ok");
   });
 
-  /* --------------------------------
-     Variantes Cigarettes (classiques)
-     -------------------------------- */
+  // -------------------------------------------------
+  // Variantes (classiques / roulées / tubées / cannabis / alcool)
+  // -------------------------------------------------
+  // Classiques
   $("#classic-use")?.addEventListener("change", e => { S.variants.classic.use = e.target.checked; saveState(); });
   setVal("#classic-pack-price",    S.variants.classic.packPrice);
   setVal("#classic-cigs-per-pack", S.variants.classic.cigsPerPack);
   onNum("#classic-pack-price",    v => S.variants.classic.packPrice = v);
   onNum("#classic-cigs-per-pack", v => S.variants.classic.cigsPerPack = v);
 
-  /* --------------------------
-     Cigarettes (roulées/tubées)
-     -------------------------- */
+  // Roulées
   $("#rolled-use")?.addEventListener("change", e => { S.variants.rolled.use = e.target.checked; saveState(); });
   setVal("#rolled-tobacco-30g-price", S.variants.rolled.tobacco30gPrice);
   setVal("#rolled-cigs-per-30g",      S.variants.rolled.cigsPer30g);
@@ -166,6 +243,7 @@ export function mountSettings(ctx) {
   onNum("#rolled-filters-price", v => S.variants.rolled.filtersPrice = v);
   onNum("#rolled-filters-count", v => S.variants.rolled.filtersCount = v);
 
+  // Tubées
   $("#tubed-use")?.addEventListener("change", e => { S.variants.tubed.use = e.target.checked; saveState(); });
   setVal("#tubed-cigs-per-30g", S.variants.tubed.cigsPer30g);
   setVal("#tubed-tubes-price",  S.variants.tubed.tubesPrice);
@@ -175,9 +253,7 @@ export function mountSettings(ctx) {
   onNum("#tubed-tubes-price",  v => S.variants.tubed.tubesPrice = v);
   onNum("#tubed-tubes-count",  v => S.variants.tubed.tubesCount = v);
 
-  /* --------------
-     Cannabis (UI)
-     -------------- */
+  // Cannabis
   $("#canna-use")?.addEventListener("change", e => { S.variants.cannabis.use = e.target.checked; saveState(); });
   setVal("#canna-price-gram",      S.variants.cannabis.gramPrice);
   setVal("#canna-grams-per-joint", S.variants.cannabis.gramsPerJoint);
@@ -189,9 +265,7 @@ export function mountSettings(ctx) {
   onNum("#canna-bigleaf-price",   v => S.variants.cannabis.bigLeafPrice = v);
   onNum("#canna-bigleaf-count",   v => S.variants.cannabis.bigLeafCount = v);
 
-  /* --------------------------
-     Alcool — catégories & prix
-     -------------------------- */
+  // Alcool (catégories internes)
   $("#beer-enabled")?.addEventListener("change", e => { S.variants.alcohol.beer.enabled = e.target.checked; saveState(); });
   setVal("#beer-price-unit", S.variants.alcohol.beer.unitPrice);
   setVal("#beer-unit-label", S.variants.alcohol.beer.unitLabel, true);
@@ -210,9 +284,9 @@ export function mountSettings(ctx) {
   onNum("#liqueur-price-dose", v => S.variants.alcohol.liqueur.dosePrice = v);
   onTxt("#liqueur-dose-unit",  v => S.variants.alcohol.liqueur.doseUnit = v);
 
-  /* ------------------------
-     RAZ & sauvegarde locaux
-     ------------------------ */
+  // -------------------------------------------------
+  // RAZ & Sauvegardes locales
+  // -------------------------------------------------
   $("#btn-raz-day")?.addEventListener("click", () => {
     S.today.counters = { cigs:0, joints:0, beer:0, hard:0, liqueur:0 };
     reflectCounters?.();
@@ -224,10 +298,7 @@ export function mountSettings(ctx) {
   });
 
   $("#btn-raz-period")?.addEventListener("click", () => {
-    // ⚠️ Ici on s’appuie sur la période active et la logique de stats dans app.js,
-    // donc si tu veux isoler complètement, il faudra passer une API "currentRange()".
-    dbg?.push?.("RAZ période : action déléguée au module stats", "info");
-    // Laisser géré par app.js pour éviter les divergences.
+    dbg?.push?.("RAZ période : géré côté stats/app.js", "info");
   });
 
   $("#btn-raz-history")?.addEventListener("click", () => {
@@ -240,14 +311,25 @@ export function mountSettings(ctx) {
 
   $("#btn-raz-factory")?.addEventListener("click", () => {
     const keepHistory = S.history;
-    const keepToday = S.today;
-    const keepCurrency = S.currency;
-    S = Object.assign(S, DefaultState()); // merge dans l'objet existant
+    const keepToday   = S.today;
+    const keepCurrency= S.currency;
+    // Réinitialise en conservant des morceaux utiles
+    let D = DefaultState();
+    S.meta = D.meta;
+    S.profile = D.profile;
+    S.currency = keepCurrency;
+    S.modules = D.modules;
+    S.prices = D.prices;
+    S.variants = D.variants;
+    S.goals = D.goals;
+    S.limits = D.limits;
+    S.dates = D.dates;
     S.history = keepHistory;
     S.today = keepToday;
-    S.currency = keepCurrency;
-    // Ré-hydrater
-    mountSettings(ctx); // re-bind pour refléter les defaults
+
+    // Re-monter l'UI et re-appliquer exclusivité
+    mountSettings(ctx);
+    applyAlcoholExclusivity({from:"factory"});
     renderChart?.();
     saveState();
     dbg?.push?.("RAZ réglages (usine) + conservation historique", "ok");
@@ -269,9 +351,11 @@ export function mountSettings(ctx) {
     try {
       const text = await file.text();
       const obj = JSON.parse(text);
-      Object.assign(S, DefaultState(), obj); // merge doux
-      // Ré-hydrater
+      // Merge doux
+      const D = DefaultState();
+      Object.assign(S, D, obj);
       mountSettings(ctx);
+      applyAlcoholExclusivity({from:"import"});
       renderChart?.();
       saveState();
       dbg?.push?.("Import JSON (réglages) ok", "ok");
@@ -283,33 +367,6 @@ export function mountSettings(ctx) {
     }
   });
 
-  $("#btn-purge-local-stats")?.addEventListener("click", () => {
-    S.history = {};
-    persistTodayIntoHistory?.();
-    renderChart?.();
-    saveState();
-    dbg?.push?.("Purge données locales (Stats)", "ok");
-  });
-
-  /* ----------------------
-     Journal & DEBUG (UI)
-     ---------------------- */
-  const dbgBox = $("#debug-console");
-  $("#cb-debug-overlay")?.addEventListener("change", e => {
-    if (e.target.checked) {
-      dbgBox?.classList.remove("hide");
-      dbg?.push?.("Overlay DEBUG ON", "ok");
-    } else {
-      dbgBox?.classList.add("hide");
-    }
-  });
-  $("#btn-copy-logs")?.addEventListener("click", () => dbg?.copy?.());
-  $("#btn-clear-logs")?.addEventListener("click", () => dbg?.clear?.());
-
-  /* ------------------------
-     Ressources (placeholder)
-     ------------------------ */
-  $("#btn-resources")?.addEventListener("click", () => {
-    alert("Ressources & numéros utiles : à compléter (liens d'aide, 112/15/17/18, associations, etc.)");
-  });
+  // Assure une dernière fois la cohérence à la fin du montage
+  applyAlcoholExclusivity({persist:false, from:"post-mount"});
 }
