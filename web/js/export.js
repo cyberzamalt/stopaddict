@@ -1,266 +1,254 @@
 // web/js/export.js
 // STOPADDICT — Export / Import
-// 3 actions cibles :
-//   1) Exporter TOUT (JSON complet)  → #btn-export-json  (fallback: #btn-export-stats)
-//   2) Importer TOUT (JSON)          → #btn-import       (utilise #file-import si présent, sinon input éphémère)
-//   3) Exporter CSV (historique/jours, filtré par modules actifs) → #btn-export-csv
+// - CSV (toutes les journées, colonnes: date, cigs, weed, beer, strong, liquor, cost, economy)
+// - JSON (état complet + méta)
+// - Import JSON (remplace l’état, migration via state.js)
+// - Optionnel: export des images de graphiques (PNG) si case cochée #export-include-charts
 //
-// Remarques :
-// - Le CSV contient : Date ; Cigarettes ; Joints ; Bière ; Alcool_Fort ; Liqueur ; Cout_Total_EUR ; Economies_EUR
-// - “OFF = exclu partout” : les catégories désactivées sont exportées à 0 et non comptées dans coût/économies.
-// - L’export JSON peut embarquer des images des graphiques si une case est cochée (#chk-export-images ou #chk-export-charts).
+// Boutons (tolérant, si absents on ignore):
+//   #btn-export-csv
+//   #btn-export-json
+//   #btn-import-json
+//   #export-include-charts  (checkbox)
+//
+// Évènements émis :
+//   'sa:state-changed' (propage via replaceState)
+
+"use strict";
 
 import {
-  load,
+  getState,
+  replaceState,
   getSettings,
   calculateDayCost,
   getEconomy,
 } from "./state.js";
 
-const $ = (sel, root = document) => root.querySelector(sel);
+const $  = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
-// ---------- Utils téléchargement ----------
-function downloadBlob(filename, mime, data) {
+// -------- Helpers téléchargement ---------------------------------------------
+
+function downloadBlob(filename, blob) {
+  const url = URL.createObjectURL(blob);
   try {
-    const blob = new Blob([data], { type: mime });
-    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = filename;
+    a.rel = "noopener";
     document.body.appendChild(a);
     a.click();
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 0);
-  } catch (e) {
-    console.error("[export] downloadBlob failed:", e);
-    alert("Téléchargement impossible dans cet environnement.");
+    a.remove();
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 }
 
-function todayStamp() {
-  const d = new Date();
-  const p = (n) => (n < 10 ? "0" + n : "" + n);
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}`;
+function downloadText(filename, text, mime = "text/plain;charset=utf-8") {
+  const blob = new Blob([text], { type: mime });
+  downloadBlob(filename, blob);
 }
 
-// ---------- CSV (historique par jour) ----------
-function buildCSVFromHistory() {
-  const st = load();
-  const settings = getSettings();
-  const sep = ";"; // séparateur CSV adapté aux locales FR
+function sortYmdAsc(a, b) {
+  // 'YYYY-MM-DD' => compare lexicographiquement suffit
+  return a < b ? -1 : (a > b ? 1 : 0);
+}
 
+// -------- CSV ----------------------------------------------------------------
+
+function buildCSV(sep = ";") {
+  const st = getState();
+  const s  = getSettings();
   const header = [
-    "Date",
-    "Cigarettes",
-    "Joints",
-    "Biere",
-    "Alcool_Fort",
-    "Liqueur",
-    "Cout_Total_EUR",
-    "Economies_EUR",
+    "date",
+    "cigs",
+    "weed",
+    "beer",
+    "strong",
+    "liquor",
+    "cost",
+    "economy",
   ].join(sep);
 
-  const keys = Object.keys(st.history || {}).sort(); // YYYY-MM-DD asc
-  const lines = [header];
+  const rows = [header];
 
-  for (const key of keys) {
-    const rec = st.history[key] || { cigs: 0, weed: 0, beer: 0, strong: 0, liquor: 0 };
-
-    // OFF = exclu → on met 0 pour la catégorie (ne sort pas dans le coût)
-    const vals = {
-      cigs:   settings.enable_cigs                     ? (+rec.cigs   || 0) : 0,
-      weed:   settings.enable_weed                     ? (+rec.weed   || 0) : 0,
-      beer:   (settings.enable_alcohol && settings.enable_beer)   ? (+rec.beer   || 0) : 0,
-      strong: (settings.enable_alcohol && settings.enable_strong) ? (+rec.strong || 0) : 0,
-      liquor: (settings.enable_alcohol && settings.enable_liquor) ? (+rec.liquor || 0) : 0,
-    };
-
-    // Calculs (respectent déjà OFF = exclu)
-    const dayCost = calculateDayCost(rec, settings);
-    const dayEco  = getEconomy(rec, settings);
-
-    const row = [
-      key,
-      vals.cigs,
-      vals.weed,
-      vals.beer,
-      vals.strong,
-      vals.liquor,
-      dayCost.toFixed(2),
-      dayEco.toFixed(2),
+  const keys = Object.keys(st.days || {}).sort(sortYmdAsc);
+  for (const k of keys) {
+    const rec = st.days[k] || {};
+    const line = [
+      k,
+      (rec.cigs   ?? 0),
+      (rec.weed   ?? 0),
+      (rec.beer   ?? 0),
+      (rec.strong ?? 0),
+      (rec.liquor ?? 0),
+      // Coût/Éco calculés selon catégories actives & prix courants
+      (calculateDayCost(rec, s)).toFixed(2),
+      (getEconomy(rec, s)).toFixed(2),
     ].join(sep);
-
-    lines.push(row);
+    rows.push(line);
   }
 
-  return lines.join("\n");
+  // Petite note finale (commentaire compatible CSV)
+  const symbol = (window.SA_CURRENCY?.get()?.symbol) || "€";
+  rows.push(`# currency: ${symbol}`);
+  rows.push(`# generated: ${new Date().toISOString()}`);
+
+  return rows.join("\n");
 }
 
-function doExportCSV() {
-  const csv = buildCSVFromHistory();
-  const name = `stopaddict_history_${todayStamp()}.csv`;
-  downloadBlob(name, "text/csv;charset=utf-8", csv);
+function exportCSV() {
+  const csv = buildCSV(";");
+  downloadText(`stopaddict_export_${dateStamp()}.csv`, csv, "text/csv;charset=utf-8");
 }
 
-// ---------- JSON (snapshot complet) ----------
-function canvasToDataURLIfAny(selCandidates = []) {
-  for (const sel of selCandidates) {
-    const c = $(sel);
-    if (c && c.toDataURL) {
-      try { return c.toDataURL("image/png"); } catch { /* ignore */ }
-    }
-  }
-  return null;
-}
+// -------- JSON ---------------------------------------------------------------
 
-function shouldIncludeCharts() {
-  const chk1 = $("#chk-export-images");
-  const chk2 = $("#chk-export-charts");
-  return (!!chk1 && chk1.checked) || (!!chk2 && chk2.checked);
-}
-
-function buildJSONSnapshot() {
-  const st = load();
-  const includeCharts = shouldIncludeCharts();
+function buildJSON() {
+  const st = getState();
+  const cur = (window.SA_CURRENCY?.get?.() || { symbol: "€", position: "after" });
 
   const payload = {
-    exported_at: new Date().toISOString(),
-    schema_version: st?.schema_version ?? 1,
-    app: {
-      name: "StopAddict",
-      source: "web",
+    meta: {
+      app: "StopAddict",
+      version: st.version || 3,
+      exported_at: new Date().toISOString(),
+      currency: cur,
+      lang: (st.settings?.lang) || null,
     },
-    state: st, // settings, view, ui, history
+    state: st, // état complet (settings + days)
   };
-
-  if (includeCharts) {
-    payload.chart_images = {
-      consos: canvasToDataURLIfAny(["#chart-consos", "#chart1"]),
-      cost:   canvasToDataURLIfAny(["#chart-cost",   "#chart2"]),
-    };
-  }
-
   return JSON.stringify(payload, null, 2);
 }
 
-function doExportJSON() {
-  const json = buildJSONSnapshot();
-  const name = `stopaddict_full_${todayStamp()}.json`;
-  downloadBlob(name, "application/json;charset=utf-8", json);
+function exportJSON() {
+  const json = buildJSON();
+  downloadText(`stopaddict_full_${dateStamp()}.json`, json, "application/json;charset=utf-8");
 }
 
-// ---------- IMPORT (JSON complet) ----------
-function pickFileAnd(fn) {
-  const existing = $("#file-import");
-  if (existing) {
-    existing.onchange = (e) => {
-      const file = e.target.files?.[0];
-      if (file) fn(file);
-      // reset pour pouvoir ré-importer le même fichier plus tard
-      e.target.value = "";
-    };
-    existing.click();
-    return;
-  }
+// -------- Import JSON --------------------------------------------------------
 
-  // Input éphémère si #file-import absent
+function importJSON() {
   const input = document.createElement("input");
   input.type = "file";
   input.accept = "application/json";
-  input.style.display = "none";
-  input.addEventListener("change", (e) => {
-    const file = e.target.files?.[0];
-    if (file) fn(file);
-    document.body.removeChild(input);
-  });
-  document.body.appendChild(input);
+  input.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const newState = data?.state || data; // tolérant : certains exports pourraient être "nus"
+      if (!newState || typeof newState !== "object" || !newState.days) {
+        alert("Fichier JSON invalide : état manquant.");
+        return;
+      }
+      replaceState(newState);
+
+      // Appliquer une devise suggérée si présente dans meta
+      const cur = data?.meta?.currency;
+      if (cur && (cur.symbol || cur.position) && window.SA_CURRENCY?.set) {
+        try { window.SA_CURRENCY.set(cur); } catch {}
+      }
+
+      // Appliquer la langue si présente
+      const lang = data?.meta?.lang || newState?.settings?.lang;
+      if (lang && window.SA_I18N?.setLang) {
+        try { await window.SA_I18N.setLang(lang); } catch {}
+      }
+
+      alert("Import JSON terminé.");
+    } catch (e) {
+      console.error("[export.importJSON] parse error:", e);
+      alert("Erreur lors de la lecture du JSON.");
+    }
+  }, { once: true });
   input.click();
 }
 
-function validateImportedState(obj) {
-  // Tolérant : on accepte {state:{...}} ou directement le state
-  const st = obj?.state && typeof obj.state === "object" ? obj.state : obj;
+// -------- Graphiques (PNG) ---------------------------------------------------
 
-  if (!st || typeof st !== "object") return { ok: false, reason: "Structure inconnue (pas d'objet state)." };
-  if (!("history" in st))           return { ok: false, reason: "State incomplet (history manquant)." };
-  if (!("settings" in st))          return { ok: false, reason: "State incomplet (settings manquant)." };
-
-  // Normalisations minimales
-  st.schema_version ??= 1;
-  st.view ??= { range: "day" };
-  st.ui ??= { activeSegments: { cigs: true, weed: true, beer: true, strong: true, liquor: true } };
-  st.settings.prices ??= { cig: 0, weed: 0, beer: 0, strong: 0, liquor: 0 };
-  st.settings.baselines ??= { cig: 0, weed: 0, beer: 0, strong: 0, liquor: 0 };
-
-  return { ok: true, state: st };
+function collectChartCanvases() {
+  // Priorité: canvases marqués exportables
+  let canv = $$("canvas[data-exportable-chart]");
+  if (canv.length) return canv;
+  // Fallback: tous les canvas sous la zone Stats
+  const stats = $("#ecran-stats");
+  if (stats) canv = $$("canvas", stats);
+  // Dernier recours: tous les canvas du doc (risque d’attraper le canvas debug si présent)
+  if (!canv.length) canv = $$("canvas");
+  return canv;
 }
 
-function doImportJSON() {
-  pickFileAnd((file) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const txt = String(reader.result || "");
-        const obj = JSON.parse(txt);
-        const { ok, state, reason } = validateImportedState(obj);
-        if (!ok) {
-          alert("Import impossible : " + (reason || "format invalide"));
-          return;
-        }
-
-        // Remplacer l'état persistant puis rafraîchir
-        try {
-          localStorage.setItem("stopaddict_state_v1", JSON.stringify(state));
-        } catch (e) {
-          console.error("[import] write localStorage failed:", e);
-          alert("Écriture impossible (stockage local indisponible).");
-          return;
-        }
-
-        // On rafraîchit la page pour repartir proprement
-        location.reload();
-
-      } catch (e) {
-        console.error("[import] parse failed:", e);
-        alert("Fichier JSON invalide.");
-      }
-    };
-    reader.onerror = () => {
-      console.error("[import] read failed");
-      alert("Lecture du fichier impossible.");
-    };
-    reader.readAsText(file, "utf-8");
+function exportChartsPNGs() {
+  const canvases = collectChartCanvases();
+  if (!canvases.length) {
+    alert("Aucun graphique à exporter pour le moment.");
+    return;
+  }
+  const stamp = dateStamp();
+  canvases.forEach((cv, i) => {
+    try {
+      const dataUrl = cv.toDataURL("image/png");
+      // Convert DataURL -> Blob
+      const bin = atob(dataUrl.split(",")[1] || "");
+      const len = bin.length;
+      const bytes = new Uint8Array(len);
+      for (let j = 0; j < len; j++) bytes[j] = bin.charCodeAt(j);
+      const blob = new Blob([bytes], { type: "image/png" });
+      downloadBlob(`stopaddict_chart_${stamp}_${String(i + 1).padStart(2,"0")}.png`, blob);
+    } catch (e) {
+      console.warn("[export.exportChartsPNGs] skip canvas", e);
+    }
   });
 }
 
-// ---------- Bind UI ----------
+// -------- Utils --------------------------------------------------------------
+
+function dateStamp() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+}
+
+function enableIfExists(btn) {
+  if (!btn) return;
+  btn.removeAttribute("disabled");
+  btn.classList.remove("disabled");
+}
+
+// -------- Init ---------------------------------------------------------------
+
 export function initExport() {
-  // Export CSV
-  const btnCSV = $("#btn-export-csv");
-  if (btnCSV) {
-    btnCSV.addEventListener("click", (e) => {
-      e.preventDefault();
-      doExportCSV();
-    });
-  }
+  // Brancher boutons si présents
+  const btnCSV   = $("#btn-export-csv");
+  const btnJSON  = $("#btn-export-json");
+  const btnIMPT  = $("#btn-import-json");
+  const includeC = $("#export-include-charts");
 
-  // Export JSON (nom historique #btn-export-stats accepté en fallback)
-  const btnJSON = $("#btn-export-json") || $("#btn-export-stats");
-  if (btnJSON) {
-    btnJSON.addEventListener("click", (e) => {
-      e.preventDefault();
-      doExportJSON();
-    });
-  }
+  enableIfExists(btnCSV);
+  enableIfExists(btnJSON);
+  enableIfExists(btnIMPT);
 
-  // Import JSON
-  const btnImport = $("#btn-import");
-  if (btnImport) {
-    btnImport.addEventListener("click", (e) => {
-      e.preventDefault();
-      doImportJSON();
+  if (btnCSV)  btnCSV.addEventListener("click", () => {
+    exportCSV();
+    // Exports complémentaires d’images si la case existe & cochée
+    if (includeC && includeC.checked) exportChartsPNGs();
+  });
+
+  if (btnJSON) btnJSON.addEventListener("click", () => {
+    exportJSON();
+    if (includeC && includeC.checked) exportChartsPNGs();
+  });
+
+  if (btnIMPT) btnIMPT.addEventListener("click", importJSON);
+
+  // Bonus: si on passe sur l’onglet stats, on active l’option "inclure images" par défaut si présente
+  const statsNav = $("#nav-stats");
+  if (statsNav && includeC) {
+    statsNav.addEventListener("click", () => {
+      // laisser l’utilisateur décider; pas d’auto-toggle agressif
+      // includeC.checked = true;
     });
   }
 }
