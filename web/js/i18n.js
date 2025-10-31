@@ -1,207 +1,247 @@
 // web/js/i18n.js
-// -----------------------------------------------------------------------------
-// Système d'internationalisation (i18n)
-// - Gère le changement de langue (fr/en)
-// - Remplace automatiquement {currency} par le symbole de devise
-// - Applique les traductions sur tous les éléments [data-i18n]
-// -----------------------------------------------------------------------------
+// STOPADDICT — Internationalisation (i18n) minimaliste et robuste
+// - Langue détectée (localStorage > navigateur) : 'fr' (par défaut) ou 'en'
+// - API : SA_I18N.t(key), SA_I18N.setLang('fr'|'en'), SA_I18N.getLang(), SA_I18N.apply()
+// - Remplacement simple de variables : t('cost.today', {n:12.3, sym:'€'}) -> "Coût du jour : 12.30 €"
+// - Bind automatique des éléments [data-i18n] (textContent) / [data-i18n-attr="placeholder"|...]
+// - Fournit des labels standardisés pour les catégories : SA_I18N.categoryLabel('beer') -> "Bière"/"Beer"
 
-const STORAGE_KEY = "sa:lang";
-const SUPPORTED = ["fr", "en"];
-let current = localStorage.getItem(STORAGE_KEY) || (navigator.language || "fr").slice(0, 2);
-if (!SUPPORTED.includes(current)) current = "fr";
+const STORE_KEY = "stopaddict_lang";
 
-let dict = {};
+const STRINGS = {
+  fr: {
+    // Navigation
+    "nav.home": "Accueil",
+    "nav.stats": "Stats",
+    "nav.calendar": "Calendrier",
+    "nav.habits": "Habitudes",
+    "nav.settings": "Réglages",
 
-function applyTexts(root = document) {
-  console.log("[i18n] Application des textes sur le DOM...");
+    // Accueil & bar
+    "today.title": "Aujourd’hui",
+    "counts.cigs": "Clopes",
+    "counts.weed": "Joints",
+    "counts.alcohol": "Alcool",
+    "cost": "Coût",
+    "savings": "Économies",
+    "tips.title": "Conseils",
+    "resources": "Ressources & numéros utiles",
+    "activate": "Activer",
+
+    // Catégories
+    "cat.cigs": "Cigarettes",
+    "cat.weed": "Joints",
+    "cat.beer": "Bière",
+    "cat.strong": "Alcool fort",
+    "cat.liquor": "Liqueur",
+
+    // Stats
+    "stats.totals": "Totaux",
+    "stats.cost_total": "Coût total",
+    "stats.savings_total": "Économies",
+    "range.day": "Jour",
+    "range.week": "Semaine",
+    "range.month": "Mois",
+    "range.year": "Année",
+    "stats.header": "Bilan {range} — {title}",
+
+    // Export
+    "export.csv": "Exporter CSV",
+    "export.json": "Exporter TOUT (JSON)",
+    "import.json": "Importer (JSON)",
+    "export.include_charts": "Inclure images des graphiques",
+
+    // Calendrier
+    "calendar.month": "Mois — Année",
+
+    // Habitudes / Réglages
+    "habits.title": "Habitudes",
+    "habits.objectives": "Objectifs quotidiens",
+    "habits.dates": "Dates clés",
+    "btn.save": "Enregistrer",
+    "btn.reset": "Réinitialiser",
+    "btn.clear": "Effacer",
+    "btn.close": "Fermer",
+
+    // Conseils types
+    "tip.fill_prices": "Renseigne le prix de {list} dans Réglages pour voir des coûts/économies réalistes.",
+    "tip.zero_today": "🎯 Zéro aujourd’hui — parfait ! Garde ce rythme.",
+    "tip.below_goal": "Bien joué : en dessous de l’objectif pour {list}.",
+    "tip.micro_goal": "Micro-objectif 💡: {label} — vise {n} au prochain passage.",
+    "cost.today": "Coût du jour : {n} {sym}. Un pas de moins réduit la note dès aujourd’hui.",
+  },
+
+  en: {
+    // Navigation
+    "nav.home": "Home",
+    "nav.stats": "Stats",
+    "nav.calendar": "Calendar",
+    "nav.habits": "Habits",
+    "nav.settings": "Settings",
+
+    // Home & bar
+    "today.title": "Today",
+    "counts.cigs": "Cigs",
+    "counts.weed": "Joints",
+    "counts.alcohol": "Alcohol",
+    "cost": "Cost",
+    "savings": "Savings",
+    "tips.title": "Tips",
+    "resources": "Resources & helplines",
+    "activate": "Enable",
+
+    // Categories
+    "cat.cigs": "Cigarettes",
+    "cat.weed": "Joints",
+    "cat.beer": "Beer",
+    "cat.strong": "Spirits",
+    "cat.liquor": "Liqueur",
+
+    // Stats
+    "stats.totals": "Totals",
+    "stats.cost_total": "Total cost",
+    "stats.savings_total": "Savings",
+    "range.day": "Day",
+    "range.week": "Week",
+    "range.month": "Month",
+    "range.year": "Year",
+    "stats.header": "{range} summary — {title}",
+
+    // Export
+    "export.csv": "Export CSV",
+    "export.json": "Export ALL (JSON)",
+    "import.json": "Import (JSON)",
+    "export.include_charts": "Include chart images",
+
+    // Calendar
+    "calendar.month": "Month — Year",
+
+    // Habits / Settings
+    "habits.title": "Habits",
+    "habits.objectives": "Daily goals",
+    "habits.dates": "Key dates",
+    "btn.save": "Save",
+    "btn.reset": "Reset",
+    "btn.clear": "Clear",
+    "btn.close": "Close",
+
+    // Tips
+    "tip.fill_prices": "Fill the price of {list} in Settings to get realistic costs/savings.",
+    "tip.zero_today": "🎯 Zero today — great! Keep it up.",
+    "tip.below_goal": "Nice: below the goal for {list}.",
+    "tip.micro_goal": "Micro-goal 💡: {label} — aim {n} next time.",
+    "cost.today": "Today’s cost: {n} {sym}. One less already reduces the bill.",
+  },
+};
+
+// ------ Langue active ------
+function detectLang() {
   try {
-    // Remplace tout [data-i18n] par la clé dans le dictionnaire
-    const elements = root.querySelectorAll("[data-i18n]");
-    console.log("[i18n] Éléments [data-i18n] trouvés:", elements.length);
-    
-    elements.forEach(el => {
-      try {
-        const key = el.getAttribute("data-i18n");
-        if (!key) return;
-        
-        const txt = key.split("|").map(k => {
-          const translated = dict[k.trim()];
-          return translated ?? "";
-        }).filter(Boolean).join(" ");
-        
-        if (txt) {
-          el.textContent = txt;
-          console.log("[i18n] Texte appliqué:", key, "→", txt);
-        }
-      } catch (err) {
-        console.error("[i18n] Erreur application texte élément:", el, err);
-      }
+    const saved = localStorage.getItem(STORE_KEY);
+    if (saved && STRINGS[saved]) return saved;
+  } catch {}
+  try {
+    const nav = (navigator.language || navigator.userLanguage || "fr").toLowerCase();
+    if (nav.startsWith("fr")) return "fr";
+  } catch {}
+  return "en"; // fallback
+}
+
+let current = detectLang();
+
+function setLang(lang) {
+  if (!STRINGS[lang]) lang = "fr";
+  current = lang;
+  try { localStorage.setItem(STORE_KEY, lang); } catch {}
+  // maj <html lang="">
+  try {
+    const html = document.documentElement;
+    if (html) html.setAttribute("lang", lang);
+    // direction (toutes nos langues sont LTR ici)
+    html.setAttribute("dir", "ltr");
+  } catch {}
+  // Appliquer aux éléments data-i18n
+  apply();
+  // Événement global
+  try { document.dispatchEvent(new CustomEvent("sa:lang-changed", { detail: { lang } })); } catch {}
+}
+
+function getLang() { return current; }
+
+// ------ Traduction ------
+function interpolate(str, vars) {
+  if (!vars) return str;
+  return str.replace(/\{(\w+)\}/g, (_, k) => (k in vars ? String(vars[k]) : `{${k}}`));
+}
+
+function t(key, vars) {
+  const dict = STRINGS[current] || STRINGS.fr;
+  let out = dict[key];
+  if (out == null) {
+    // fallback en -> fr -> clé
+    out = (STRINGS.fr && STRINGS.fr[key]) || (STRINGS.en && STRINGS.en[key]) || key;
+  }
+  if (typeof out !== "string") return key;
+  return interpolate(out, vars);
+}
+
+// ------ Application auto sur le DOM ------
+// Usage :
+//   <span data-i18n="nav.settings"></span>
+//   <input data-i18n="habits.title" data-i18n-attr="placeholder">
+function apply(root = document) {
+  const nodes = root.querySelectorAll("[data-i18n]");
+  nodes.forEach((el) => {
+    const key = el.getAttribute("data-i18n");
+    const attr = el.getAttribute("data-i18n-attr");
+    const html = el.getAttribute("data-i18n-html") === "1";
+    if (!key) return;
+    const txt = t(key);
+    if (attr) el.setAttribute(attr, txt);
+    else if (html) el.innerHTML = txt;
+    else el.textContent = txt;
+  });
+}
+
+// ------ Labels de catégories (utiles aux modules) ------
+function categoryLabel(kind) {
+  switch (kind) {
+    case "cigs":   return t("cat.cigs");
+    case "weed":   return t("cat.weed");
+    case "beer":   return t("cat.beer");
+    case "strong": return t("cat.strong");
+    case "liquor": return t("cat.liquor");
+    default:       return kind;
+  }
+}
+
+// ------ API publique ------
+export function initI18n() {
+  // Mettre l'attribut lang au démarrage
+  try {
+    const html = document.documentElement;
+    if (html) html.setAttribute("lang", current);
+  } catch {}
+  // Appliquer dès que possible
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => apply(), { once: true });
+  } else {
+    apply();
+  }
+
+  // Optionnel : bouton rapide si présent
+  // <button id="toggle-lang">FR/EN</button>
+  const toggle = document.getElementById("toggle-lang");
+  if (toggle) {
+    toggle.addEventListener("click", () => {
+      setLang(getLang() === "fr" ? "en" : "fr");
     });
-
-    // Placeholders sur inputs
-    const phElements = root.querySelectorAll("[data-i18n-ph]");
-    console.log("[i18n] Éléments [data-i18n-ph] trouvés:", phElements.length);
-    
-    phElements.forEach(el => {
-      try {
-        const k = el.getAttribute("data-i18n-ph");
-        if (k && dict[k]) {
-          el.setAttribute("placeholder", dict[k]);
-          console.log("[i18n] Placeholder appliqué:", k, "→", dict[k]);
-        }
-      } catch (err) {
-        console.error("[i18n] Erreur application placeholder:", el, err);
-      }
-    });
-
-    // Titres (tooltips)
-    const titleElements = root.querySelectorAll("[data-i18n-title]");
-    console.log("[i18n] Éléments [data-i18n-title] trouvés:", titleElements.length);
-    
-    titleElements.forEach(el => {
-      try {
-        const k = el.getAttribute("data-i18n-title");
-        if (k && dict[k]) {
-          el.setAttribute("title", dict[k]);
-          console.log("[i18n] Titre appliqué:", k, "→", dict[k]);
-        }
-      } catch (err) {
-        console.error("[i18n] Erreur application titre:", el, err);
-      }
-    });
-
-    console.log("[i18n] Application des textes terminée");
-  } catch (err) {
-    console.error("[i18n] Erreur globale applyTexts:", err);
   }
 }
 
-async function loadLang(lang) {
-  console.log("[i18n] ========== Chargement langue:", lang, "==========");
-  try {
-    const url = `./i18n/${lang}.json`;
-    console.log("[i18n] URL:", url);
-    
-    const res = await fetch(url, { cache: "no-store" });
-    console.log("[i18n] Fetch réussi, status:", res.status);
-    
-    if (!res.ok) {
-      throw new Error(`Erreur HTTP: ${res.status}`);
-    }
-    
-    dict = await res.json();
-    console.log("[i18n] Dictionnaire chargé:", Object.keys(dict).length, "clés");
-    console.log("[i18n] Symbole devise:", dict["currency.symbol"]);
-    
-    current = lang;
-    localStorage.setItem(STORAGE_KEY, lang);
-    console.log("[i18n] Langue sauvegardée:", lang);
-    
-    applyTexts(document);
-    
-    document.dispatchEvent(new CustomEvent("sa:langChanged", { detail: { lang } }));
-    console.log("[i18n] Événement sa:langChanged émis");
-    console.log("[i18n] ========== Chargement terminé ==========");
-  } catch (err) {
-    console.error("[i18n] ========== ERREUR CHARGEMENT LANGUE ==========", err);
-  }
-}
+try {
+  window.SA_I18N = { t, setLang, getLang, apply, categoryLabel, STRINGS };
+} catch { /* ignore */ }
 
-export async function initI18n() {
-  console.log("[i18n] ========== Initialisation module i18n ==========");
-  console.log("[i18n] Langues supportées:", SUPPORTED);
-  console.log("[i18n] Langue détectée:", current);
-  
-  try {
-    // peupler le sélecteur s'il existe
-    const select = document.getElementById("langSelect");
-    if (select) {
-      console.log("[i18n] Sélecteur de langue trouvé");
-      // options fixes FR/EN
-      select.innerHTML = `
-        <option value="fr">Français</option>
-        <option value="en">English</option>
-      `;
-      select.value = current;
-      console.log("[i18n] Valeur sélecteur:", current);
-      
-      select.addEventListener("change", () => {
-        console.log("[i18n] Changement de langue via sélecteur:", select.value);
-        loadLang(select.value);
-      });
-      
-      console.log("[i18n] Événement changement langue configuré");
-    } else {
-      console.warn("[i18n] Sélecteur de langue #langSelect non trouvé");
-    }
-    
-    await loadLang(current);
-    console.log("[i18n] ========== Initialisation terminée ==========");
-  } catch (err) {
-    console.error("[i18n] ========== ERREUR INITIALISATION ==========", err);
-  }
-}
-
-/**
- * Traduit une clé et remplace les placeholders comme {currency}
- * @param {string} key - Clé de traduction
- * @returns {string} - Texte traduit avec remplacements
- */
-export function t(key) {
-  try {
-    let text = dict[key] || key;
-    
-    // Remplacer {currency} par le symbole de devise
-    if (text.includes('{currency}')) {
-      const symbol = dict['currency.symbol'] || '€';
-      text = text.replace(/{currency}/g, symbol);
-      console.log("[i18n] Remplacement currency:", key, "→", text);
-    }
-    
-    return text;
-  } catch (err) {
-    console.error("[i18n] Erreur traduction clé:", key, err);
-    return key;
-  }
-}
-
-/**
- * Obtient le symbole de devise actuel
- * @returns {string} - Symbole (€, £, etc.)
- */
-export function getCurrencySymbol() {
-  try {
-    const symbol = dict['currency.symbol'] || '€';
-    console.log("[i18n] Symbole devise:", symbol);
-    return symbol;
-  } catch (err) {
-    console.error("[i18n] Erreur récupération symbole devise:", err);
-    return '€';
-  }
-}
-
-/**
- * Obtient la langue courante
- * @returns {string} - Code langue (fr, en)
- */
-export function getCurrentLang() {
-  return current;
-}
-
-/**
- * Change la langue
- * @param {string} lang - Code langue (fr, en)
- */
-export async function setLang(lang) {
-  console.log("[i18n] Changement de langue vers:", lang);
-  try {
-    if (SUPPORTED.includes(lang)) {
-      await loadLang(lang);
-    } else {
-      console.warn("[i18n] Langue non supportée:", lang);
-    }
-  } catch (err) {
-    console.error("[i18n] Erreur changement langue:", err);
-  }
-}
+export { t, setLang, getLang, apply, categoryLabel };
+export default { initI18n, t, setLang, getLang, apply, categoryLabel };
