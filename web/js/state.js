@@ -1,523 +1,369 @@
 // web/js/state.js
-// STOPADDICT – State & Domain Logic (v1, “zéro par défaut”)
-// Rôle : source de vérité unique pour l’état, les réglages, les agrégations et les coûts.
-// ❗ Contrat d’API attendu par les autres modules (counters/stats/charts/calendar/export) :
-//   - getDaily(date), addEntry(kind, delta, date), removeOneToday(kind)
-//   - getSettings(), setSettings(patch)
-//   - getActiveSegments(), setActiveSegment(key, isActive)
-//   - ymd(date), totalsHeader(range, anchorDate)
-//   - getRangeTotals(range, anchorDate)
-//   - calculateDayCost(dayRec, settings)
-//   - getEconomy(dayRec, settings)
-//   - setViewRange(range), getViewRange()
-//   - load(), save(), resetAll()
-//   - ensureToday()
-//
-// Stockage : localStorage (clé primaire SA_STATE_KEY). Schéma versionné.
+// STOPADDICT — Source de vérité (état, réglages, données journalières, agrégats)
+// - Persistance localStorage avec migration tolérante
+// - Catégories gérées : cigs, weed, beer, strong, liquor
+// - Sous-modules alcool : beer/strong/liquor activables indépendamment
+// - Toutes les sommes/agrégats EXCLUENT les catégories désactivées
+// - Évènements émis : 'sa:state-changed', 'sa:counts-updated'
+// API exportée (principales) :
+//   load(), save(), ymd(d)
+//   getSettings(), setSettings(partial)
+//   getViewRange(), setViewRange(range)
+//   getDaily(date), ensureToday()
+//   addCount(kind, delta, date?), setCount(kind, value, date?)
+//   totalsHeader(range, date), getRangeTotals(range, date)
+//   calculateDayCost(rec, settings?), getEconomy(rec, settings?)
 
-const SA_STATE_KEY = 'stopaddict_state_v1';
-const SA_STATE_KEY_LEGACY = 'stopaddict_state'; // lecture compat descendante si existant
+"use strict";
 
-// ---------- Utils temps & formats ----------
-function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+const STORE_KEY = "stopaddict_state_v3";
 
-// Format YYYY-MM-DD (local)
-export function ymd(d = new Date()) {
-  const dt = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  return `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
-}
-
-function startOfDay(d = new Date()) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-}
-
-function startOfWeekMonday(d = new Date()) {
-  const dt = startOfDay(d);
-  const day = (dt.getDay() + 6) % 7; // 0 = Monday
-  dt.setDate(dt.getDate() - day);
-  return dt;
-}
-
-function endOfWeekMonday(d = new Date()) {
-  const start = startOfWeekMonday(d);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  return end;
-}
-
-function startOfMonth(d = new Date()) {
-  return new Date(d.getFullYear(), d.getMonth(), 1);
-}
-
-function endOfMonth(d = new Date()) {
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0);
-}
-
-function startOfYear(d = new Date()) {
-  return new Date(d.getFullYear(), 0, 1);
-}
-
-function endOfYear(d = new Date()) {
-  return new Date(d.getFullYear(), 11, 31);
-}
-
-function fr(d) {
-  return d.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
-
-function monthNameFR(d) {
-  return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-}
-
-// ---------- Schéma par défaut (“zéro par défaut”) ----------
-const DEFAULT_STATE = {
-  schema_version: 1,
-  view: { range: 'day' }, // 'day' | 'week' | 'month' | 'year'
+// ---- État en mémoire --------------------------------------------------------
+let state = {
+  version: 3,
   ui: {
-    activeSegments: {
-      cigs: true,
-      weed: true,
-      beer: true,
-      strong: true,
-      liquor: true,
-    },
+    viewRange: "day", // 'day' | 'week' | 'month' | 'year'
   },
   settings: {
-    // Modules ON/OFF (zéro par défaut = tout OFF)
-    enable_cigs: false,
-    enable_weed: false,
-    enable_alcohol: false,
-    // Sous-modules alcool
-    enable_beer: false,
-    enable_strong: false,
-    enable_liquor: false,
-
-    // Prix unitaires (zéro par défaut)
-    prices: {
-      cig: 0,     // prix d’une cigarette
-      weed: 0,    // prix d’un joint
-      beer: 0,    // prix d’une bière
-      strong: 0,  // prix d’un alcool fort
-      liquor: 0,  // prix d’une liqueur
-    },
-
-    // Baselines / objectifs par jour (zéro par défaut)
-    baselines: {
-      cig: 0,
-      weed: 0,
-      beer: 0,
-      strong: 0,
-      liquor: 0,
-    },
+    // Modules
+    enable_cigs: true,
+    enable_weed: true,
+    enable_alcohol: true,
+    enable_beer: true,
+    enable_strong: true,
+    enable_liquor: true,
+    // Prix unitaire (affichage monnaie géré ailleurs)
+    prices: { cig: 0, weed: 0, beer: 0, strong: 0, liquor: 0 },
+    // Objectifs quotidiens (baselines)
+    baselines: { cig: 0, weed: 0, beer: 0, strong: 0, liquor: 0 },
+    // Dates clés (utilisation libre)
+    dates: { quit_all: "", quit_cigs: "", quit_weed: "", quit_alcohol: "" },
+    // Profil utilisateur
+    profile: { name: "" },
+    // Préférence langue (optionnelle, i18n.js gère le reste)
+    lang: null,
   },
-
-  // Historique par jour (clé: YYYY-MM-DD)
-  // Chaque enregistrement : { cigs, weed, beer, strong, liquor }
-  history: {},
+  // Données journalières: map 'YYYY-MM-DD' -> { cigs, weed, beer, strong, liquor, note? }
+  days: {}
 };
 
-// ---------- État en mémoire ----------
-let _state = null;
-
-// ---------- Persistence ----------
-export function load() {
-  if (_state) return _state;
-
-  let raw = localStorage.getItem(SA_STATE_KEY);
-  if (!raw) {
-    // Compat : ancienne clé si présente
-    raw = localStorage.getItem(SA_STATE_KEY_LEGACY);
+// ---- Utils ------------------------------------------------------------------
+export function ymd(d) {
+  const dt = d instanceof Date ? d : new Date(d);
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+function clampNonNeg(n) {
+  const v = Number.isFinite(+n) ? +n : 0;
+  return v < 0 ? 0 : v;
+}
+function deepMerge(target, patch) {
+  if (!patch || typeof patch !== "object") return target;
+  const out = Array.isArray(target) ? [...target] : { ...target };
+  for (const k of Object.keys(patch)) {
+    const pv = patch[k];
+    if (pv && typeof pv === "object" && !Array.isArray(pv)) {
+      out[k] = deepMerge(target?.[k] || {}, pv);
+    } else {
+      out[k] = pv;
+    }
   }
-
-  if (!raw) {
-    _state = structuredClone(DEFAULT_STATE);
-    save();
-    return _state;
-  }
-
-  try {
-    const parsed = JSON.parse(raw);
-    _state = migrateIfNeeded(parsed);
-  } catch (e) {
-    console.error('[state.load] corrupted JSON, resetting to defaults:', e);
-    _state = structuredClone(DEFAULT_STATE);
-  }
-
-  // Filet de sécurité pour les champs manquants
-  _state.schema_version ??= 1;
-  _state.view ??= { range: 'day' };
-  _state.ui ??= { activeSegments: structuredClone(DEFAULT_STATE.ui.activeSegments) };
-  _state.settings ??= structuredClone(DEFAULT_STATE.settings);
-  _state.history ??= {};
-
-  // Normaliser champs imbriqués
-  _state.settings.prices ??= structuredClone(DEFAULT_STATE.settings.prices);
-  _state.settings.baselines ??= structuredClone(DEFAULT_STATE.settings.baselines);
-
-  save();
-  return _state;
+  return out;
 }
 
-function migrateIfNeeded(s) {
-  // Réservé pour futures migrations de schéma
-  if (!s || typeof s !== 'object') return structuredClone(DEFAULT_STATE);
-  if (!('schema_version' in s)) s.schema_version = 1;
-
-  // V1 -> V1 (rien à faire pour l’instant)
-  return s;
+// ---- Persistance / migration -------------------------------------------------
+export function load() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      state = migrate(ensureShape(parsed));
+      return;
+    }
+    // Legacy keys (v1/v2) — migration douce si présentes
+    const legacy = localStorage.getItem("stopaddict_state_v2") || localStorage.getItem("stopaddict_state");
+    if (legacy) {
+      const parsed = JSON.parse(legacy);
+      state = migrate(ensureShape(parsed));
+      save(); // ré-écrire au nouveau format
+      return;
+    }
+  } catch (e) {
+    console.warn("[state.load] parse error, using defaults", e);
+  }
+  // first-time defaults already in `state`
+  ensureToday();
+  save();
 }
 
 export function save() {
-  if (!_state) return;
   try {
-    localStorage.setItem(SA_STATE_KEY, JSON.stringify(_state));
+    localStorage.setItem(STORE_KEY, JSON.stringify(state));
   } catch (e) {
-    console.error('[state.save] localStorage error:', e);
+    console.warn("[state.save] localStorage error", e);
   }
 }
 
-export function resetAll() {
-  _state = structuredClone(DEFAULT_STATE);
-  save();
-  return _state;
+function ensureShape(s) {
+  const out = { ...state, ...s };
+  out.version = Number.isFinite(+out.version) ? +out.version : 3;
+  out.ui = { ...state.ui, ...(s?.ui || {}) };
+  out.settings = deepMerge(state.settings, s?.settings || {});
+  out.days = s?.days && typeof s.days === "object" ? s.days : {};
+  // sanitize days
+  for (const k of Object.keys(out.days)) {
+    const d = out.days[k] || {};
+    out.days[k] = {
+      cigs: clampNonNeg(d.cigs),
+      weed: clampNonNeg(d.weed),
+      beer: clampNonNeg(d.beer),
+      strong: clampNonNeg(d.strong),
+      liquor: clampNonNeg(d.liquor),
+      note: typeof d.note === "string" ? d.note : "",
+    };
+  }
+  return out;
 }
 
-// ---------- Accès réglages ----------
+function migrate(s) {
+  // Ajouter champs manquants selon versions antérieures
+  s.settings.prices ??= { cig: 0, weed: 0, beer: 0, strong: 0, liquor: 0 };
+  s.settings.baselines ??= { cig: 0, weed: 0, beer: 0, strong: 0, liquor: 0 };
+  s.settings.dates ??= { quit_all: "", quit_cigs: "", quit_weed: "", quit_alcohol: "" };
+  s.settings.profile ??= { name: "" };
+  // Alcohol submodules
+  if (s.settings.enable_alcohol && (s.settings.enable_beer == null && s.settings.enable_strong == null && s.settings.enable_liquor == null)) {
+    s.settings.enable_beer = true;
+    s.settings.enable_strong = true;
+    s.settings.enable_liquor = true;
+  }
+  s.version = 3;
+  return s;
+}
+
+// ---- Sélecteurs & mutateurs de réglages -------------------------------------
 export function getSettings() {
-  return load().settings;
+  return state.settings;
 }
 
-export function setSettings(patch = {}) {
-  const st = load();
-  // Fusion superficielle + sous-objets attendus
-  st.settings = {
-    ...st.settings,
-    ...patch,
-    prices: { ...st.settings.prices, ...(patch.prices || {}) },
-    baselines: { ...st.settings.baselines, ...(patch.baselines || {}) },
-  };
-
-  // Cohérence des sous-modules alcool si enable_alcohol = false
-  if (st.settings.enable_alcohol === false) {
-    st.settings.enable_beer = false;
-    st.settings.enable_strong = false;
-    st.settings.enable_liquor = false;
-  }
-
+export function setSettings(partial) {
+  state.settings = deepMerge(state.settings, partial || {});
   save();
-  return st.settings;
+  try { document.dispatchEvent(new CustomEvent("sa:state-changed", { detail: { source: "settings" } })); } catch {}
 }
 
-// ---------- Segments actifs (affichage des séries/graphes) ----------
-export function getActiveSegments() {
-  return load().ui.activeSegments;
-}
-
-export function setActiveSegment(key, isActive) {
-  const st = load();
-  if (!(key in st.ui.activeSegments)) return st.ui.activeSegments;
-  st.ui.activeSegments[key] = !!isActive;
-  save();
-  return st.ui.activeSegments;
-}
-
-// ---------- Vue (jour/semaine/mois/année) ----------
-export function setViewRange(range) {
-  const ok = ['day', 'week', 'month', 'year'].includes(range);
-  if (!ok) return getViewRange();
-  const st = load();
-  st.view.range = range;
-  save();
-  return st.view.range;
-}
-
+// ---- Vue Stats (day/week/month/year) ----------------------------------------
 export function getViewRange() {
-  return load().view.range;
+  return state.ui.viewRange || "day";
+}
+export function setViewRange(range) {
+  if (!["day", "week", "month", "year"].includes(range)) return;
+  state.ui.viewRange = range;
+  save();
+  try { document.dispatchEvent(new CustomEvent("sa:state-changed", { detail: { source: "viewRange" } })); } catch {}
 }
 
-// ---------- Historique (lecture/écriture) ----------
-function defaultDayRec() {
-  return { cigs: 0, weed: 0, beer: 0, strong: 0, liquor: 0 };
+// ---- Données journalières ----------------------------------------------------
+export function getDaily(date) {
+  const key = ymd(date || new Date());
+  if (!state.days[key]) {
+    state.days[key] = { cigs: 0, weed: 0, beer: 0, strong: 0, liquor: 0, note: "" };
+    save();
+  }
+  return state.days[key];
 }
 
 export function ensureToday() {
-  const st = load();
-  const key = ymd(new Date());
-  if (!st.history[key]) {
-    st.history[key] = defaultDayRec();
-    save();
-  }
-  return key;
+  getDaily(new Date());
 }
 
-export function getDaily(date = new Date()) {
-  const st = load();
-  const key = ymd(date);
-  if (!st.history[key]) st.history[key] = defaultDayRec();
-  return st.history[key];
-}
-
-// kind ∈ 'cigs' | 'weed' | 'beer' | 'strong' | 'liquor'
-export function addEntry(kind, delta = 1, date = new Date()) {
-  const st = load();
-  const key = ymd(date);
-  if (!st.history[key]) st.history[key] = defaultDayRec();
-  const rec = st.history[key];
-
-  // Respect des modules/sous-modules : si OFF → on ignore l’ajout
-  if (!isKindEnabled(kind, st.settings)) return rec;
-
-  const next = (rec[kind] || 0) + (Number(delta) || 0);
-  rec[kind] = Math.max(0, next);
+export function addCount(kind, delta = 1, date = new Date()) {
+  if (!["cigs", "weed", "beer", "strong", "liquor"].includes(kind)) return;
+  const rec = getDaily(date);
+  rec[kind] = clampNonNeg((+rec[kind] || 0) + (+delta || 0));
   save();
-  return rec;
+  try { document.dispatchEvent(new CustomEvent("sa:counts-updated", { detail: { date: ymd(date), kind, value: rec[kind] } })); } catch {}
 }
 
-export function removeOneToday(kind) {
-  return addEntry(kind, -1, new Date());
+export function setCount(kind, value, date = new Date()) {
+  if (!["cigs", "weed", "beer", "strong", "liquor"].includes(kind)) return;
+  const rec = getDaily(date);
+  rec[kind] = clampNonNeg(value);
+  save();
+  try { document.dispatchEvent(new CustomEvent("sa:counts-updated", { detail: { date: ymd(date), kind, value: rec[kind] } })); } catch {}
 }
 
-// ---------- Coûts & économies ----------
-function priceForKind(kind, settings) {
-  const p = settings.prices || {};
-  switch (kind) {
-    case 'cigs': return +p.cig || 0;
-    case 'weed': return +p.weed || 0;
-    case 'beer': return +p.beer || 0;
-    case 'strong': return +p.strong || 0;
-    case 'liquor': return +p.liquor || 0;
-    default: return 0;
-  }
+// ---- Catégories actives / filtrage ------------------------------------------
+function enabledKinds(settings = state.settings) {
+  const out = [];
+  if (settings.enable_cigs) out.push("cigs");
+  if (settings.enable_weed) out.push("weed");
+  if (settings.enable_alcohol && settings.enable_beer) out.push("beer");
+  if (settings.enable_alcohol && settings.enable_strong) out.push("strong");
+  if (settings.enable_alcohol && settings.enable_liquor) out.push("liquor");
+  return out;
 }
 
-function baselineForKind(kind, settings) {
-  const b = settings.baselines || {};
-  switch (kind) {
-    case 'cigs': return +b.cig || 0;
-    case 'weed': return +b.weed || 0;
-    case 'beer': return +b.beer || 0;
-    case 'strong': return +b.strong || 0;
-    case 'liquor': return +b.liquor || 0;
-    default: return 0;
-  }
-}
-
-function isKindEnabled(kind, settings) {
-  const s = settings || getSettings();
-  switch (kind) {
-    case 'cigs': return !!s.enable_cigs;
-    case 'weed': return !!s.enable_weed;
-    case 'beer': return !!s.enable_alcohol && !!s.enable_beer;
-    case 'strong': return !!s.enable_alcohol && !!s.enable_strong;
-    case 'liquor': return !!s.enable_alcohol && !!s.enable_liquor;
-    default: return false;
-  }
-}
-
-// Calcule le coût total d’une journée en tenant compte des modules actifs
-export function calculateDayCost(dayRec, settings = getSettings()) {
-  if (!dayRec) return 0;
-  const kinds = ['cigs', 'weed', 'beer', 'strong', 'liquor'];
+// ---- Coûts & économies -------------------------------------------------------
+export function calculateDayCost(rec, settings = state.settings) {
+  const prices = settings.prices || {};
   let cost = 0;
-  for (const k of kinds) {
-    if (!isKindEnabled(k, settings)) continue; // OFF = exclu partout
-    const qty = +dayRec[k] || 0;
-    const unit = priceForKind(k, settings);
-    cost += qty * unit;
+  for (const k of enabledKinds(settings)) {
+    const unit =
+      k === "cigs" ? +prices.cig :
+      k === "weed" ? +prices.weed :
+      k === "beer" ? +prices.beer :
+      k === "strong" ? +prices.strong :
+      k === "liquor" ? +prices.liquor : 0;
+    cost += (clampNonNeg(rec[k]) * (Number.isFinite(unit) ? unit : 0));
   }
-  return +cost.toFixed(2);
+  return +cost || 0;
 }
 
-// Économies du jour : max(0, (baseline - qty) * prix) sommées sur toutes les catégories actives
-export function getEconomy(dayRec, settings = getSettings()) {
-  if (!dayRec) return 0;
-  const kinds = ['cigs', 'weed', 'beer', 'strong', 'liquor'];
+export function getEconomy(rec, settings = state.settings) {
+  // économie = max(0, (baseline - conso réelle)) * prix
+  const base = settings.baselines || {};
+  const prices = settings.prices || {};
   let eco = 0;
-  for (const k of kinds) {
-    if (!isKindEnabled(k, settings)) continue;
-    const qty = +dayRec[k] || 0;
-    const base = baselineForKind(k, settings);
-    const unit = priceForKind(k, settings);
-    const delta = Math.max(0, base - qty);
-    eco += delta * unit;
+  for (const k of enabledKinds(settings)) {
+    const b =
+      k === "cigs" ? +base.cig :
+      k === "weed" ? +base.weed :
+      k === "beer" ? +base.beer :
+      k === "strong" ? +base.strong :
+      k === "liquor" ? +base.liquor : 0;
+
+    const unit =
+      k === "cigs" ? +prices.cig :
+      k === "weed" ? +prices.weed :
+      k === "beer" ? +prices.beer :
+      k === "strong" ? +prices.strong :
+      k === "liquor" ? +prices.liquor : 0;
+
+    const diff = Math.max(0, (Number.isFinite(b) ? b : 0) - clampNonNeg(rec[k]));
+    eco += diff * (Number.isFinite(unit) ? unit : 0);
   }
-  return +eco.toFixed(2);
+  return +eco || 0;
 }
 
-// ---------- Agrégations pour Stats/Charts ----------
-function eachDay(from, to, cb) {
-  const cur = new Date(from);
-  while (cur <= to) {
-    cb(new Date(cur));
-    cur.setDate(cur.getDate() + 1);
+// ---- Périodes & agrégats -----------------------------------------------------
+function startOfWeekFR(d) {
+  const dt = new Date(d);
+  const day = (dt.getDay() + 6) % 7; // Lundi=0 ... Dimanche=6
+  dt.setDate(dt.getDate() - day);
+  dt.setHours(0, 0, 0, 0);
+  return dt;
+}
+function endOfWeekFR(d) {
+  const start = startOfWeekFR(d);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+  return end;
+}
+function startOfMonth(d) {
+  const dt = new Date(d);
+  return new Date(dt.getFullYear(), dt.getMonth(), 1);
+}
+function endOfMonth(d) {
+  const dt = new Date(d);
+  return new Date(dt.getFullYear(), dt.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+function startOfYear(d) {
+  const dt = new Date(d);
+  return new Date(dt.getFullYear(), 0, 1);
+}
+function endOfYear(d) {
+  const dt = new Date(d);
+  return new Date(dt.getFullYear(), 11, 31, 23, 59, 59, 999);
+}
+
+function dateRange(range, refDate = new Date()) {
+  const d = refDate instanceof Date ? refDate : new Date(refDate);
+  let start, end;
+  if (range === "day") {
+    start = new Date(d); start.setHours(0, 0, 0, 0);
+    end = new Date(d);   end.setHours(23, 59, 59, 999);
+  } else if (range === "week") {
+    start = startOfWeekFR(d); end = endOfWeekFR(d);
+  } else if (range === "month") {
+    start = startOfMonth(d);  end = endOfMonth(d);
+  } else {
+    start = startOfYear(d);   end = endOfYear(d);
   }
+  return { start, end };
 }
 
-function monthKey(d) {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`; // YYYY-MM
+export function totalsHeader(range, refDate = new Date()) {
+  const { start, end } = dateRange(range, refDate);
+  const fmt = (dt) => dt.toLocaleDateString?.() || ymd(dt);
+  if (range === "day") return `Bilan Jour — ${fmt(refDate)}`;
+  if (range === "week") return `Bilan Semaine — ${fmt(start)} → ${fmt(end)}`;
+  if (range === "month") return `Bilan Mois — ${refDate.getFullYear()}-${String(refDate.getMonth() + 1).padStart(2, "0")}`;
+  return `Bilan Année — ${refDate.getFullYear()}`;
 }
 
-// Retourne labels + séries par catégorie + totals
-// range: 'day' | 'week' | 'month' | 'year'
-export function getRangeTotals(range = getViewRange(), anchorDate = new Date()) {
-  const st = load();
-  const settings = st.settings;
-  const kinds = ['cigs', 'weed', 'beer', 'strong', 'liquor'];
+export function getRangeTotals(range = "day", refDate = new Date()) {
+  const kinds = enabledKinds();
+  const { start, end } = dateRange(range, refDate);
 
-  const result = {
+  const labels = [];
+  const series = { cigs: [], weed: [], beer: [], strong: [], liquor: [] };
+  const sum = { cigs: 0, weed: 0, beer: 0, strong: 0, liquor: 0 };
+  let totalCost = 0;
+  let totalEco = 0;
+
+  // Itération jour par jour dans la plage (sans créer de jours manquants)
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    const k = ymd(cursor);
+    const rec = state.days[k];
+    const dayObj = rec || { cigs: 0, weed: 0, beer: 0, strong: 0, liquor: 0 };
+
+    labels.push(k);
+
+    for (const cat of ["cigs", "weed", "beer", "strong", "liquor"]) {
+      const v = clampNonNeg(dayObj[cat]);
+      series[cat].push(v);
+      if (kinds.includes(cat)) sum[cat] += v;
+    }
+
+    // Coût/Éco (seulement catégories actives)
+    if (kinds.length) {
+      totalCost += calculateDayCost(dayObj, state.settings);
+      totalEco  += getEconomy(dayObj, state.settings);
+    }
+
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  // Filtrer les séries aux catégories actives (les autres restent pour compat charts mais on peut ignorer côté rendu)
+  const filteredSeries = {};
+  for (const cat of kinds) filteredSeries[cat] = series[cat];
+
+  return {
     range,
-    labels: [],
-    series: { cigs: [], weed: [], beer: [], strong: [], liquor: [], cost: [] },
-    totalCount: 0,
-    totalCost: 0,
-    totalEconomy: 0,
+    start,
+    end,
+    labels,             // ex: ['2025-10-25', ...]
+    series: filteredSeries,
+    sum,                // sommes (seulement actives)
+    cost: +totalCost || 0,
+    economy: +totalEco || 0,
   };
-
-  if (range === 'day') {
-    const key = ymd(anchorDate);
-    const rec = st.history[key] || defaultDayRec();
-    for (const k of kinds) {
-      const qty = isKindEnabled(k, settings) ? (+rec[k] || 0) : 0;
-      result.series[k].push(qty);
-      result.totalCount += qty;
-    }
-    const c = calculateDayCost(rec, settings);
-    result.series.cost.push(c);
-    result.totalCost += c;
-    result.totalEconomy += getEconomy(rec, settings);
-    result.labels.push(fr(startOfDay(anchorDate)));
-    return result;
-  }
-
-  if (range === 'week') {
-    const from = startOfWeekMonday(anchorDate);
-    const to = endOfWeekMonday(anchorDate);
-    eachDay(from, to, (d) => {
-      const key = ymd(d);
-      const rec = st.history[key] || defaultDayRec();
-      let dayCost = 0;
-      for (const k of kinds) {
-        const qty = isKindEnabled(k, settings) ? (+rec[k] || 0) : 0;
-        result.series[k].push(qty);
-        result.totalCount += qty;
-      }
-      dayCost = calculateDayCost(rec, settings);
-      result.series.cost.push(dayCost);
-      result.totalCost += dayCost;
-      result.totalEconomy += getEconomy(rec, settings);
-      result.labels.push(fr(d));
-    });
-    return result;
-  }
-
-  if (range === 'month') {
-    const from = startOfMonth(anchorDate);
-    const to = endOfMonth(anchorDate);
-    eachDay(from, to, (d) => {
-      const key = ymd(d);
-      const rec = st.history[key] || defaultDayRec();
-      let dayCost = 0;
-      for (const k of kinds) {
-        const qty = isKindEnabled(k, settings) ? (+rec[k] || 0) : 0;
-        result.series[k].push(qty);
-        result.totalCount += qty;
-      }
-      dayCost = calculateDayCost(rec, settings);
-      result.series.cost.push(dayCost);
-      result.totalCost += dayCost;
-      result.totalEconomy += getEconomy(rec, settings);
-      result.labels.push(pad2(d.getDate())); // 01..31
-    });
-    return result;
-  }
-
-  if (range === 'year') {
-    // Agrégation par mois (12 points)
-    const yearStart = startOfYear(anchorDate);
-    const yearEnd = endOfYear(anchorDate);
-
-    // Préparer 12 seaux mensuels
-    const bucket = {};
-    for (let m = 0; m < 12; m++) {
-      const d = new Date(anchorDate.getFullYear(), m, 1);
-      const mk = monthKey(d);
-      bucket[mk] = { cigs: 0, weed: 0, beer: 0, strong: 0, liquor: 0, cost: 0, eco: 0 };
-    }
-
-    // Balayer tous les jours de l’année
-    eachDay(yearStart, yearEnd, (d) => {
-      const key = ymd(d);
-      const mk = monthKey(d);
-      const rec = st.history[key] || defaultDayRec();
-      for (const k of kinds) {
-        const qty = isKindEnabled(k, settings) ? (+rec[k] || 0) : 0;
-        bucket[mk][k] += qty;
-      }
-      bucket[mk].cost += calculateDayCost(rec, settings);
-      bucket[mk].eco += getEconomy(rec, settings);
-    });
-
-    // Sortie triée mois 01..12
-    for (let m = 0; m < 12; m++) {
-      const d = new Date(anchorDate.getFullYear(), m, 1);
-      const mk = monthKey(d);
-      const b = bucket[mk];
-      result.labels.push(d.toLocaleDateString(undefined, { month: 'short' })); // janv., févr., ...
-      for (const k of kinds) {
-        result.series[k].push(b[k]);
-        result.totalCount += b[k];
-      }
-      result.series.cost.push(+b.cost.toFixed(2));
-      result.totalCost += b.cost;
-      result.totalEconomy += b.eco;
-    }
-
-    result.totalCost = +result.totalCost.toFixed(2);
-    result.totalEconomy = +result.totalEconomy.toFixed(2);
-    return result;
-  }
-
-  // Par défaut: day
-  return getRangeTotals('day', anchorDate);
 }
 
-// ---------- En-tête titre Stats ----------
-export function totalsHeader(range = getViewRange(), anchorDate = new Date()) {
-  if (range === 'day') {
-    const d = startOfDay(anchorDate);
-    return `Bilan Jour — ${fr(d)}`;
-  }
-  if (range === 'week') {
-    const from = startOfWeekMonday(anchorDate);
-    const to = endOfWeekMonday(anchorDate);
-    return `Bilan Semaine — du ${fr(from)} au ${fr(to)}`;
-  }
-  if (range === 'month') {
-    return `Bilan Mois — ${monthNameFR(anchorDate)}`;
-  }
-  if (range === 'year') {
-    return `Bilan Année — ${anchorDate.getFullYear()}`;
-  }
-  return `Bilan`;
+// ---- Export “brut” pour export.js (si besoin) --------------------------------
+export function getState() { return state; }
+export function replaceState(newState) {
+  // Utilisé par import JSON — attend un objet complet avec .days / .settings
+  if (!newState || typeof newState !== "object") return;
+  state = migrate(ensureShape(newState));
+  save();
+  try { document.dispatchEvent(new CustomEvent("sa:state-changed", { detail: { source: "import" } })); } catch {}
 }
 
-// ---------- Export défaut facultatif (confort d’import côté modules) ----------
-const stateAPI = {
-  ymd,
-  load, save, resetAll,
-  getSettings, setSettings,
-  getActiveSegments, setActiveSegment,
-  getViewRange, setViewRange,
-  ensureToday, getDaily,
-  addEntry, removeOneToday,
-  calculateDayCost, getEconomy,
-  getRangeTotals, totalsHeader,
-};
-
-export default stateAPI;
-
-// Optionnel : exposer sur window pour debug manuel
-try {
-  // eslint-disable-next-line no-undef
-  window.SA = stateAPI;
-} catch {}
+// ---- Export par défaut -------------------------------------------------------
+export default state;
