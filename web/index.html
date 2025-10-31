@@ -4,33 +4,42 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>StopAddict</title>
+
+  <!-- (Optionnel) ton CSS si présent dans /web/css -->
+  <!-- <link rel="stylesheet" href="./css/app.css"> -->
+
   <style>
-    /* Mini styles pour vérifier le fonctionnement (tu pourras remettre ton CSS ensuite) */
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#0b1220;color:#e5e7eb}
-    header,nav,main,section{width:100%}
-    header{background:#111a2e;border-bottom:1px solid #1a2642;padding:.75rem 1rem}
-    .topbar{display:flex;gap:1rem;flex-wrap:wrap;font-size:.95rem}
-    .topbar span{opacity:.95}
-    nav{display:flex;gap:.5rem;flex-wrap:wrap;padding:.5rem 1rem;background:#0e1729;border-bottom:1px solid #1a2642}
-    nav button{background:#1a2642;color:#e5e7eb;border:0;padding:.5rem .75rem;border-radius:.5rem;cursor:pointer}
-    nav button.actif{background:#3b82f6}
-    .wrap{padding:1rem}
-    .row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
-    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
-    .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem}
-    .card{background:#111a2e;border:1px solid #1a2642;border-radius:.75rem;padding:1rem;margin:0 0 1rem 0}
+    /* Styles légers pour valider le fonctionnement (tu peux remettre ton CSS) */
+    :root{--bg:#0b1220;--panel:#0e1729;--card:#111a2e;--grid:#1a2642;--text:#e5e7eb;--muted:#9ca3af;--blue:#3b82f6}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    header{background:var(--card);border-bottom:1px solid var(--grid);padding:.75rem 1rem}
+    .topbar{display:flex;flex-wrap:wrap;gap:1rem}
+    nav{display:flex;flex-wrap:wrap;gap:.5rem;padding:.5rem 1rem;background:var(--panel);border-bottom:1px solid var(--grid)}
+    nav button{background:#1a2642;border:1px solid #243353;color:var(--text);padding:.5rem .75rem;border-radius:.5rem;cursor:pointer}
+    nav button.actif{background:var(--blue)}
+    main{padding:1rem;max-width:1100px;margin:0 auto}
+    .card{background:var(--card);border:1px solid var(--grid);border-radius:.75rem;padding:1rem;margin:0 0 1rem}
     .title{font-weight:700;margin-bottom:.5rem}
-    .muted{opacity:.8;font-size:.9rem}
-    .btn{background:#1a2642;border:1px solid #243353;color:#e5e7eb;border-radius:.5rem;padding:.5rem .75rem;cursor:pointer}
+    .muted{color:var(--muted)}
+    .row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+    .grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem}
+    .grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
+    .grid-5{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1rem}
+    .btn{background:#1a2642;border:1px solid #243353;color:var(--text);border-radius:.5rem;padding:.45rem .7rem;cursor:pointer}
+    .switch{display:inline-flex;align-items:center;gap:.4rem}
+    .kpi{display:flex;flex-wrap:wrap;gap:1rem;font-size:.95rem;opacity:.95}
+    .kpi b{font-weight:700}
+    .mini{font-size:.9rem}
+    canvas{max-width:100%;background:var(--panel);border:1px solid var(--grid);border-radius:.5rem}
     #debug-console{display:none;position:fixed;left:0;right:0;bottom:0;max-height:35vh;overflow:auto;background:#0a0f1d;border-top:1px solid #1a2642;padding:.5rem;font:12px/1.4 ui-monospace,Consolas,Monaco,monospace;color:#9ca3af}
-    canvas{max-width:100%;background:#0e1729;border:1px solid #1a2642;border-radius:.5rem}
   </style>
 </head>
 <body>
 
-  <!-- Bandeau haut (résumé du jour) -->
+  <!-- Bandeau haut : résumé du jour -->
   <header>
-    <div class="topbar">
+    <div class="kpi">
       <span data-i18n="today.title">Aujourd’hui</span> |
       <span><b data-i18n="counts.cigs">Clopes</b> : <span id="bar-clopes">0</span></span>
       <span><b data-i18n="counts.weed">Joints</b> : <span id="bar-joints">0</span></span>
@@ -42,58 +51,93 @@
 
   <!-- Navigation -->
   <nav>
-    <button id="nav-accueil"     data-target="ecran-accueil"     class="actif" data-i18n="nav.home">Accueil</button>
-    <button id="nav-stats"       data-target="ecran-stats"       data-i18n="nav.stats">Stats</button>
-    <button id="nav-calendrier"  data-target="ecran-calendrier"  data-i18n="nav.calendar">Calendrier</button>
-    <button id="nav-habitudes"   data-target="ecran-habitudes"   data-i18n="nav.habits">Habitudes</button>
-    <button id="nav-params"      data-target="ecran-params"      data-i18n="nav.settings">Réglages</button>
+    <button id="nav-accueil"    data-target="ecran-accueil"    class="actif" data-i18n="nav.home">Accueil</button>
+    <button id="nav-stats"      data-target="ecran-stats"      data-i18n="nav.stats">Stats</button>
+    <button id="nav-calendrier" data-target="ecran-calendrier" data-i18n="nav.calendar">Calendrier</button>
+    <button id="nav-habitudes"  data-target="ecran-habitudes"  data-i18n="nav.habits">Habitudes</button>
+    <button id="nav-params"     data-target="ecran-params"     data-i18n="nav.settings">Réglages</button>
   </nav>
 
-  <main class="wrap">
+  <main>
     <!-- ACCUEIL -->
     <section id="ecran-accueil" style="display:block">
       <div class="card">
         <div class="title" data-i18n="today.title">Aujourd’hui</div>
-        <!-- Hôte pour les conseils -->
-        <div id="tips-box" class="muted" data-i18n="tips.title">Conseils</div>
+        <div id="tips-box" class="mini">
+          <!-- tips.js remplira avec des conseils personnalisés -->
+        </div>
       </div>
 
-      <!-- Blocs d’action simples (+/−). Les modules peuvent s’y accrocher. -->
+      <!-- 5 catégories : +/− et interrupteurs “Activer” (IDs attendus par counters.js) -->
       <div class="grid-3">
         <div class="card">
-          <div class="title" data-i18n="cat.cigs">Cigarettes</div>
+          <div class="row" style="justify-content:space-between">
+            <div class="title" data-i18n="cat.cigs">Cigarettes</div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-cigs" checked>
+              <span class="mini" data-i18n="activate">Activer</span>
+            </label>
+          </div>
           <div class="row">
             <button class="btn" id="btn-cigs-minus" data-kind="cigs" data-delta="-1">−</button>
             <button class="btn" id="btn-cigs-plus"  data-kind="cigs" data-delta="+1">+</button>
             <span class="muted">(<span id="count-cigs">0</span>)</span>
           </div>
         </div>
+
         <div class="card">
-          <div class="title" data-i18n="cat.weed">Joints</div>
+          <div class="row" style="justify-content:space-between">
+            <div class="title" data-i18n="cat.weed">Joints</div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-weed" checked>
+              <span class="mini" data-i18n="activate">Activer</span>
+            </label>
+          </div>
           <div class="row">
             <button class="btn" id="btn-weed-minus" data-kind="weed" data-delta="-1">−</button>
             <button class="btn" id="btn-weed-plus"  data-kind="weed" data-delta="+1">+</button>
             <span class="muted">(<span id="count-weed">0</span>)</span>
           </div>
         </div>
+
         <div class="card">
-          <div class="title" data-i18n="cat.beer">Bière</div>
+          <div class="row" style="justify-content:space-between">
+            <div class="title" data-i18n="cat.beer">Bière</div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-beer" checked>
+              <span class="mini" data-i18n="activate">Activer</span>
+            </label>
+          </div>
           <div class="row">
             <button class="btn" id="btn-beer-minus" data-kind="beer" data-delta="-1">−</button>
             <button class="btn" id="btn-beer-plus"  data-kind="beer" data-delta="+1">+</button>
             <span class="muted">(<span id="count-beer">0</span>)</span>
           </div>
         </div>
+
         <div class="card">
-          <div class="title" data-i18n="cat.strong">Alcool fort</div>
+          <div class="row" style="justify-content:space-between">
+            <div class="title" data-i18n="cat.strong">Alcool fort</div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-strong" checked>
+              <span class="mini" data-i18n="activate">Activer</span>
+            </label>
+          </div>
           <div class="row">
             <button class="btn" id="btn-strong-minus" data-kind="strong" data-delta="-1">−</button>
             <button class="btn" id="btn-strong-plus"  data-kind="strong" data-delta="+1">+</button>
             <span class="muted">(<span id="count-strong">0</span>)</span>
           </div>
         </div>
+
         <div class="card">
-          <div class="title" data-i18n="cat.liquor">Liqueur</div>
+          <div class="row" style="justify-content:space-between">
+            <div class="title" data-i18n="cat.liquor">Liqueur</div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-liquor" checked>
+              <span class="mini" data-i18n="activate">Activer</span>
+            </label>
+          </div>
           <div class="row">
             <button class="btn" id="btn-liquor-minus" data-kind="liquor" data-delta="-1">−</button>
             <button class="btn" id="btn-liquor-plus"  data-kind="liquor" data-delta="+1">+</button>
@@ -115,7 +159,7 @@
             <button class="btn" id="btn-range-year"  data-range="year"  data-i18n="range.year">Année</button>
           </div>
         </div>
-        <canvas id="chart-main" data-exportable-chart width="900" height="360"></canvas>
+        <canvas id="chart-main" data-exportable-chart width="1024" height="380"></canvas>
       </div>
 
       <div class="card">
@@ -154,8 +198,11 @@
     </section>
   </main>
 
-  <!-- Console debug intégrée (F12 si besoin, sinon Ctrl+Shift+D selon ton module) -->
+  <!-- Console debug (désactivée visuellement par défaut) -->
   <div id="debug-console"></div>
+
+  <!-- Chart.js (nécessaire pour charts.js) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <!-- App (ES modules) -->
   <script type="module" src="./js/app.js"></script>
