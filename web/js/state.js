@@ -1,231 +1,213 @@
 /* web/js/state.js
-   État central + persistance + helpers communs (ES module)
-
-   Exemples d'utilisation (optionnels) :
-     import { DefaultState, loadState, saveState, todayKey } from './state.js';
-     let S = loadState();
-     S.meta.ver = 'x.y.z';
-     saveState(S);
+   État centralisé, logique métier, calculs, bus événements
+   Exports: getters/setters, calculs, bus, agrégations.
 */
 
-/* =========================
-   Constantes stockage
-   ========================= */
-export const LS_KEY = "sa_state_v1";
-export const LS_AGE = "sa_age_ack_v1";
-
-/* =========================
-   Helpers génériques
-   ========================= */
-export const $ = (sel) => document.querySelector(sel);
-export const $$ = (sel) => document.querySelectorAll(sel);
-
-export function todayKey(d = new Date()) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+// -------------------- Bus d'événements --------------------
+const listeners = new Map();
+export function on(evt, fn) {
+  if (!listeners.has(evt)) listeners.set(evt, []);
+  listeners.get(evt).push(fn);
+}
+export function off(evt, fn) {
+  const arr = listeners.get(evt) || [];
+  listeners.set(evt, arr.filter(f => f !== fn));
+}
+export function emit(evt, data) {
+  (listeners.get(evt) || []).forEach(fn => {
+    try { fn(data); } catch (e) { console.warn("[emit]", evt, e); }
+  });
 }
 
-export function fmtMoney(val, cur) {
-  const n = Number(val || 0);
-  const s = cur?.symbol ?? "€";
-  const before = !!cur?.before;
-  const fixed = n.toFixed(2);
-  return before ? `${s}${fixed}` : `${fixed} ${s}`;
-}
+// -------------------- Keys / storage --------------------
+const K_SETTINGS = "sa.settings.v1";
+const K_HISTORY  = "sa.history.v1";
+const K_UNDO     = "sa.undo.v1";
 
-export function download(filename, text, type = "text/plain") {
-  const blob = new Blob([text], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
+// -------------------- Defaults --------------------
+const DEFAULT_SETTINGS = {
+  currency: "€",
+  lang: "fr",
+  modules: { 
+    cigs: false, 
+    weed: false, 
+    alcohol: false,
+    // Sous-modules alcool
+    beer: false,
+    strong: false,
+    liquor: false
+  },
+  prices: { 
+    cigs: 0, 
+    weed: 0, 
+    beer: 0, 
+    strong: 0, 
+    liquor: 0 
+  },
+  milestones: {
+    cigs:    { reduce:"", stop:"", zero:"" },
+    weed:    { reduce:"", stop:"", zero:"" },
+    alcohol: { reduce:"", stop:"", zero:"" },
+  }
+};
 
-/* =========================
-   Schéma d'état par défaut
-   (aligné avec app.js)
-   ========================= */
-export function DefaultState() {
-  return {
-    meta: { ver: "2.3.1-like", created: Date.now() },
-    profile: { name: "", language: "fr" },
-    currency: { symbol: "€", before: true },
+// history schema:
+// { [ymd]: { c: number, j: number, a: { beer:number, strong:number, liquor:number } } }
+let settings = loadJSON(K_SETTINGS, DEFAULT_SETTINGS);
+let history  = loadJSON(K_HISTORY, {});
+let undoStack = loadJSON(K_UNDO, []);
 
-    modules: {
-      cigs: true,
-      joints: true,
-      beer: true,
-      hard: true,
-      liqueur: true,
-      alcoholGlobal: true, // agrégat informatif
-    },
-
-    // Prix unitaires simples (fallback)
-    prices: {
-      cigarette: 0,
-      joint: 0,
-      beer: 0,
-      hard: 0,
-      liqueur: 0,
-    },
-
-    // Variantes détaillées (stockées ; le calcul unitaire peut s’y appuyer)
-    variants: {
-      classic: { use: false, packPrice: 0, cigsPerPack: 20 },
-      rolled: {
-        use: false,
-        tobacco30gPrice: 0, cigsPer30g: 0,
-        smallLeavesPrice: 0, smallLeavesCount: 0,
-        filtersPrice: 0,     filtersCount: 0,
-        useFilter: false,
-      },
-      tubed: {
-        use: false,
-        cigsPer30g: 0,
-        tubesPrice: 0, tubesCount: 0,
-        useFilter: false,
-      },
-      cannabis: {
-        use: false,
-        gramPrice: 0, gramsPerJoint: 0,
-        bigLeafPrice: 0, bigLeafCount: 0,
-        useFilter: false,
-      },
-      alcohol: {
-        beer:    { enabled: true, dosePrice: undefined, unitPrice: 0, unitLabel: "33 cl" },
-        hard:    { enabled: true, dosePrice: 0, doseUnit: "4 cl" },
-        liqueur: { enabled: true, dosePrice: 0, doseUnit: "6 cl" },
-      },
-    },
-
-    // Objectifs & limites
-    goals:  { cigs: 0, joints: 0, beer: 0, hard: 0, liqueur: 0 },
-    limits: { cigs: 0, joints: 0, beer: 0, hard: 0, liqueur: 0 },
-
-    // Dates clés (réduction / objectif / plus censé)
-    dates: {
-      stopGlobal: "", stopAlcohol: "", stopCigs: "", stopJoints: "",
-      reduceCigs: "", quitCigsObj: "", noMoreCigs: "",
-      reduceJoints: "", quitJointsObj: "", noMoreJoints: "",
-      reduceAlcohol: "", quitAlcoholObj: "", noMoreAlcohol: "",
-    },
-
-    // Données agrégées par jour
-    history: {
-      // "YYYY-MM-DD": { cigs, joints, beer, hard, liqueur, cost, saved }
-    },
-
-    // Miroir du jour courant
-    today: {
-      date: todayKey(),
-      counters: { cigs: 0, joints: 0, beer: 0, hard: 0, liqueur: 0 },
-      active:   { cigs: true, joints: true, beer: true, hard: true, liqueur: true },
-    },
-
-    // Journal debug minimal
-    debug: { logs: [] },
-  };
-}
-
-/* =========================
-   Migration douce (merge)
-   ========================= */
-export function migrateState(obj) {
-  // Merge récursif simple pour garantir la présence des nouvelles clés.
-  const D = DefaultState();
-
-  return {
-    ...D,
-    ...obj,
-    profile:  { ...D.profile,  ...(obj?.profile  || {}) },
-    currency: { ...D.currency, ...(obj?.currency || {}) },
-    modules:  { ...D.modules,  ...(obj?.modules  || {}) },
-    prices:   { ...D.prices,   ...(obj?.prices   || {}) },
-    variants: {
-      ...D.variants,
-      ...(obj?.variants || {}),
-      classic:  { ...D.variants.classic,  ...(obj?.variants?.classic  || {}) },
-      rolled:   { ...D.variants.rolled,   ...(obj?.variants?.rolled   || {}) },
-      tubed:    { ...D.variants.tubed,    ...(obj?.variants?.tubed    || {}) },
-      cannabis: { ...D.variants.cannabis, ...(obj?.variants?.cannabis || {}) },
-      alcohol:  {
-        ...D.variants.alcohol,
-        ...(obj?.variants?.alcohol || {}),
-        beer:    { ...D.variants.alcohol.beer,    ...(obj?.variants?.alcohol?.beer    || {}) },
-        hard:    { ...D.variants.alcohol.hard,    ...(obj?.variants?.alcohol?.hard    || {}) },
-        liqueur: { ...D.variants.alcohol.liqueur, ...(obj?.variants?.alcohol?.liqueur || {}) },
-      },
-    },
-    goals:  { ...D.goals,  ...(obj?.goals  || {}) },
-    limits: { ...D.limits, ...(obj?.limits || {}) },
-    dates:  { ...D.dates,  ...(obj?.dates  || {}) },
-    today:  {
-      ...D.today,
-      ...(obj?.today || {}),
-      counters: { ...D.today.counters, ...(obj?.today?.counters || {}) },
-      active:   { ...D.today.active,   ...(obj?.today?.active   || {}) },
-    },
-    debug: { ...D.debug, ...(obj?.debug || {}) },
-    history: { ...(obj?.history || {}) },
-  };
-}
-
-/* =========================
-   Chargement / sauvegarde
-   ========================= */
-export function loadState() {
+// -------------------- Utils --------------------
+function loadJSON(key, fallback) {
   try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return DefaultState();
-    const obj = JSON.parse(raw);
-    return migrateState(obj);
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
   } catch {
-    return DefaultState();
+    return fallback;
   }
 }
 
-export function saveState(S) {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch {}
+function persistSettings() { 
+  localStorage.setItem(K_SETTINGS, JSON.stringify(settings)); 
+}
+function persistHistory()  { 
+  localStorage.setItem(K_HISTORY,  JSON.stringify(history)); 
 }
 
-/* =========================
-   Outils pratiques
-   ========================= */
-export function snapshot(S) {
-  return JSON.parse(JSON.stringify(S));
+// -------------------- Accès en lecture --------------------
+export function getSettings() { return structuredClone(settings); }
+export function getData()     { return structuredClone(history); }
+export function getDaily(ymd) { return structuredClone(history[ymd] || {}); }
+
+// -------------------- Mutation settings --------------------
+export function setSettings(next) {
+  settings = structuredClone(next);
+  persistSettings();
+  emit("sa:settings-changed", structuredClone(settings));
+  console.log("[state] settings modifiés", settings);
 }
 
-export function resetState({ keepHistory = true, keepToday = true, keepCurrency = true } = {}) {
-  const D = DefaultState();
-  let base = D;
+// -------------------- Mutation données --------------------
+export function formatYMD(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
 
-  if (keepHistory || keepToday || keepCurrency) {
-    const cur = loadState();
-    base = { ...D };
-    if (keepHistory) base.history = cur.history || {};
-    if (keepToday)   base.today   = cur.today   || D.today;
-    if (keepCurrency)base.currency= cur.currency|| D.currency;
+export function updateDay(ymd, type, amount, subType) {
+  let d = history[ymd] || { c:0, j:0, a:{ beer:0, strong:0, liquor:0 } };
+  if (type === "c") d.c = Math.max(0, (d.c || 0) + amount);
+  if (type === "j") d.j = Math.max(0, (d.j || 0) + amount);
+  if (type === "a") {
+    d.a = d.a || { beer:0, strong:0, liquor:0 };
+    d.a[subType] = Math.max(0, (d.a[subType] || 0) + amount);
   }
-  saveState(base);
-  return base;
+  history[ymd] = d;
+
+  persistHistory();
+  emit("sa:counts-updated", { ymd, day: structuredClone(d) });
 }
 
-/* =========================
-   Export debug global (facultatif)
-   ========================= */
-try {
-  if (typeof window !== "undefined") {
-    window.SAState = {
-      LS_KEY, LS_AGE,
-      todayKey, fmtMoney, download,
-      DefaultState, migrateState,
-      loadState, saveState, resetState, snapshot
-    };
+// -------------------- Coûts & économies --------------------
+export function calculateDayCost(day) {
+  const p = settings.prices || {};
+  const cigsCost  = (day.c || 0) * (p.cigs   || 0);
+  const weedCost  = (day.j || 0) * (p.weed   || 0);
+  const beerCost  = (day.a?.beer   || 0) * (p.beer   || 0);
+  const strongCost= (day.a?.strong || 0) * (p.strong || 0);
+  const liquorCost= (day.a?.liquor || 0) * (p.liquor || 0);
+  const total = cigsCost + weedCost + beerCost + strongCost + liquorCost;
+  return { total, breakdown: { cigsCost, weedCost, beerCost, strongCost, liquorCost } };
+}
+
+// (placeholder) économies : ici on calcule vs 0 par défaut.
+// Si tu ajoutes une baseline dans habits.js → émettre sa:habits-changed
+// et on pourra utiliser ces baselines pour estimer l'économie.
+export function economiesForDay(/*day*/) {
+  return 0;
+}
+
+// -------------------- Agrégations (stats/charts) --------------------
+export function getRangeTotals(range, refDate = new Date()) {
+  // range: 'day' | 'week' | 'month' | 'year'
+  const res = { c:0, j:0, aBeer:0, aStrong:0, aLiquor:0, cost:0, eco:0 };
+  const curY = refDate.getFullYear();
+  const curM = refDate.getMonth();
+
+  const start =
+    range === "day"  ? new Date(refDate.getFullYear(), refDate.getMonth(), refDate.getDate()) :
+    range === "week" ? startOfWeek(refDate, 1) :
+    range === "month"? startOfMonth(refDate) :
+    /*year*/           new Date(curY, 0, 1);
+
+  const end =
+    range === "day"  ? new Date(start.getFullYear(), start.getMonth(), start.getDate()+1) :
+    range === "week" ? new Date(start.getFullYear(), start.getMonth(), start.getDate()+7) :
+    range === "month"? new Date(start.getFullYear(), start.getMonth()+1, 1) :
+                       new Date(curY+1, 0, 1);
+
+  const d = new Date(start);
+  while (d < end) {
+    const ymd = formatYMD(d);
+    const day = history[ymd];
+    if (day) {
+      res.c += (day.c || 0);
+      res.j += (day.j || 0);
+      res.aBeer   += (day.a?.beer   || 0);
+      res.aStrong += (day.a?.strong || 0);
+      res.aLiquor += (day.a?.liquor || 0);
+      res.cost    += calculateDayCost(day).total;
+      res.eco     += economiesForDay(day);
+    }
+    d.setDate(d.getDate()+1);
   }
-} catch {}
+  return res;
+}
+
+// -------------------- Helpers date --------------------
+export function startOfWeek(d, firstDayOfWeek = 1) {
+  const day = d.getDay();
+  const diff = (day < firstDayOfWeek ? 7 : 0) + day - firstDayOfWeek;
+  const res = new Date(d.getFullYear(), d.getMonth(), d.getDate() - diff);
+  return res;
+}
+
+export function startOfMonth(d) {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+// -------------------- Économies (new) --------------------
+let economy = loadJSON("sa.economy.v1", {
+  baseline: {},
+  lastReset: null,
+  cumulatedSavings: 0,
+});
+
+export function getEconomy() {
+  return structuredClone(economy);
+}
+
+export function setEconomy(eco) {
+  economy = structuredClone(eco);
+  localStorage.setItem("sa.economy.v1", JSON.stringify(economy));
+  emit("sa:economy-changed", structuredClone(economy));
+}
+
+// -------------------- Habitudes (new) --------------------
+let habits = loadJSON("sa.habits.v1", {
+  goals: {},
+  triggers: [],
+  replacements: [],
+  progress: {}
+});
+
+export function getHabits() {
+  return structuredClone(habits);
+}
+
+export function setHabits(h) {
+  habits = structuredClone(h);
+  localStorage.setItem("sa.habits.v1", JSON.stringify(habits));
+  emit("sa:habits-changed", structuredClone(habits));
+}
