@@ -5,6 +5,11 @@
    Contient les ajustements pour Phase 2 et corrections.
    ============================================================ */
 
+/* Affichage/masquage piloté par le JS */
+.hide {
+  display: none !important;
+}
+
 /* ============================================================
    ACTIONS GRAPHIQUES
    ============================================================ */
@@ -80,12 +85,13 @@
   overflow: auto;
   padding: 8px;
   white-space: pre-wrap;
-  display: none;
+  /* NE PAS forcer display:none ici, c'est la classe .hide qui pilote */
   border: 2px solid #333;
   border-radius: 4px;
   margin: 8px 0;
 }
 
+/* Conserver au cas où, même si le JS utilise .hide/.hide toggle */
 #debug-console.show {
   display: block;
 }
