@@ -1,197 +1,234 @@
-// web/js/calendar.js
-// STOPADDICT — Calendrier (vue mensuelle simple)
-// Objectif : afficher le mois courant avec, pour chaque jour, un résumé des consommations
-// en respectant les modules actifs (OFF = exclu). Navigation mois précédent/suivant si les
-// éléments existent dans la page : #cal-prev, #cal-next, #cal-title, #cal-grid.
-//
-// Dépendances : ./state.js
+/* web/js/calendar.js — V2 : Mois + Semaine + Jour, filtres modules, liens Stats/Habitudes */
+export function mountCalendar(ctx) {
+  const { S, getState = () => S, showTab } = ctx || {};
+  const elGrid = document.querySelector("#calendar-grid");
+  const elTitle = document.querySelector("#cal-title");
+  const elDetails = document.querySelector("#calendar-details");
 
-import {
-  load,
-  getSettings,
-  calculateDayCost,
-  ymd,
-} from "./state.js";
+  if (!elGrid || !elTitle || !elDetails) return null;
 
-const $  = (sel, root = document) => root.querySelector(sel);
-const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+  // Etat interne
+  let mode = "month"; // "day" | "week" | "month"
+  let ref = new Date();
 
-/* ------------------------ Utils dates (local, lundi=1) ------------------------ */
+  // Filtres
+  function readFilters() {
+    const c = (name) => !!document.querySelector(`[data-cal-filter="${name}"]`)?.checked;
+    return { cigs: c("cigs"), joints: c("joints"), beer: c("beer"), hard: c("hard"), liqueur: c("liqueur") };
+  }
 
-function startOfMonth(d = new Date()) { return new Date(d.getFullYear(), d.getMonth(), 1); }
-function endOfMonth(d = new Date())   { return new Date(d.getFullYear(), d.getMonth() + 1, 0); }
+  const fmt = (d) => d.toISOString().slice(0,10);
+  const isoMonday = (d) => { const x = new Date(d); const wd = (x.getDay()+6)%7; x.setDate(x.getDate()-wd); x.setHours(0,0,0,0); return x; };
 
-function dayOfWeekMonday0(d) {
-  // JS: 0=dimanche,1=lundi,... → on veut 0=lundi,6=dimanche
-  return (d.getDay() + 6) % 7;
-}
+  function getDayData(dateStr, filters) {
+    const st = getState();
+    const d = st.history?.[dateStr] || {};
+    const out = {
+      cigs: filters.cigs ? (d.cigs||0) : 0,
+      joints: filters.joints ? (d.joints||0) : 0,
+      beer: filters.beer ? (d.beer||0) : 0,
+      hard: filters.hard ? (d.hard||0) : 0,
+      liqueur: filters.liqueur ? (d.liqueur||0) : 0,
+      cost: d.cost||0,
+      saved: d.saved||0
+    };
+    return out;
+  }
 
-function monthLabel(d) {
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-}
+  function sumDay(d) {
+    return (d.cigs||0)+(d.joints||0)+(d.beer||0)+(d.hard||0)+(d.liqueur||0);
+    // coût/économies visibles dans détail
+  }
 
-function sameDay(a, b) {
-  return a.getFullYear() === b.getFullYear()
-      && a.getMonth()    === b.getMonth()
-      && a.getDate()     === b.getDate();
-}
+  function renderMonth() {
+    const st = getState();
+    const y = ref.getFullYear(), m = ref.getMonth();
+    const first = new Date(y, m, 1);
+    const start = isoMonday(first);
+    const today = fmt(new Date());
 
-/* ------------------------ Agrégation d’un jour (respect modules) ------------------------ */
+    elTitle.textContent = first.toLocaleDateString(st.profile?.language || "fr-FR", { month:"long", year:"numeric" });
 
-function daySummary(isoDayKey, settings) {
-  const st = load();
-  const rec = st.history?.[isoDayKey] || { cigs: 0, weed: 0, beer: 0, strong: 0, liquor: 0 };
+    // En-têtes jours
+    const headers = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
+    let html = `<div class="cal-head">${headers.map(h=>`<div>${h}</div>`).join("")}</div>`;
 
-  const vals = {
-    cigs:   settings.enable_cigs                     ? (+rec.cigs   || 0) : 0,
-    weed:   settings.enable_weed                     ? (+rec.weed   || 0) : 0,
-    beer:   (settings.enable_alcohol && settings.enable_beer)   ? (+rec.beer   || 0) : 0,
-    strong: (settings.enable_alcohol && settings.enable_strong) ? (+rec.strong || 0) : 0,
-    liquor: (settings.enable_alcohol && settings.enable_liquor) ? (+rec.liquor || 0) : 0,
-  };
+    // 6 semaines * 7 jours
+    const filters = readFilters();
+    let d = new Date(start);
+    html += `<div class="cal-body">`;
+    for (let w=0; w<6; w++) {
+      for (let i=0; i<7; i++) {
+        const key = fmt(d);
+        const data = getDayData(key, filters);
+        const total = sumDay(data);
+        const inMonth = d.getMonth() === m;
+        const isToday = key === today;
+        html += `
+          <div class="cal-cell ${inMonth?'':'cal-other'} ${isToday?'cal-today':''}" data-date="${key}">
+            <div class="cal-day">${d.getDate()}</div>
+            <div class="cal-mini">
+              ${total>0?`<span class="mini-dot">${total}</span>`:""}
+              ${data.cost?`<span class="mini-euro">€</span>`:""}
+            </div>
+          </div>`;
+        d.setDate(d.getDate()+1);
+      }
+    }
+    html += `</div>`;
+    elGrid.innerHTML = html;
 
-  const totalCount = vals.cigs + vals.weed + vals.beer + vals.strong + vals.liquor;
-  const cost       = calculateDayCost(rec, settings); // déjà filtré par modules actifs
-
-  return { ...vals, totalCount, cost };
-}
-
-/* ------------------------ Rendu cellule ------------------------ */
-
-function renderCell(container, dateObj, monthCtx) {
-  const stgs = getSettings();
-  const iso  = ymd(dateObj);
-  const { totalCount, cost } = daySummary(iso, stgs);
-
-  const inCurrent = dateObj.getMonth() === monthCtx.getMonth();
-  const today     = sameDay(dateObj, new Date());
-
-  const cell = document.createElement("div");
-  cell.className = "cal-cell";
-  cell.dataset.date = iso;
-
-  // Classes d’état
-  if (!inCurrent) cell.classList.add("cal-out");
-  if (today)      cell.classList.add("cal-today");
-
-  // Contenu minimal lisible (pas de dépendance CSS forte)
-  const head = document.createElement("div");
-  head.className = "cal-daynum";
-  head.textContent = String(dateObj.getDate());
-
-  const info = document.createElement("div");
-  info.className = "cal-info";
-  info.textContent = totalCount > 0
-    ? `Σ ${totalCount} • €${cost.toFixed(2)}`
-    : ""; // vide si rien (garde l’UI légère)
-
-  cell.appendChild(head);
-  cell.appendChild(info);
-
-  container.appendChild(cell);
-}
-
-/* ------------------------ Construction grille (6 lignes x 7 colonnes) ------------------------ */
-
-function buildMonthGrid(root, anchor) {
-  const grid = $("#cal-grid", root);
-  const title = $("#cal-title", root);
-  if (!grid || !title) return; // calendrier optionnel : on n’essaie pas d’imposer l’UI
-
-  // En-tête
-  title.textContent = monthLabel(anchor);
-
-  // Réinitialiser
-  grid.innerHTML = "";
-
-  // Jours de la semaine (si le template ne les prévoit pas)
-  // Lundi…Dimanche (FR)
-  const weekdays = ["L", "M", "M", "J", "V", "S", "D"];
-  let hasHeader = grid.querySelector(".cal-head");
-  if (!hasHeader) {
-    const headRow = document.createElement("div");
-    headRow.className = "cal-head";
-    weekdays.forEach((w) => {
-      const h = document.createElement("div");
-      h.className = "cal-head-cell";
-      h.textContent = w;
-      headRow.appendChild(h);
+    // Click -> détail jour
+    elGrid.querySelectorAll(".cal-cell").forEach(cell=>{
+      cell.addEventListener("click", ()=>{
+        mode = "day";
+        ref = new Date(cell.dataset.date+"T00:00:00");
+        render();
+      });
     });
-    grid.appendChild(headRow);
+
+    // Détail du mois (synthèse)
+    showMonthSummary(filters);
   }
 
-  // Plage à afficher
-  const first = startOfMonth(anchor);
-  const last  = endOfMonth(anchor);
+  function showMonthSummary(filters) {
+    const st = getState();
+    const y = ref.getFullYear(), m = ref.getMonth();
+    const first = new Date(y, m, 1);
+    const last = new Date(y, m+1, 0);
 
-  // Position du 1er jour (0=lundi … 6=dimanche)
-  const startOffset = dayOfWeekMonday0(first);
+    let iter = new Date(first);
+    let total = {cigs:0,joints:0,beer:0,hard:0,liqueur:0,cost:0,saved:0};
+    while (iter <= last) {
+      const k = fmt(iter);
+      const d = getDayData(k, filters);
+      total.cigs+=d.cigs; total.joints+=d.joints; total.beer+=d.beer; total.hard+=d.hard; total.liqueur+=d.liqueur;
+      total.cost+=d.cost; total.saved+=d.saved;
+      iter.setDate(iter.getDate()+1);
+    }
 
-  // Nombre de cases à produire : 6 semaines * 7 jours = 42 (classique)
-  const totalCells = 42;
-
-  // Date de départ = lundi de la semaine du 1er (peut être du mois précédent)
-  const startDate = new Date(first);
-  startDate.setDate(first.getDate() - startOffset);
-
-  for (let i = 0; i < totalCells; i++) {
-    const d = new Date(startDate);
-    d.setDate(startDate.getDate() + i);
-    renderCell(grid, d, anchor);
+    elDetails.innerHTML = `
+      <div class="cal-box">
+        <h4>Récapitulatif du mois</h4>
+        <div class="cal-summary">
+          <div>🚬 ${total.cigs}</div>
+          <div>🌿 ${total.joints}</div>
+          <div>🍺 ${total.beer}</div>
+          <div>🥃 ${total.hard}</div>
+          <div>🍸 ${total.liqueur}</div>
+          <div>💸 ${(total.cost||0).toFixed(2)}</div>
+          <div>💶 ${(total.saved||0).toFixed(2)}</div>
+        </div>
+      </div>`;
   }
-}
 
-/* ------------------------ Navigation & rafraîchissement ------------------------ */
+  function renderWeek() {
+    const st = getState();
+    const start = isoMonday(ref);
+    const today = fmt(new Date());
+    elTitle.textContent = `${start.toLocaleDateString(st.profile?.language||"fr-FR")} → ${new Date(start.getFullYear(),start.getMonth(),start.getDate()+6).toLocaleDateString(st.profile?.language||"fr-FR")}`;
 
-let currentMonth = startOfMonth(new Date());
+    const filters = readFilters();
+    let d = new Date(start);
+    let html = `<div class="cal-row">`;
+    for (let i=0;i<7;i++){
+      const key = fmt(d);
+      const data = getDayData(key, filters);
+      const isToday = key === today;
+      html += `
+        <div class="cal-cell week ${isToday?'cal-today':''}" data-date="${key}">
+          <div class="cal-day">${d.toLocaleDateString(st.profile?.language||"fr-FR",{weekday:"short"})} ${d.getDate()}</div>
+          <div class="cal-breakdown">
+            <span title="Cigarettes">🚬 ${data.cigs||0}</span>
+            <span title="Joints">🌿 ${data.joints||0}</span>
+            <span title="Bière">🍺 ${data.beer||0}</span>
+            <span title="Fort">🥃 ${data.hard||0}</span>
+            <span title="Liqueur">🍸 ${data.liqueur||0}</span>
+            <span title="Coût">💸 ${(data.cost||0).toFixed(2)}</span>
+            <span title="Économies">💶 ${(data.saved||0).toFixed(2)}</span>
+          </div>
+        </div>`;
+      d.setDate(d.getDate()+1);
+    }
+    html += `</div>`;
+    elGrid.innerHTML = html;
 
-function gotoPrevMonth(root) {
-  currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
-  buildMonthGrid(root, currentMonth);
-}
+    elDetails.innerHTML = `<div class="cal-box"><h4>Conseil</h4><p>Clique un jour pour le détail, utilise les filtres modules en haut.</p></div>`;
 
-function gotoNextMonth(root) {
-  currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
-  buildMonthGrid(root, currentMonth);
-}
+    elGrid.querySelectorAll(".cal-cell").forEach(cell=>{
+      cell.addEventListener("click", ()=>{
+        mode="day";
+        ref = new Date(cell.dataset.date+"T00:00:00");
+        render();
+      });
+    });
+  }
 
-function bindNav(root) {
-  const prev = $("#cal-prev", root);
-  const next = $("#cal-next", root);
+  function renderDay() {
+    const st = getState();
+    const key = fmt(ref);
+    elTitle.textContent = `Jour : ${ref.toLocaleDateString(st.profile?.language||"fr-FR",{weekday:"long", year:"numeric", month:"long", day:"numeric"})}`;
+    const filters = readFilters();
+    const d = getDayData(key, filters);
 
-  if (prev) prev.addEventListener("click", (e) => {
-    e.preventDefault();
-    gotoPrevMonth(root);
+    elGrid.innerHTML = `
+      <div class="cal-dayview">
+        <div class="cal-box">
+          <h4>${key}</h4>
+          <div class="cal-summary">
+            <div>🚬 ${d.cigs||0}</div>
+            <div>🌿 ${d.joints||0}</div>
+            <div>🍺 ${d.beer||0}</div>
+            <div>🥃 ${d.hard||0}</div>
+            <div>🍸 ${d.liqueur||0}</div>
+            <div>💸 ${(d.cost||0).toFixed(2)}</div>
+            <div>💶 ${(d.saved||0).toFixed(2)}</div>
+          </div>
+        </div>
+      </div>`;
+
+    elDetails.innerHTML = `<div class="cal-box"><h4>Astuce</h4><p>Utilise Habitudes pour fixer des objectifs (onglet <em>Habitudes</em>).</p></div>`;
+  }
+
+  function render() {
+    if (mode==="month") renderMonth();
+    else if (mode==="week") renderWeek();
+    else renderDay();
+  }
+
+  // Toolbar events
+  document.querySelectorAll('[data-cal-mode]').forEach(b=>{
+    b.addEventListener("click", ()=>{
+      document.querySelectorAll('[data-cal-mode]').forEach(x=>x.classList.remove("active"));
+      b.classList.add("active");
+      mode = b.dataset.calMode;
+      render();
+    });
+  });
+  document.getElementById("cal-prev")?.addEventListener("click", ()=>{
+    if (mode==="month") ref.setMonth(ref.getMonth()-1);
+    else if (mode==="week") ref.setDate(ref.getDate()-7);
+    else ref.setDate(ref.getDate()-1);
+    render();
+  });
+  document.getElementById("cal-next")?.addEventListener("click", ()=>{
+    if (mode==="month") ref.setMonth(ref.getMonth()+1);
+    else if (mode==="week") ref.setDate(ref.getDate()+7);
+    else ref.setDate(ref.getDate()+1);
+    render();
+  });
+  document.querySelectorAll('[data-cal-filter]').forEach(cb=>{
+    cb.addEventListener("change", render);
   });
 
-  if (next) next.addEventListener("click", (e) => {
-    e.preventDefault();
-    gotoNextMonth(root);
-  });
+  document.getElementById("cal-open-stats")?.addEventListener("click", ()=> showTab?.("stats"));
+  document.getElementById("cal-open-habits")?.addEventListener("click", ()=> showTab?.("habits"));
+
+  // Initial
+  render();
+
+  // API publique pour l’app
+  return {
+    update(nextS){ render(); }
+  };
 }
-
-function refresh(root) {
-  buildMonthGrid(root, currentMonth);
-}
-
-/* ------------------------ API publique ------------------------ */
-
-export function initCalendar() {
-  const root = document.getElementById("ecran-calendrier");
-  if (!root) return; // écran optionnel
-
-  // Construire UI initiale
-  currentMonth = startOfMonth(new Date());
-  bindNav(root);
-  refresh(root);
-
-  // Quand les comptes changent (Accueil +/−) ou réglages (modules/prix/baselines) → réafficher
-  document.addEventListener("sa:counts-updated", () => refresh(root));
-  document.addEventListener("sa:state-changed",  () => refresh(root));
-
-  // Si on revient sur l’onglet Calendrier via la nav
-  const nav = document.getElementById("nav-calendrier");
-  if (nav) nav.addEventListener("click", () => setTimeout(() => refresh(root), 0));
-}
-
-export default { initCalendar };
