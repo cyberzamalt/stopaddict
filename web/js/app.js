@@ -211,9 +211,9 @@ function hydrateUIFromState(){
   Cal?.update(S);
 }
 
-/* Boot */
+/* Boot - CORRECTION: Retrait du DOMContentLoaded */
 let Cal=null;
-window.addEventListener("DOMContentLoaded", async ()=>{
+(async function initApp() {
   if(!S.today?.date) S.today.date=todayKey();
   await initI18nIfAvailable();
   initAgeGate();
@@ -242,4 +242,4 @@ window.addEventListener("DOMContentLoaded", async ()=>{
   let taps=[]; $("#today-date")?.addEventListener("click", ()=>{ const now=Date.now(); taps=taps.filter(t=> now-t<=900); taps.push(now); if(taps.length>=5){ $("#debug-console")?.classList.toggle("hide"); taps=[]; dbg.push("Toggle overlay","ok"); } });
 
   dbg.push("App ready","ok");
-});
+})();
