@@ -1,314 +1,131 @@
-/* web/js/settings.js
-   Écran "Réglages" + source de vérité persistance/événements.
-   Rôle: hydrate UI, écouter modifs, émettre sa:settings-changed.
-*/
-import { getSettings, setSettings, on, emit } from "./state.js";
+/* web/js/settings.js — fournit mountSettings() et réutilise la logique du fallback */
+export function mountSettings(ctx) {
+  const { S, DefaultState, saveState, persistTodayIntoHistory, updateHeader, renderChart, reflectCounters, dbg } = ctx;
+  const $  = (sel) => document.querySelector(sel);
+  const $$ = (sel) => document.querySelectorAll(sel);
 
-// UI template (injecté dans #ecran-params)
-const SETTINGS_HTML = `
-  <div class="card">
-    <div class="section-title">Modules principaux</div>
-    <div class="grid-2">
-      <div class="param"><label><input type="checkbox" id="set-mod-cigs"> Activer "Cigarettes"</label></div>
-      <div class="param"><label><input type="checkbox" id="set-mod-weed"> Activer "Joints"</label></div>
-      <div class="param"><label><input type="checkbox" id="set-mod-alcohol"> Activer "Alcool" (global)</label></div>
-    </div>
-  </div>
-
-  <div class="card" id="card-sous-modules-alcool">
-    <div class="section-title">Sous-modules Alcool</div>
-    <div class="grid-2">
-      <div class="param"><label><input type="checkbox" id="set-mod-beer"> Activer "Bière"</label></div>
-      <div class="param"><label><input type="checkbox" id="set-mod-strong"> Activer "Alcool fort"</label></div>
-      <div class="param"><label><input type="checkbox" id="set-mod-liquor"> Activer "Liqueur"</label></div>
-    </div>
-    <div class="hint">Note : Activez d'abord "Alcool" pour afficher ces options sur l'Accueil</div>
-  </div>
-
-  <div class="card">
-    <div class="section-title">Prix & Devise (par unité)</div>
-    <div class="grid-2">
-      <div class="param"><label>Devise</label><input type="text" id="set-currency" placeholder="€" value="€"></div>
-      <div class="param"><label>Cigarette</label><input type="number" id="set-price-cigs" min="0" step="0.01"></div>
-      <div class="param"><label>Joint</label><input type="number" id="set-price-weed" min="0" step="0.01"></div>
-      <div class="param"><label>Bière</label><input type="number" id="set-price-beer" min="0" step="0.01"></div>
-      <div class="param"><label>Alcool fort</label><input type="number" id="set-price-strong" min="0" step="0.01"></div>
-      <div class="param"><label>Liqueur</label><input type="number" id="set-price-liquor" min="0" step="0.01"></div>
-    </div>
-    <div class="hint">Laissez à 0 si vous ne souhaitez pas suivre les coûts</div>
-  </div>
-
-  <div class="card">
-    <div class="section-title">Dates (jalons)</div>
-    <div class="grid-2">
-      <div class="param"><label>Réduction clopes</label><input type="date" id="date-reduc-clopes"></div>
-      <div class="param"><label>Stop clopes</label><input type="date" id="date-stop-clopes"></div>
-      <div class="param"><label>Objectif 0 clope</label><input type="date" id="date-no-clopes"></div>
-
-      <div class="param"><label>Réduction joints</label><input type="date" id="date-reduc-joints"></div>
-      <div class="param"><label>Stop joints</label><input type="date" id="date-stop-joints"></div>
-      <div class="param"><label>Objectif 0 joint</label><input type="date" id="date-no-joints"></div>
-
-      <div class="param"><label>Réduction alcool</label><input type="date" id="date-reduc-alcool"></div>
-      <div class="param"><label>Stop alcool</label><input type="date" id="date-stop-alcool"></div>
-      <div class="param"><label>Objectif 0 alcool</label><input type="date" id="date-no-alcool"></div>
-      <div class="param hint">Ces dates s'affichent dans le calendrier.</div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="section-title">Limites quotidiennes (alertes)</div>
-    <div class="grid-2">
-      <div class="param"><label>Max cigarettes/jour</label><input type="number" id="set-limit-cigs" min="0" step="1"></div>
-      <div class="param"><label>Max joints/jour</label><input type="number" id="set-limit-weed" min="0" step="1"></div>
-      <div class="param"><label>Max unités alcool/jour</label><input type="number" id="set-limit-alcohol" min="0" step="1"></div>
-    </div>
-    <div class="hint">Une alerte s'affiche quand vous dépassez ces limites (0 = pas de limite)</div>
-  </div>
-
-  <div class="card">
-    <div class="section-title">Export / Import & Données</div>
-    <div class="grid-2">
-      <div class="param">
-        <label>Langue (code)</label>
-        <input type="text" id="set-lang" placeholder="fr" value="fr">
-      </div>
-      <div class="param">
-        <label>Actions</label>
-        <div>
-          <button class="btn small" id="btn-export-all" type="button">📥 Exporter TOUT</button>
-          <button class="btn small" id="btn-import-all" type="button">📤 Importer TOUT</button>
-          <input type="file" id="input-import-all" accept=".json,.csv" style="display:none">
-        </div>
-      </div>
-      <div class="param">
-        <label>Réinitialisation</label>
-        <button class="btn small danger" id="btn-reset-all" type="button">🗑️ RAZ complète</button>
-      </div>
-    </div>
-  </div>
-`;
-
-function val(id) { return /** @type {HTMLInputElement|null} */(document.getElementById(id)); }
-
-function readUIToSettings() {
-  const cur = getSettings();
-  const next = structuredClone(cur);
-
-  // Modules principaux
-  next.modules = next.modules || {};
-  if (val("set-mod-cigs"))   next.modules.cigs   = val("set-mod-cigs").checked;
-  if (val("set-mod-weed"))   next.modules.weed   = val("set-mod-weed").checked;
-  if (val("set-mod-alcohol"))next.modules.alcohol= val("set-mod-alcohol").checked;
-  
-  // Sous-modules alcool
-  if (val("set-mod-beer"))   next.modules.beer   = val("set-mod-beer").checked;
-  if (val("set-mod-strong")) next.modules.strong = val("set-mod-strong").checked;
-  if (val("set-mod-liquor")) next.modules.liquor = val("set-mod-liquor").checked;
-
-  // Prix
-  next.prices = next.prices || {};
-  const get = (id) => parseFloat(val(id)?.value) || 0;
-  next.prices.cigs   = get("set-price-cigs");
-  next.prices.weed   = get("set-price-weed");
-  next.prices.beer   = get("set-price-beer");
-  next.prices.strong = get("set-price-strong");
-  next.prices.liquor = get("set-price-liquor");
-
-  // Limites
-  next.limits = next.limits || {};
-  next.limits.cigs    = parseFloat(val("set-limit-cigs")?.value) || 0;
-  next.limits.weed    = parseFloat(val("set-limit-weed")?.value) || 0;
-  next.limits.alcohol = parseFloat(val("set-limit-alcohol")?.value) || 0;
-
-  // Devise & langue
-  next.currency = val("set-currency")?.value || "€";
-  next.lang = val("set-lang")?.value || "fr";
-
-  // Jalons (dates)
-  const jd = next.milestones || {};
-  jd.cigs = jd.cigs || {};
-  jd.weed = jd.weed || {};
-  jd.alcohol = jd.alcohol || {};
-
-  const getDate = (id) => val(id)?.value || "";
-  jd.cigs.reduce = getDate("date-reduc-clopes");
-  jd.cigs.stop   = getDate("date-stop-clopes");
-  jd.cigs.zero   = getDate("date-no-clopes");
-  
-  jd.weed.reduce = getDate("date-reduc-joints");
-  jd.weed.stop   = getDate("date-stop-joints");
-  jd.weed.zero   = getDate("date-no-joints");
-  
-  jd.alcohol.reduce = getDate("date-reduc-alcool");
-  jd.alcohol.stop   = getDate("date-stop-alcool");
-  jd.alcohol.zero   = getDate("date-no-alcool");
-
-  return next;
-}
-
-function writeSettingsToUI(s) {
-  // Modules principaux
-  const m = s.modules || {};
-  const p = s.prices  || {};
-  if (val("set-mod-cigs"))   val("set-mod-cigs").checked   = !!m.cigs;
-  if (val("set-mod-weed"))   val("set-mod-weed").checked   = !!m.weed;
-  if (val("set-mod-alcohol"))val("set-mod-alcohol").checked= !!m.alcohol;
-  
-  // Sous-modules alcool
-  if (val("set-mod-beer"))   val("set-mod-beer").checked   = !!m.beer;
-  if (val("set-mod-strong")) val("set-mod-strong").checked = !!m.strong;
-  if (val("set-mod-liquor")) val("set-mod-liquor").checked = !!m.liquor;
-
-  // Afficher/masquer la carte des sous-modules selon l'état du module alcool
-  const alcoolCard = document.getElementById("card-sous-modules-alcool");
-  if (alcoolCard) {
-    alcoolCard.style.display = m.alcohol ? "block" : "none";
-  }
-
-  // Devise + Prix
-  if (val("set-currency"))     val("set-currency").value   = s.currency || "€";
-  if (val("set-price-cigs"))   val("set-price-cigs").value = String(p.cigs ?? 0);
-  if (val("set-price-weed"))   val("set-price-weed").value = String(p.weed ?? 0);
-  if (val("set-price-beer"))   val("set-price-beer").value = String(p.beer ?? 0);
-  if (val("set-price-strong")) val("set-price-strong").value = String(p.strong ?? 0);
-  if (val("set-price-liquor")) val("set-price-liquor").value = String(p.liquor ?? 0);
-
-  // Limites
-  const l = s.limits || {};
-  if (val("set-limit-cigs"))    val("set-limit-cigs").value = String(l.cigs ?? 0);
-  if (val("set-limit-weed"))    val("set-limit-weed").value = String(l.weed ?? 0);
-  if (val("set-limit-alcohol")) val("set-limit-alcohol").value = String(l.alcohol ?? 0);
-
-  // Langue
-  if (val("set-lang")) val("set-lang").value = s.lang || "fr";
-
-  // Jalons
-  const jd = s.milestones || {};
-  if (val("date-reduc-clopes")) val("date-reduc-clopes").value = jd.cigs?.reduce || "";
-  if (val("date-stop-clopes"))  val("date-stop-clopes").value  = jd.cigs?.stop   || "";
-  if (val("date-no-clopes"))    val("date-no-clopes").value    = jd.cigs?.zero   || "";
-  
-  if (val("date-reduc-joints")) val("date-reduc-joints").value = jd.weed?.reduce || "";
-  if (val("date-stop-joints"))  val("date-stop-joints").value  = jd.weed?.stop   || "";
-  if (val("date-no-joints"))    val("date-no-joints").value    = jd.weed?.zero   || "";
-  
-  if (val("date-reduc-alcool")) val("date-reduc-alcool").value = jd.alcohol?.reduce || "";
-  if (val("date-stop-alcool"))  val("date-stop-alcool").value  = jd.alcohol?.stop   || "";
-  if (val("date-no-alcool"))    val("date-no-alcool").value    = jd.alcohol?.zero   || "";
-}
-
-function bindSettingsEvents() {
-  // Auto-save sur chaque modif
-  const inputs = [
-    "set-mod-cigs", "set-mod-weed", "set-mod-alcohol",
-    "set-mod-beer", "set-mod-strong", "set-mod-liquor",
-    "set-price-cigs", "set-price-weed", "set-price-beer", "set-price-strong", "set-price-liquor",
-    "set-limit-cigs", "set-limit-weed", "set-limit-alcohol",
-    "set-currency", "set-lang",
-    "date-reduc-clopes", "date-stop-clopes", "date-no-clopes",
-    "date-reduc-joints", "date-stop-joints", "date-no-joints",
-    "date-reduc-alcool", "date-stop-alcool", "date-no-alcool"
-  ];
-  
-  inputs.forEach(id => {
-    const el = val(id);
-    if (el) {
-      el.addEventListener("change", () => {
-        const updated = readUIToSettings();
-        setSettings(updated);
-        console.log(`[settings] ${id} modifié`);
-        
-        // Si on change le module alcool, afficher/masquer les sous-modules
-        if (id === "set-mod-alcohol") {
-          const alcoolCard = document.getElementById("card-sous-modules-alcool");
-          if (alcoolCard) {
-            alcoolCard.style.display = el.checked ? "block" : "none";
-          }
-        }
-      });
-    }
+  // Prénom + langue (minimal, i18n si dispo)
+  $("#profile-name").value = S.profile.name || "";
+  $("#profile-name").addEventListener("input", e => {
+    S.profile.name = e.target.value || "";
+    saveState(S);
   });
 
-  // Export TOUT
-  const btnExport = val("btn-export-all");
-  if (btnExport) {
-    btnExport.addEventListener("click", async () => {
-      try {
-        const exp = await import("./export.js");
-        if (exp?.exportAll) {
-          await exp.exportAll(true); // true = inclure les graphiques
-          console.log("[settings] Export complet effectué");
-        } else {
-          alert("Module export non disponible");
-        }
-      } catch (e) {
-        alert("Export indisponible : " + e.message);
-        console.error("[settings] exportAll:", e);
-      }
+  const langSel = $("#select-language");
+  if (langSel) {
+    if (!langSel.options.length) {
+      langSel.innerHTML = `<option value="fr">Français</option><option value="en">English</option>`;
+    }
+    langSel.value = S.profile.language || "fr";
+    langSel.addEventListener("change", async () => {
+      S.profile.language = langSel.value;
+      saveState(S);
     });
   }
 
-  // Import TOUT
-  const btnImport = val("btn-import-all");
-  const fileIn = val("input-import-all");
-  if (btnImport && fileIn) {
-    btnImport.addEventListener("click", () => fileIn.click());
-    fileIn.addEventListener("change", async () => {
-      const f = fileIn.files?.[0];
-      if (!f) return;
-      try {
-        const st = await import("./storage.js");
-        if (st?.importAll) {
-          await st.importAll(f);
-          console.log("[settings] Import effectué");
-          location.reload(); // Recharger pour appliquer
-        }
-      } catch (e) {
-        alert("Import indisponible : " + e.message);
-        console.warn("[settings] importAll:", e);
-      } finally {
-        fileIn.value = "";
+  // Devise
+  $("#currency-symbol").value = S.currency.symbol || "€";
+  $("#currency-before").checked = !!S.currency.before;
+  $("#currency-after").checked  = !S.currency.before;
+  $("#btn-apply-currency").addEventListener("click", () => {
+    const sym = $("#currency-symbol").value || "€";
+    const before = $("#currency-before").checked;
+    S.currency = { symbol: sym, before };
+    updateHeader(); renderChart(); saveState(S);
+    dbg.push("Devise appliquée", "ok");
+  });
+
+  // Modules (+ miroirs compteurs)
+  const modIds = {
+    cigs: "#mod-cigs", beer: "#mod-beer", joints: "#mod-joints",
+    hard: "#mod-hard", liqueur: "#mod-liqueur", alcoholGlobal: "#mod-alcohol"
+  };
+  for (const k in modIds) {
+    const el = $(modIds[k]); if (!el) continue;
+    el.checked = !!S.modules[k];
+    el.addEventListener("change", () => {
+      S.modules[k] = el.checked;
+      if (["cigs","joints","beer","hard","liqueur"].includes(k)) {
+        S.today.active[k] = el.checked; reflectCounters();
       }
+      saveState(S);
     });
   }
 
-  // RAZ complète
-  const btnReset = val("btn-reset-all");
-  if (btnReset) {
-    btnReset.addEventListener("click", () => {
-      if (confirm("⚠️ ATTENTION : Cela supprimera TOUTES vos données (consommations, réglages, graphiques). Continuer ?")) {
-        if (confirm("🔴 Dernière chance : Êtes-vous VRAIMENT sûr ? Cette action est IRRÉVERSIBLE !")) {
-          localStorage.clear();
-          sessionStorage.clear();
-          console.log("[settings] RAZ complète effectuée");
-          alert("✅ Réinitialisation complète effectuée. L'application va redémarrer.");
-          location.reload();
-        }
-      }
-    });
-  }
-}
+  // Prix unitaires
+  $("#price-cigarette").value = S.prices.cigarette ?? 0;
+  "#price-joint"     in document && ($("#price-joint").value     = S.prices.joint     ?? 0);
+  $("#price-beer").value      = S.prices.beer      ?? 0;
+  $("#price-hard").value      = S.prices.hard      ?? 0;
+  $("#price-liqueur").value   = S.prices.liqueur   ?? 0;
 
-export async function initSettings() {
-  // Injecter l'UI si vide
-  const pane = document.getElementById("ecran-params");
-  if (pane) {
-    pane.innerHTML = SETTINGS_HTML;
-    console.log("[settings] Template HTML injecté");
-  } else {
-    console.warn("[settings] Element #ecran-params introuvable !");
-  }
+  $("#btn-save-prices").addEventListener("click", () => {
+    S.prices.cigarette = Number($("#price-cigarette").value || 0);
+    "price-joint" in (document.all||{}) && (S.prices.joint = Number($("#price-joint").value || 0));
+    S.prices.beer      = Number($("#price-beer").value || 0);
+    S.prices.hard      = Number($("#price-hard").value || 0);
+    S.prices.liqueur   = Number($("#price-liqueur").value || 0);
+    persistTodayIntoHistory(); updateHeader(); renderChart(); saveState(S);
+    dbg.push("Prix unitaires enregistrés", "ok");
+  });
 
-  // Hydrater depuis l'état
-  const cur = getSettings();
-  writeSettingsToUI(cur);
+  $("#btn-reset-prices").addEventListener("click", () => {
+    S.prices = { ...DefaultState().prices };
+    $("#price-cigarette").value = 0; 
+    "price-joint" in (document.all||{}) && ($("#price-joint").value = 0);
+    $("#price-beer").value = 0; $("#price-hard").value = 0; $("#price-liqueur").value = 0;
+    persistTodayIntoHistory(); updateHeader(); renderChart(); saveState(S);
+    dbg.push("Prix unitaires réinitialisés", "ok");
+  });
 
-  // Brancher les events
-  bindSettingsEvents();
+  // RAZ & sauvegardes
+  $("#btn-raz-day")?.addEventListener("click", () => {
+    S.today.counters = { cigs:0, joints:0, beer:0, hard:0, liqueur:0 };
+    reflectCounters(); persistTodayIntoHistory(); updateHeader(); renderChart(); saveState(S);
+    dbg.push("RAZ du jour", "ok");
+  });
+  $("#btn-raz-history")?.addEventListener("click", () => {
+    S.history = {}; persistTodayIntoHistory(); renderChart(); saveState(S);
+    dbg.push("RAZ historique", "ok");
+  });
+  $("#btn-raz-factory")?.addEventListener("click", () => {
+    const keepHistory = S.history; const keepToday = S.today; const keepCurrency = S.currency;
+    const fresh = DefaultState(); fresh.history = keepHistory; fresh.today = keepToday; fresh.currency = keepCurrency;
+    Object.assign(S, fresh);
+    // rafraîchir l’UI
+    reflectCounters(); renderChart(); saveState(S);
+    dbg.push("RAZ réglages (usine) + conservation historique", "ok");
+  });
 
-  // Si les settings changent ailleurs (import, etc.), refléter dans l'UI
-  on("sa:settings-changed", () => writeSettingsToUI(getSettings()));
+  $("#btn-save-json-settings")?.addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify(S, null, 2)], {type:"application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = "stopaddict_settings_backup.json";
+    document.body.appendChild(a); a.click(); a.remove();
+    dbg.push("Sauvegarder JSON (réglages + état) ok", "ok");
+  });
+  $("#file-import-json-settings")?.addEventListener("change", async (ev) => {
+    const file = ev.target.files?.[0]; if (!file) return;
+    try {
+      const text = await file.text();
+      const obj = JSON.parse(text);
+      const fresh = { ...DefaultState(), ...obj };
+      Object.assign(S, fresh);
+      // best effort rerender
+      reflectCounters(); renderChart(); saveState(S);
+      dbg.push("Import JSON (réglages) ok", "ok");
+    } catch (e) {
+      alert("Import JSON invalide."); dbg.push("Import JSON (réglages) erreur: "+e?.message, "err");
+    } finally { ev.target.value = ""; }
+  });
 
-  console.log("[settings] ✓ Initialisé avec succès");
+  $("#cb-debug-overlay")?.addEventListener("change", e => {
+    const box = $("#debug-console");
+    if (e.target.checked) { box?.classList.remove("hide"); dbg.push("Overlay DEBUG ON","ok"); }
+    else { box?.classList.add("hide"); }
+  });
+  $("#btn-copy-logs")?.addEventListener("click", () => {
+    navigator.clipboard?.writeText((S.debug.logs||[]).join("\n")).catch(()=>{});
+  });
+  $("#btn-clear-logs")?.addEventListener("click", () => { S.debug.logs = []; $("#debug-console").innerHTML = ""; });
 }
