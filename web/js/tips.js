@@ -1,154 +1,53 @@
-// web/js/tips.js
-// STOPADDICT — Conseils adaptatifs (Accueil, bandeau bas)
-// - Analyse la journée (comptes, objectifs, prix) et affiche 2–4 conseils utiles.
-// - Personnalise avec le prénom (Réglages > Profil).
-// - Respecte l’activation/désactivation des catégories et l’absence de prix.
-// - Rafraîchit sur changements (comptes, réglages, langue, devise).
-// Cibles DOM (tolérant) :
-//   * #tips-box        (prioritaire, si présent dans la page)
-//   * [data-tips]      (fallback sémantique)
-//   * crée <div id="tips-box"> dans #ecran-accueil sinon.
+/* web/js/tips.js — Conseils dynamiques (module optionnel) */
 
-"use strict";
+const $ = (s) => document.querySelector(s);
 
-import { getSettings, getDaily, calculateDayCost } from "./state.js";
-import { t, categoryLabel } from "./i18n.js";
-
-const $  = (sel, root = document) => root.querySelector(sel);
-
-// --- Utilitaires locaux ---
-function enabledKinds(s) {
-  const out = [];
-  if (s.enable_cigs) out.push("cigs");
-  if (s.enable_weed) out.push("weed");
-  if (s.enable_alcohol && s.enable_beer)   out.push("beer");
-  if (s.enable_alcohol && s.enable_strong) out.push("strong");
-  if (s.enable_alcohol && s.enable_liquor) out.push("liquor");
-  return out;
-}
-function moneySymbol() {
-  try { return window.SA_CURRENCY?.get()?.symbol || "€"; } catch { return "€"; }
-}
-function listLabels(kinds) {
-  return kinds.map(categoryLabel).join(", ");
-}
-function integer(n) {
-  const v = Number.parseInt(n, 10);
-  return Number.isFinite(v) && v >= 0 ? v : 0;
+export function mountTips({ rootSel = "#tips-root", stateGetter }) {
+  const root = $(rootSel);
+  if (!root) return;
+  root.innerHTML = `<div class="tips-card"><h3>Conseils</h3><div id="tips-content">—</div></div>`;
+  updateTips(stateGetter());
 }
 
-// --- Génération des messages ---
-function buildTips() {
-  const s = getSettings();
-  const today = getDaily(new Date());
-  const kinds = enabledKinds(s);
-  const msgs = [];
+export function updateTips(S) {
+  const box = $("#tips-content");
+  if (!box) return;
 
-  // 0) Personnalisation (accroche douce si prénom)
-  const name = (s.profile?.name || "").trim();
-  const hello = name ? `👋 ${name} — ` : "";
+  const lines = [];
+  const T = S.today?.counters || {};
+  const G = S.goals || {};
 
-  // 1) Prix manquants (uniquement parmi les catégories actives)
-  const prices = s.prices || {};
-  const missing = kinds.filter(k =>
-    (k === "cigs"   && !+prices.cig)   ||
-    (k === "weed"   && !+prices.weed)  ||
-    (k === "beer"   && !+prices.beer)  ||
-    (k === "strong" && !+prices.strong)||
-    (k === "liquor" && !+prices.liquor)
-  );
-  if (missing.length) {
-    msgs.push(t("tip.fill_prices", { list: listLabels(missing) }));
+  // Cigarettes
+  if ((T.cigs||0) > 0) {
+    if (G.cigs > 0 && T.cigs > G.cigs) lines.push("🚬 Tu dépasses ton objectif cigarettes aujourd'hui.");
+    else if (T.cigs > 0) lines.push("🚬 Pense à espacer tes cigarettes ou à réduire d'1 par palier.");
+  } else {
+    lines.push("✅ Pas de cigarette pour l’instant, continue !");
   }
 
-  // 2) Coût du jour (toujours utile, avec devise)
-  const cost = calculateDayCost(today, s);
-  msgs.push(hello + t("cost.today", { n: cost.toFixed(2), sym: moneySymbol() }));
-
-  // 3) Zéro aujourd’hui ?
-  const totalToday = kinds.reduce((acc, k) => acc + integer(today[k]), 0);
-  if (totalToday === 0) {
-    msgs.push(t("tip.zero_today"));
+  // Joints
+  if ((T.joints||0) > 0) {
+    if (G.joints > 0 && T.joints > G.joints) lines.push("🌿 Tu dépasses ton objectif joints aujourd'hui.");
+    else lines.push("🌿 Hydrate-toi et privilégie un environnement calme.");
+  } else {
+    lines.push("✅ Pas de joint pour l’instant, bien joué.");
   }
 
-  // 4) En dessous de l’objectif ?
-  const base = s.baselines || {};
-  const below = kinds.filter(k => {
-    const b =
-      k === "cigs" ? +base.cig :
-      k === "weed" ? +base.weed :
-      k === "beer" ? +base.beer :
-      k === "strong" ? +base.strong :
-      k === "liquor" ? +base.liquor : 0;
-    return Number.isFinite(b) && integer(today[k]) < b;
-  });
-  if (below.length) {
-    msgs.push(t("tip.below_goal", { list: listLabels(below) }));
+  // Alcool
+  const alc = (T.beer||0) + (T.hard||0) + (T.liqueur||0);
+  const gAlc = (G.beer||0) + (G.hard||0) + (G.liqueur||0);
+  if (alc > 0) {
+    if (gAlc > 0 && alc > gAlc) lines.push("🍺 Tu as dépassé ton objectif alcool aujourd’hui.");
+    else lines.push("🍺 Alterne boisson alcoolisée et eau, mange avant et pendant.");
+  } else {
+    lines.push("✅ Pas d’alcool consommé à cette heure.");
   }
 
-  // 5) Micro-objectif (proposition simple sur la catégorie la plus haute aujourd’hui)
-  let maxKind = null, maxVal = -1;
-  for (const k of kinds) {
-    const v = integer(today[k]);
-    if (v > maxVal) { maxVal = v; maxKind = k; }
-  }
-  if (maxKind && maxVal > 0) {
-    const target = Math.max(0, maxVal - 1);
-    msgs.push(t("tip.micro_goal", { label: categoryLabel(maxKind), n: target }));
-  }
+  // Économie
+  const cost = Number((S.history?.[S.today?.date||""]?.cost) || 0);
+  const saved = Number((S.history?.[S.today?.date||""]?.saved) || 0);
+  if (saved > 0) lines.push(`💶 Économies estimées aujourd'hui : ${saved.toFixed(2)}${S.currency?.symbol||"€"}.`);
+  else if (cost > 0) lines.push(`💸 Coût estimé aujourd’hui : ${cost.toFixed(2)}${S.currency?.symbol||"€"}.`);
 
-  // Limiter à 3–4 messages pour rester lisible
-  return msgs.slice(0, 4);
+  box.innerHTML = lines.map(l => `<div class="tip-line">${l}</div>`).join("") || "—";
 }
-
-// --- Rendu DOM ---
-function ensureHost() {
-  let host = document.getElementById("tips-box");
-  if (host) return host;
-
-  host = document.querySelector("[data-tips]");
-  if (host) return host;
-
-  // Fallback : créer un bandeau minimal si rien n’existe
-  const home = document.getElementById("ecran-accueil") || document.body;
-  host = document.createElement("div");
-  host.id = "tips-box";
-  // styles légers si aucun style global
-  host.style.background = "#f59e0b1a";
-  host.style.borderTop = "1px solid #f59e0b55";
-  host.style.padding = ".5rem .75rem";
-  host.style.marginTop = "0.5rem";
-  home.appendChild(host);
-  return host;
-}
-
-function render() {
-  const host = ensureHost();
-  const tips = buildTips();
-
-  // Structure simple : liste de paragraphes
-  host.innerHTML = "";
-  tips.forEach(txt => {
-    const p = document.createElement("p");
-    p.className = "tip-line";
-    p.textContent = txt;
-    host.appendChild(p);
-  });
-}
-
-// --- API publique ---
-export function initTips() {
-  render();
-
-  // Rafraîchir si la journée/les réglages changent
-  document.addEventListener("sa:counts-updated", render);
-  document.addEventListener("sa:state-changed", render);
-  document.addEventListener("sa:lang-changed", render);
-  document.addEventListener("sa:currency-changed", render);
-
-  // Rafraîchir quand on revient sur l’Accueil
-  const nav = document.getElementById("nav-accueil");
-  if (nav) nav.addEventListener("click", () => setTimeout(render, 0));
-}
-
-export default { initTips };
