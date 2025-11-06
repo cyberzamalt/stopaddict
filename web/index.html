@@ -1,21 +1,12 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>StopAddict</title>
-
-  <!-- CSS -->
-  <link rel="stylesheet" href="css/app.css?v=5">
-
-  <!-- Libs -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
-
-  <!-- App -->
-  <script type="module" src="js/app.js?v=5" defer></script>
+  <link rel="stylesheet" href="./css/app.css?v=5" />
 </head>
 <body>
-
   <!-- Header -->
   <header class="app-header">
     <div class="header-left">
@@ -43,182 +34,186 @@
     <button class="tab" data-tab="settings">Réglages</button>
   </nav>
 
+  <!-- Pages -->
   <main class="pages">
     <!-- Accueil -->
     <section id="page-home">
       <div class="counters-grid">
-
-        <div id="ctr-cigs" class="counter-card">
+        <article id="ctr-cigs" class="counter-card">
           <h2>Cigarettes</h2>
           <div class="ctr-row">
-            <button class="btn small" data-action="dec" data-kind="cigs">−</button>
-            <div id="val-cigs" class="ctr-val">0</div>
-            <button class="btn small" data-action="inc" data-kind="cigs">+</button>
+            <button class="btn" data-action="dec" data-kind="cigs">−</button>
+            <div class="ctr-val" id="val-cigs">0</div>
+            <button class="btn" data-action="inc" data-kind="cigs">+</button>
           </div>
-          <label class="toggle"><input type="checkbox" id="chk-cigs-active"> Activer</label>
-        </div>
+          <label class="toggle"><input type="checkbox" id="chk-cigs-active" /> Activer</label>
+        </article>
 
-        <div id="ctr-joints" class="counter-card">
+        <article id="ctr-joints" class="counter-card">
           <h2>Joints</h2>
           <div class="ctr-row">
-            <button class="btn small" data-action="dec" data-kind="joints">−</button>
-            <div id="val-joints" class="ctr-val">0</div>
-            <button class="btn small" data-action="inc" data-kind="joints">+</button>
+            <button class="btn" data-action="dec" data-kind="joints">−</button>
+            <div class="ctr-val" id="val-joints">0</div>
+            <button class="btn" data-action="inc" data-kind="joints">+</button>
           </div>
-          <label class="toggle"><input type="checkbox" id="chk-joints-active"> Activer</label>
-        </div>
+          <label class="toggle"><input type="checkbox" id="chk-joints-active" /> Activer</label>
+        </article>
 
-        <div id="ctr-beer" class="counter-card">
+        <article id="ctr-beer" class="counter-card">
           <h2>Bière</h2>
           <div class="ctr-row">
-            <button class="btn small" data-action="dec" data-kind="beer">−</button>
-            <div id="val-beer" class="ctr-val">0</div>
-            <button class="btn small" data-action="inc" data-kind="beer">+</button>
+            <button class="btn" data-action="dec" data-kind="beer">−</button>
+            <div class="ctr-val" id="val-beer">0</div>
+            <button class="btn" data-action="inc" data-kind="beer">+</button>
           </div>
-          <label class="toggle"><input type="checkbox" id="chk-beer-active"> Activer</label>
-        </div>
+          <label class="toggle"><input type="checkbox" id="chk-beer-active" /> Activer</label>
+        </article>
 
-        <div id="ctr-hard" class="counter-card">
+        <article id="ctr-hard" class="counter-card">
           <h2>Alcool fort</h2>
           <div class="ctr-row">
-            <button class="btn small" data-action="dec" data-kind="hard">−</button>
-            <div id="val-hard" class="ctr-val">0</div>
-            <button class="btn small" data-action="inc" data-kind="hard">+</button>
+            <button class="btn" data-action="dec" data-kind="hard">−</button>
+            <div class="ctr-val" id="val-hard">0</div>
+            <button class="btn" data-action="inc" data-kind="hard">+</button>
           </div>
-          <label class="toggle"><input type="checkbox" id="chk-hard-active"> Activer</label>
-        </div>
+          <label class="toggle"><input type="checkbox" id="chk-hard-active" /> Activer</label>
+        </article>
 
-        <div id="ctr-liqueur" class="counter-card">
+        <article id="ctr-liqueur" class="counter-card">
           <h2>Liqueur</h2>
           <div class="ctr-row">
-            <button class="btn small" data-action="dec" data-kind="liqueur">−</button>
-            <div id="val-liqueur" class="ctr-val">0</div>
-            <button class="btn small" data-action="inc" data-kind="liqueur">+</button>
+            <button class="btn" data-action="dec" data-kind="liqueur">−</button>
+            <div class="ctr-val" id="val-liqueur">0</div>
+            <button class="btn" data-action="inc" data-kind="liqueur">+</button>
           </div>
-          <label class="toggle"><input type="checkbox" id="chk-liqueur-active"> Activer</label>
-        </div>
-
+          <label class="toggle"><input type="checkbox" id="chk-liqueur-active" /> Activer</label>
+        </article>
       </div>
 
       <!-- Conseils -->
-      <div class="tips-panel">
-        <div class="tips-card">
-          <h3>Conseils</h3>
-          <div id="tips-list">
-            <!-- Rempli dynamiquement -->
-          </div>
-        </div>
-      </div>
+      <section id="tips-root" class="tips-panel"></section>
     </section>
 
     <!-- Stats -->
     <section id="page-stats" class="hide">
-      <div class="section-title">Période — <span id="stats-date">—</span></div>
+      <div class="kpi-block">
+        <h3>Période</h3>
+        <div id="stats-date">—</div>
+      </div>
       <div class="chart-actions">
         <button id="btnPeriod-day" class="btn">Jour</button>
         <button id="btnPeriod-week" class="btn">Semaine</button>
         <button id="btnPeriod-month" class="btn">Mois</button>
         <button id="btnPeriod-year" class="btn">Année</button>
-        <button id="btn-export-csv" class="btn">Exporter CSV</button>
-        <button id="btn-export-json" class="btn">Exporter JSON</button>
-        <label class="btn">
-          Importer JSON
-          <input id="file-import-json" type="file" accept="application/json" style="display:none">
-        </label>
+        <button id="btn-export-csv" class="btn small">Exporter CSV</button>
+        <button id="btn-export-json" class="btn small">Exporter JSON</button>
+        <label class="btn small">Importer JSON <input id="file-import-json" type="file" accept="application/json" hidden /></label>
       </div>
-      <div class="chart-block">
-        <canvas id="chart-main"></canvas>
-      </div>
+      <div class="chart-block"><canvas id="chart-main"></canvas></div>
     </section>
 
     <!-- Calendrier -->
     <section id="page-calendar" class="hide">
-      <div id="calendar-root"></div>
+      <div class="calendar-toolbar">
+        <div class="toolbar-left">
+          <button id="cal-prev" class="btn small">◀</button>
+          <div id="cal-title" class="cal-title">—</div>
+          <button id="cal-next" class="btn small">▶</button>
+        </div>
+        <div class="toolbar-center">
+          <button class="btn small" data-cal-mode="day">Jour</button>
+          <button class="btn small" data-cal-mode="week">Semaine</button>
+          <button class="btn small active" data-cal-mode="month">Mois</button>
+        </div>
+        <div class="toolbar-right cal-filters">
+          <label><input type="checkbox" data-cal-filter="cigs" checked /> 🚬</label>
+          <label><input type="checkbox" data-cal-filter="joints" checked /> 🌿</label>
+          <label><input type="checkbox" data-cal-filter="beer" checked /> 🍺</label>
+          <label><input type="checkbox" data-cal-filter="hard" checked /> 🥃</label>
+          <label><input type="checkbox" data-cal-filter="liqueur" checked /> 🍸</label>
+        </div>
+      </div>
+      <div id="calendar-grid" class="cal-grid"></div>
+      <div id="calendar-details" class="cal-details"></div>
+      <div class="cal-links">
+        <button id="cal-open-stats" class="btn small">Ouvrir Stats</button>
+        <button id="cal-open-habits" class="btn small">Ouvrir Habitudes</button>
+      </div>
     </section>
 
     <!-- Habitudes -->
     <section id="page-habits" class="hide">
-      <div class="section-title">Objectifs par jour</div>
+      <h2 class="section-title">Objectifs par jour</h2>
       <div class="grid-2">
-        <label>Cigarettes <input id="goal-cigs" type="number" min="0" value="0"></label>
-        <label>Joints <input id="goal-joints" type="number" min="0" value="0"></label>
-        <label>Bière <input id="goal-beer" type="number" min="0" value="0"></label>
-        <label>Alcool fort <input id="goal-hard" type="number" min="0" value="0"></label>
-        <label>Liqueur <input id="goal-liqueur" type="number" min="0" value="0"></label>
+        <label>Cigarettes <input id="goal-cigs" type="number" min="0" /></label>
+        <label>Joints <input id="goal-joints" type="number" min="0" /></label>
+        <label>Bière <input id="goal-beer" type="number" min="0" /></label>
+        <label>Alcool fort <input id="goal-hard" type="number" min="0" /></label>
+        <label>Liqueur <input id="goal-liqueur" type="number" min="0" /></label>
       </div>
-      <div class="actions">
-        <button id="btn-habits-save" class="btn">Enregistrer</button>
-        <button id="btn-habits-reset" class="btn">Réinitialiser</button>
-      </div>
+      <div class="actions"><button id="btn-habits-save" class="btn">Enregistrer</button> <button id="btn-habits-reset" class="btn">Réinitialiser</button></div>
 
-      <div class="section-title">Dates clés</div>
+      <h2 class="section-title">Dates clés</h2>
       <div class="grid-2">
-        <label>Arrêt global <input id="date-stop-global" type="date"></label>
-        <label>Arrêt alcool <input id="date-stop-alcohol" type="date"></label>
+        <label>Arrêt global <input id="date-stop-global" type="date" /></label>
+        <label>Arrêt alcool <input id="date-stop-alcohol" type="date" /></label>
 
-        <label>Arrêt clopes (début réduction) <input id="date-reduce-cigs" type="date"></label>
-        <label>Arrêt clopes (objectif) <input id="date-quit-cigs-obj" type="date"></label>
-        <label>Clopes : plus jamais après <input id="date-nomore-cigs" type="date"></label>
+        <label>Arrêt clopes (début réduction) <input id="date-reduce-cigs" type="date" /></label>
+        <label>Arrêt clopes (objectif) <input id="date-quit-cigs-obj" type="date" /></label>
+        <label>Clopes : plus jamais après <input id="date-nomore-cigs" type="date" /></label>
 
-        <label>Arrêt joints (début réduction) <input id="date-reduce-joints" type="date"></label>
-        <label>Arrêt joints (objectif) <input id="date-quit-joints-obj" type="date"></label>
-        <label>Joints : plus jamais après <input id="date-nomore-joints" type="date"></label>
+        <label>Arrêt joints (début réduction) <input id="date-reduce-joints" type="date" /></label>
+        <label>Arrêt joints (objectif) <input id="date-quit-joints-obj" type="date" /></label>
+        <label>Joints : plus jamais après <input id="date-nomore-joints" type="date" /></label>
 
-        <label>Alcool (début réduction) <input id="date-reduce-alcohol" type="date"></label>
-        <label>Alcool (objectif arrêt) <input id="date-quit-alcohol-obj" type="date"></label>
-        <label>Alcool : plus jamais après <input id="date-nomore-alcohol" type="date"></label>
+        <label>Alcool (début réduction) <input id="date-reduce-alcohol" type="date" /></label>
+        <label>Alcool (objectif arrêt) <input id="date-quit-alcohol-obj" type="date" /></label>
+        <label>Alcool : plus jamais après <input id="date-nomore-alcohol" type="date" /></label>
       </div>
     </section>
 
     <!-- Réglages -->
     <section id="page-settings" class="hide">
-      <div class="section-title">Profil</div>
+      <h2 class="section-title">Profil</h2>
       <div class="grid-2">
-        <label>Prénom <input id="profile-name" type="text" placeholder="Ton prénom"></label>
-        <label>Langue
-          <select id="select-language">
-            <option value="fr">Français</option>
-            <option value="en">English</option>
-          </select>
-        </label>
+        <label>Prénom <input id="profile-name" type="text" placeholder="Votre prénom" /></label>
+        <label>Langue <select id="select-language"></select></label>
       </div>
 
-      <div class="section-title">Devise</div>
+      <h2 class="section-title">Devise</h2>
       <div class="grid-2">
-        <label>Symbole <input id="currency-symbol" type="text" value="€" maxlength="3"></label>
-        <label>Position :
-          <span>
-            <input type="radio" name="curpos" id="currency-before" checked> Avant
-            <input type="radio" name="curpos" id="currency-after"> Après
-          </span>
-        </label>
+        <label>Symbole <input id="currency-symbol" type="text" value="€" /></label>
+        <div>Position :
+          <label><input type="radio" name="cur-pos" id="currency-before" /> Avant</label>
+          <label><input type="radio" name="cur-pos" id="currency-after" /> Après</label>
+        </div>
       </div>
       <div class="actions"><button id="btn-apply-currency" class="btn">Appliquer</button></div>
 
-      <div class="section-title">Modules</div>
+      <h2 class="section-title">Modules</h2>
       <div class="grid-2">
-        <label><span>Cigarettes</span> <input id="mod-cigs" type="checkbox"></label>
-        <label><span>Joints</span> <input id="mod-joints" type="checkbox"></label>
-        <label><span>Bière</span> <input id="mod-beer" type="checkbox"></label>
-        <label><span>Alcool fort</span> <input id="mod-hard" type="checkbox"></label>
-        <label><span>Liqueur</span> <input id="mod-liqueur" type="checkbox"></label>
-        <label><span>Alcool (global)</span> <input id="mod-alcohol" type="checkbox"></label>
+        <label><input type="checkbox" id="mod-cigs" /> Cigarettes</label>
+        <label><input type="checkbox" id="mod-joints" /> Joints</label>
+        <label><input type="checkbox" id="mod-beer" /> Bière</label>
+        <label><input type="checkbox" id="mod-hard" /> Alcool fort</label>
+        <label><input type="checkbox" id="mod-liqueur" /> Liqueur</label>
+        <label><input type="checkbox" id="mod-alcohol" /> Alcool (global)</label>
       </div>
 
-      <div class="section-title">Prix unitaires</div>
+      <h2 class="section-title">Prix unitaires</h2>
       <div class="grid-2">
-        <label>Cigarette (€) <input id="price-cigarette" type="number" step="0.01" min="0"></label>
-        <label>Joint (€) <input id="price-joint" type="number" step="0.01" min="0"></label>
-        <label>Bière (€) <input id="price-beer" type="number" step="0.01" min="0"></label>
-        <label>Alcool fort (€) <input id="price-hard" type="number" step="0.01" min="0"></label>
-        <label>Liqueur (€) <input id="price-liqueur" type="number" step="0.01" min="0"></label>
+        <label>Cigarette (€) <input id="price-cigarette" type="number" min="0" step="0.01" /></label>
+        <label>Joint (€) <input id="price-joint" type="number" min="0" step="0.01" /></label>
+        <label>Bière (€) <input id="price-beer" type="number" min="0" step="0.01" /></label>
+        <label>Alcool fort (€) <input id="price-hard" type="number" min="0" step="0.01" /></label>
+        <label>Liqueur (€) <input id="price-liqueur" type="number" min="0" step="0.01" /></label>
       </div>
       <div class="actions">
         <button id="btn-save-prices" class="btn">Enregistrer les prix</button>
         <button id="btn-reset-prices" class="btn">Réinitialiser les prix</button>
       </div>
 
-      <div class="section-title">Maintenance & sauvegardes</div>
+      <h2 class="section-title">Maintenance & sauvegardes</h2>
       <div class="actions">
         <button id="btn-raz-day" class="btn">RAZ du jour</button>
         <button id="btn-raz-history" class="btn">RAZ historique</button>
@@ -226,33 +221,35 @@
       </div>
       <div class="actions">
         <button id="btn-save-json-settings" class="btn">Sauvegarder JSON</button>
-        <label class="btn">
-          Importer JSON
-          <input id="file-import-json-settings" type="file" accept="application/json" style="display:none">
-        </label>
+        <label class="btn">Importer JSON <input id="file-import-json-settings" type="file" accept="application/json" hidden /></label>
       </div>
 
-      <div class="section-title">Journal & Debug</div>
-      <label class="toggle"><input type="checkbox" id="cb-debug-overlay"> Afficher la console</label>
+      <h2 class="section-title">Journal & Debug</h2>
+      <label><input type="checkbox" id="cb-debug-overlay" /> Afficher la console</label>
       <div class="actions">
         <button id="btn-copy-logs" class="btn">Copier les logs</button>
         <button id="btn-clear-logs" class="btn">Vider les logs</button>
         <button id="btn-resources" class="btn">Ressources & numéros utiles</button>
       </div>
+
       <div id="debug-console" class="hide"></div>
     </section>
   </main>
 
-  <!-- Age-gate -->
-  <dialog id="agegate" class="agegate hide">
-    <h3>+18</h3>
-    <p>J’ai plus de 18 ans.</p>
-    <div class="actions">
-      <label><input type="checkbox" id="age-18plus"> Oui</label>
-      <label><input type="checkbox" id="age-hide"> Ne plus afficher</label>
-      <button id="btn-age-accept" class="btn">Entrer</button>
-    </div>
+  <!-- Age gate -->
+  <dialog id="agegate" class="hide">
+    <form method="dialog" class="agegate">
+      <h3>+18</h3>
+      <p>J'ai plus de 18 ans.</p>
+      <label><input type="checkbox" id="age-18plus" /> Oui</label>
+      <label><input type="checkbox" id="age-hide" /> Ne plus afficher</label>
+      <div class="actions"><button id="btn-age-accept" class="btn" disabled>Entrer</button></div>
+    </form>
   </dialog>
 
+  <!-- Vendor -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- App -->
+  <script type="module" src="./js/app.js?v=6"></script>
 </body>
 </html>
