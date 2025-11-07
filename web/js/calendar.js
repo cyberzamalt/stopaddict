@@ -1,234 +1,256 @@
-/* web/js/calendar.js — V2 : Mois + Semaine + Jour, filtres modules, liens Stats/Habitudes */
-export function mountCalendar(ctx) {
-  const { S, getState = () => S, showTab } = ctx || {};
-  const elGrid = document.querySelector("#calendar-grid");
-  const elTitle = document.querySelector("#cal-title");
-  const elDetails = document.querySelector("#calendar-details");
+/* web/js/calendar.js — Calendrier V2 (jour/semaine/mois) */
+const $  = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => r.querySelectorAll(s);
 
-  if (!elGrid || !elTitle || !elDetails) return null;
+function iso(d){
+  const y=d.getFullYear();
+  const m=String(d.getMonth()+1).padStart(2,'0');
+  const da=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${da}`;
+}
+function clone(d){ return new Date(d.getTime()); }
+function startOfWeek(d){ const x=new Date(d); const wd=(x.getDay()+6)%7; x.setDate(x.getDate()-wd); x.setHours(0,0,0,0); return x; }
+function startOfMonth(d){ const x=new Date(d.getFullYear(), d.getMonth(), 1); x.setHours(0,0,0,0); return x; }
+function endOfMonth(d){ const x=new Date(d.getFullYear(), d.getMonth()+1, 0); x.setHours(0,0,0,0); return x; }
 
-  // Etat interne
-  let mode = "month"; // "day" | "week" | "month"
-  let ref = new Date();
-
-  // Filtres
-  function readFilters() {
-    const c = (name) => !!document.querySelector(`[data-cal-filter="${name}"]`)?.checked;
-    return { cigs: c("cigs"), joints: c("joints"), beer: c("beer"), hard: c("hard"), liqueur: c("liqueur") };
+function sumForDay(S, dateIso, filters){
+  const todayIso = iso(new Date());
+  const d = (dateIso===todayIso ? { ...S.history?.[dateIso], ...S.today?.counters } : S.history?.[dateIso]) || {};
+  const keys = ['cigs','joints','beer','hard','liqueur'];
+  const out  = { cigs:0,joints:0,beer:0,hard:0,liqueur:0, cost: Number(d.cost||0), saved: Number(d.saved||0) };
+  for (const k of keys){
+    if (!filters[k]) continue;
+    out[k] = Number(d[k]||0);
   }
+  return out;
+}
 
-  const fmt = (d) => d.toISOString().slice(0,10);
-  const isoMonday = (d) => { const x = new Date(d); const wd = (x.getDay()+6)%7; x.setDate(x.getDate()-wd); x.setHours(0,0,0,0); return x; };
+function fmtMoney(n, cur='€'){
+  const x = Math.round(Number(n||0)*100)/100;
+  return x.toFixed(2).replace('.', ',') + cur;
+}
 
-  function getDayData(dateStr, filters) {
-    const st = getState();
-    const d = st.history?.[dateStr] || {};
-    const out = {
-      cigs: filters.cigs ? (d.cigs||0) : 0,
-      joints: filters.joints ? (d.joints||0) : 0,
-      beer: filters.beer ? (d.beer||0) : 0,
-      hard: filters.hard ? (d.hard||0) : 0,
-      liqueur: filters.liqueur ? (d.liqueur||0) : 0,
-      cost: d.cost||0,
-      saved: d.saved||0
-    };
-    return out;
-  }
+export function mountCalendar({ S, getState=()=>S, showTab } = {}){
+  let state = S;
+  const cur = { mode:'month', ref: new Date(), filters:{ cigs:true,joints:true,beer:true,hard:true,liqueur:true } };
 
-  function sumDay(d) {
-    return (d.cigs||0)+(d.joints||0)+(d.beer||0)+(d.hard||0)+(d.liqueur||0);
-    // coût/économies visibles dans détail
-  }
+  const elTitle   = $('#cal-title');
+  const btnPrev   = $('#cal-prev');
+  const btnNext   = $('#cal-next');
+  const grid      = $('#calendar-grid');
+  const details   = $('#calendar-details');
 
-  function renderMonth() {
-    const st = getState();
-    const y = ref.getFullYear(), m = ref.getMonth();
-    const first = new Date(y, m, 1);
-    const start = isoMonday(first);
-    const today = fmt(new Date());
-
-    elTitle.textContent = first.toLocaleDateString(st.profile?.language || "fr-FR", { month:"long", year:"numeric" });
-
-    // En-têtes jours
-    const headers = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
-    let html = `<div class="cal-head">${headers.map(h=>`<div>${h}</div>`).join("")}</div>`;
-
-    // 6 semaines * 7 jours
-    const filters = readFilters();
-    let d = new Date(start);
-    html += `<div class="cal-body">`;
-    for (let w=0; w<6; w++) {
-      for (let i=0; i<7; i++) {
-        const key = fmt(d);
-        const data = getDayData(key, filters);
-        const total = sumDay(data);
-        const inMonth = d.getMonth() === m;
-        const isToday = key === today;
-        html += `
-          <div class="cal-cell ${inMonth?'':'cal-other'} ${isToday?'cal-today':''}" data-date="${key}">
-            <div class="cal-day">${d.getDate()}</div>
-            <div class="cal-mini">
-              ${total>0?`<span class="mini-dot">${total}</span>`:""}
-              ${data.cost?`<span class="mini-euro">€</span>`:""}
-            </div>
-          </div>`;
-        d.setDate(d.getDate()+1);
-      }
-    }
-    html += `</div>`;
-    elGrid.innerHTML = html;
-
-    // Click -> détail jour
-    elGrid.querySelectorAll(".cal-cell").forEach(cell=>{
-      cell.addEventListener("click", ()=>{
-        mode = "day";
-        ref = new Date(cell.dataset.date+"T00:00:00");
-        render();
-      });
-    });
-
-    // Détail du mois (synthèse)
-    showMonthSummary(filters);
-  }
-
-  function showMonthSummary(filters) {
-    const st = getState();
-    const y = ref.getFullYear(), m = ref.getMonth();
-    const first = new Date(y, m, 1);
-    const last = new Date(y, m+1, 0);
-
-    let iter = new Date(first);
-    let total = {cigs:0,joints:0,beer:0,hard:0,liqueur:0,cost:0,saved:0};
-    while (iter <= last) {
-      const k = fmt(iter);
-      const d = getDayData(k, filters);
-      total.cigs+=d.cigs; total.joints+=d.joints; total.beer+=d.beer; total.hard+=d.hard; total.liqueur+=d.liqueur;
-      total.cost+=d.cost; total.saved+=d.saved;
-      iter.setDate(iter.getDate()+1);
-    }
-
-    elDetails.innerHTML = `
-      <div class="cal-box">
-        <h4>Récapitulatif du mois</h4>
-        <div class="cal-summary">
-          <div>🚬 ${total.cigs}</div>
-          <div>🌿 ${total.joints}</div>
-          <div>🍺 ${total.beer}</div>
-          <div>🥃 ${total.hard}</div>
-          <div>🍸 ${total.liqueur}</div>
-          <div>💸 ${(total.cost||0).toFixed(2)}</div>
-          <div>💶 ${(total.saved||0).toFixed(2)}</div>
-        </div>
-      </div>`;
-  }
-
-  function renderWeek() {
-    const st = getState();
-    const start = isoMonday(ref);
-    const today = fmt(new Date());
-    elTitle.textContent = `${start.toLocaleDateString(st.profile?.language||"fr-FR")} → ${new Date(start.getFullYear(),start.getMonth(),start.getDate()+6).toLocaleDateString(st.profile?.language||"fr-FR")}`;
-
-    const filters = readFilters();
-    let d = new Date(start);
-    let html = `<div class="cal-row">`;
-    for (let i=0;i<7;i++){
-      const key = fmt(d);
-      const data = getDayData(key, filters);
-      const isToday = key === today;
-      html += `
-        <div class="cal-cell week ${isToday?'cal-today':''}" data-date="${key}">
-          <div class="cal-day">${d.toLocaleDateString(st.profile?.language||"fr-FR",{weekday:"short"})} ${d.getDate()}</div>
-          <div class="cal-breakdown">
-            <span title="Cigarettes">🚬 ${data.cigs||0}</span>
-            <span title="Joints">🌿 ${data.joints||0}</span>
-            <span title="Bière">🍺 ${data.beer||0}</span>
-            <span title="Fort">🥃 ${data.hard||0}</span>
-            <span title="Liqueur">🍸 ${data.liqueur||0}</span>
-            <span title="Coût">💸 ${(data.cost||0).toFixed(2)}</span>
-            <span title="Économies">💶 ${(data.saved||0).toFixed(2)}</span>
-          </div>
-        </div>`;
-      d.setDate(d.getDate()+1);
-    }
-    html += `</div>`;
-    elGrid.innerHTML = html;
-
-    elDetails.innerHTML = `<div class="cal-box"><h4>Conseil</h4><p>Clique un jour pour le détail, utilise les filtres modules en haut.</p></div>`;
-
-    elGrid.querySelectorAll(".cal-cell").forEach(cell=>{
-      cell.addEventListener("click", ()=>{
-        mode="day";
-        ref = new Date(cell.dataset.date+"T00:00:00");
-        render();
-      });
-    });
-  }
-
-  function renderDay() {
-    const st = getState();
-    const key = fmt(ref);
-    elTitle.textContent = `Jour : ${ref.toLocaleDateString(st.profile?.language||"fr-FR",{weekday:"long", year:"numeric", month:"long", day:"numeric"})}`;
-    const filters = readFilters();
-    const d = getDayData(key, filters);
-
-    elGrid.innerHTML = `
-      <div class="cal-dayview">
-        <div class="cal-box">
-          <h4>${key}</h4>
-          <div class="cal-summary">
-            <div>🚬 ${d.cigs||0}</div>
-            <div>🌿 ${d.joints||0}</div>
-            <div>🍺 ${d.beer||0}</div>
-            <div>🥃 ${d.hard||0}</div>
-            <div>🍸 ${d.liqueur||0}</div>
-            <div>💸 ${(d.cost||0).toFixed(2)}</div>
-            <div>💶 ${(d.saved||0).toFixed(2)}</div>
-          </div>
-        </div>
-      </div>`;
-
-    elDetails.innerHTML = `<div class="cal-box"><h4>Astuce</h4><p>Utilise Habitudes pour fixer des objectifs (onglet <em>Habitudes</em>).</p></div>`;
-  }
-
-  function render() {
-    if (mode==="month") renderMonth();
-    else if (mode==="week") renderWeek();
-    else renderDay();
-  }
-
-  // Toolbar events
-  document.querySelectorAll('[data-cal-mode]').forEach(b=>{
-    b.addEventListener("click", ()=>{
-      document.querySelectorAll('[data-cal-mode]').forEach(x=>x.classList.remove("active"));
-      b.classList.add("active");
-      mode = b.dataset.calMode;
+  // Mode buttons
+  $$('.toolbar-center [data-cal-mode]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      $$('.toolbar-center [data-cal-mode]').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      cur.mode = b.dataset.calMode;
       render();
     });
   });
-  document.getElementById("cal-prev")?.addEventListener("click", ()=>{
-    if (mode==="month") ref.setMonth(ref.getMonth()-1);
-    else if (mode==="week") ref.setDate(ref.getDate()-7);
-    else ref.setDate(ref.getDate()-1);
-    render();
-  });
-  document.getElementById("cal-next")?.addEventListener("click", ()=>{
-    if (mode==="month") ref.setMonth(ref.getMonth()+1);
-    else if (mode==="week") ref.setDate(ref.getDate()+7);
-    else ref.setDate(ref.getDate()+1);
-    render();
-  });
-  document.querySelectorAll('[data-cal-filter]').forEach(cb=>{
-    cb.addEventListener("change", render);
+
+  // Filters
+  $$('.cal-filters [data-cal-filter]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      cur.filters[cb.dataset.calFilter] = cb.checked;
+      render();
+    });
   });
 
-  document.getElementById("cal-open-stats")?.addEventListener("click", ()=> showTab?.("stats"));
-  document.getElementById("cal-open-habits")?.addEventListener("click", ()=> showTab?.("habits"));
+  // Prev/Next
+  btnPrev?.addEventListener('click', ()=>{
+    if (cur.mode==='day'){ cur.ref.setDate(cur.ref.getDate()-1); }
+    else if (cur.mode==='week'){ cur.ref.setDate(cur.ref.getDate()-7); }
+    else { cur.ref.setMonth(cur.ref.getMonth()-1); }
+    render();
+  });
+  btnNext?.addEventListener('click', ()=>{
+    if (cur.mode==='day'){ cur.ref.setDate(cur.ref.getDate()+1); }
+    else if (cur.mode==='week'){ cur.ref.setDate(cur.ref.getDate()+7); }
+    else { cur.ref.setMonth(cur.ref.getMonth()+1); }
+    render();
+  });
 
-  // Initial
+  function renderHeader(){
+    const d = cur.ref;
+    const t = (cur.mode==='day')
+      ? d.toLocaleDateString('fr-FR', { weekday:'long', year:'numeric', month:'long', day:'numeric' })
+      : (cur.mode==='week')
+        ? `Semaine du ${startOfWeek(d).toLocaleDateString('fr-FR')}`
+        : d.toLocaleDateString('fr-FR', { year:'numeric', month:'long' });
+    if (elTitle) elTitle.textContent = t;
+  }
+
+  function renderDay(){
+    if (!grid || !details) return;
+    grid.replaceChildren();
+    details.replaceChildren();
+
+    const S = getState();
+    const i = iso(cur.ref);
+    const totals = sumForDay(S,i,cur.filters);
+    const curSym = S.currency || '€';
+
+    const box = document.createElement('div');
+    box.className = 'cal-box cal-dayview';
+    const h4 = document.createElement('h4');
+    h4.textContent = `Détail — ${cur.ref.toLocaleDateString('fr-FR')}`;
+    box.appendChild(h4);
+
+    const sum = document.createElement('div');
+    sum.className = 'cal-summary';
+    const pairs = [
+      ['Cigarettes', totals.cigs],
+      ['Joints',     totals.joints],
+      ['Bière',      totals.beer],
+      ['Alcool fort',totals.hard],
+      ['Liqueur',    totals.liqueur],
+      ['Coût',       fmtMoney(totals.cost, curSym)],
+      ['Économies',  fmtMoney(totals.saved, curSym)],
+    ];
+    for (const [k,v] of pairs){
+      const c = document.createElement('div');
+      c.innerHTML = `<strong>${k}</strong><br>${v}`;
+      sum.appendChild(c);
+    }
+    box.appendChild(sum);
+    details.appendChild(box);
+  }
+
+  function dayCell(d, otherMonth=false){
+    const S = getState();
+    const i = iso(d);
+    const t = sumForDay(S, i, cur.filters);
+    const cell = document.createElement('div');
+    cell.className = 'cal-cell';
+    if (otherMonth) cell.classList.add('cal-other');
+    if (i === iso(new Date())) cell.classList.add('cal-today');
+
+    const day = document.createElement('div');
+    day.className = 'cal-day';
+    day.textContent = String(d.getDate());
+    cell.appendChild(day);
+
+    const mini = document.createElement('div');
+    mini.className = 'cal-mini';
+    const dot = (txt) => { const s=document.createElement('span'); s.className='mini-dot'; s.textContent=txt; return s; };
+    const eur = (val) => { const s=document.createElement('span'); s.className='mini-euro'; s.textContent=fmtMoney(val, (S.currency||'€')); return s; };
+
+    const sumCount = (t.cigs + t.joints + t.beer + t.hard + t.liqueur);
+    if (sumCount > 0) mini.appendChild(dot(sumCount));
+    if (t.cost > 0)   mini.appendChild(eur(t.cost));
+
+    cell.appendChild(mini);
+
+    cell.addEventListener('click', ()=>{
+      cur.mode = 'day';
+      $$('.toolbar-center [data-cal-mode]').forEach(x=>x.classList.remove('active'));
+      $$('.toolbar-center [data-cal-mode][data-cal-mode="day"]')[0]?.classList.add('active');
+      cur.ref = new Date(d);
+      render();
+    });
+
+    return cell;
+  }
+
+  function renderMonth(){
+    if (!grid || !details) return;
+    grid.replaceChildren();
+    details.replaceChildren();
+
+    const d0   = startOfMonth(cur.ref);
+    const dEnd = endOfMonth(cur.ref);
+
+    // Head (jours)
+    const head = document.createElement('div');
+    head.className = 'cal-head';
+    const days = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+    for (const w of days){ const c=document.createElement('div'); c.textContent = w; head.appendChild(c); }
+    grid.appendChild(head);
+
+    // Body
+    const body = document.createElement('div');
+    body.className = 'cal-body';
+
+    // Commencer au lundi de la 1ère semaine affichée
+    let curDay = startOfWeek(d0);
+    while (curDay <= dEnd || (curDay.getDay()+6)%7 !== 0) {
+      body.appendChild(dayCell(new Date(curDay), curDay.getMonth() !== d0.getMonth()));
+      curDay.setDate(curDay.getDate()+1);
+    }
+
+    grid.appendChild(body);
+
+    // Bas de page : liens rapides
+    const links = document.createElement('div');
+    links.className = 'cal-links';
+    const b1 = Object.assign(document.createElement('button'), { className:'btn small', id:'cal-open-stats', textContent:'Ouvrir Stats' });
+    const b2 = Object.assign(document.createElement('button'), { className:'btn small', id:'cal-open-habits', textContent:'Ouvrir Habitudes' });
+    b1.addEventListener('click', ()=> showTab?.('stats'));
+    b2.addEventListener('click', ()=> showTab?.('habits'));
+    links.appendChild(b1); links.appendChild(b2);
+    details.appendChild(links);
+  }
+
+  function renderWeek(){
+    if (!grid || !details) return;
+    grid.replaceChildren();
+    details.replaceChildren();
+
+    const S = getState();
+    const start = startOfWeek(cur.ref);
+    const cont = document.createElement('div');
+    cont.className = 'cal-row';
+
+    for (let i=0;i<7;i++){
+      const d = new Date(start); d.setDate(start.getDate()+i);
+      cont.appendChild(dayCell(d, false));
+    }
+    grid.appendChild(cont);
+
+    // Résumé semaine
+    const sumBox = document.createElement('div');
+    sumBox.className = 'cal-box';
+    const h4 = document.createElement('h4'); h4.textContent = 'Résumé semaine';
+    sumBox.appendChild(h4);
+
+    const totals = { cigs:0,joints:0,beer:0,hard:0,liqueur:0,cost:0,saved:0 };
+    for (let i=0;i<7;i++){
+      const d=new Date(start); d.setDate(start.getDate()+i);
+      const t=sumForDay(S, iso(d), cur.filters);
+      totals.cigs+=t.cigs; totals.joints+=t.joints; totals.beer+=t.beer; totals.hard+=t.hard; totals.liqueur+=t.liqueur; totals.cost+=t.cost; totals.saved+=t.saved;
+    }
+    const curSym = S.currency || '€';
+    const list = [
+      ['Cigarettes', totals.cigs],
+      ['Joints', totals.joints],
+      ['Bière', totals.beer],
+      ['Alcool fort', totals.hard],
+      ['Liqueur', totals.liqueur],
+      ['Coût', fmtMoney(totals.cost, curSym)],
+      ['Économies', fmtMoney(totals.saved, curSym)],
+    ];
+    for (const [k,v] of list){
+      const p = document.createElement('div');
+      p.textContent = `${k}: ${v}`;
+      sumBox.appendChild(p);
+    }
+    details.appendChild(sumBox);
+  }
+
+  function render(){
+    state = getState();
+    renderHeader();
+    if (cur.mode==='day') renderDay();
+    else if (cur.mode==='week') renderWeek();
+    else renderMonth();
+  }
+
+  // premier rendu
   render();
 
-  // API publique pour l’app
   return {
-    update(nextS){ render(); }
+    update: (Snext)=>{ state = Snext || getState(); render(); }
   };
 }
