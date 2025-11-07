@@ -89,3 +89,10 @@ dialog::backdrop{background:rgba(2,6,23,.5)}
 .agegate{min-width:260px;padding:1rem;display:grid;gap:.6rem}
 .agegate h3{margin:0}
 .agegate .actions{justify-content:flex-end}
+
+/* Resources modal */
+.resources-list{display:grid;gap:.5rem}
+.resource-item{display:flex;align-items:center;justify-content:space-between;background:#0c1222;border:1px solid #1f2b48;padding:.6rem;border-radius:.6rem}
+.resource-item a{text-decoration:none;color:#cde2ff;font-weight:600}
+.resource-item small{opacity:.8}
+
