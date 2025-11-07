@@ -1,42 +1,110 @@
-// Ressources & numéros utiles (FR) – version simple et sûre
-export const RESOURCES = [
+/* web/js/resources.js — Ressources & numéros utiles (FR) */
+
+const RESOURCES = [
   {
-    cat: "Urgences",
+    group: "Urgences",
     items: [
-      { name: "112 (Urgences européennes)", phone: "112", url: "https://www.service-public.fr/particuliers/vosdroits/F742" },
-      { name: "15 (SAMU)", phone: "15" },
-      { name: "17 (Police)", phone: "17" },
-      { name: "18 (Pompiers)", phone: "18" },
-      { name: "114 (SMS/visio personnes sourdes)", phone: "114", url: "https://www.urgence114.fr" },
+      { label: "SAMU (urgence vitale)", number: "15" },
+      { label: "Police / Gendarmerie", number: "17" },
+      { label: "Pompiers", number: "18" },
+      { label: "Numéro d’urgence européen", number: "112" },
+      { label: "Urgence sourds/malentendants (SMS/visio)", number: "114", site: "https://www.info.urgence114.fr" }
     ]
   },
   {
-    cat: "Prévention suicide",
+    group: "Addictions",
     items: [
-      { name: "3114 (24/7, gratuit)", phone: "3114", url: "https://3114.fr" }
+      { label: "Drogues Info Service", number: "0 800 23 13 13", site: "https://www.drogues-info-service.fr" },
+      { label: "Alcool Info Service", number: "0 980 980 930", site: "https://www.alcool-info-service.fr" },
+      { label: "Tabac Info Service", number: "39 89", site: "https://www.tabac-info-service.fr" }
     ]
   },
   {
-    cat: "Addictions / arrêt",
+    group: "Soutien psychologique",
     items: [
-      { name: "Tabac Info Service", phone: "3989", url: "https://www.tabac-info-service.fr" },
-      { name: "Alcool Info Service", phone: "0980 980 930", url: "https://www.alcool-info-service.fr" },
-      { name: "Drogues Info Service", phone: "0800 23 13 13", url: "https://www.drogues-info-service.fr" }
+      { label: "Prévention du suicide", number: "3114", site: "https://3114.fr" }
     ]
   },
   {
-    cat: "Soutien & violences",
+    group: "Violences et protection",
     items: [
-      { name: "Violences Femmes Info", phone: "3919", url: "https://www.solidaritefemmes.org" },
-      { name: "Enfance en danger", phone: "119", url: "https://allo119.gouv.fr" },
-      { name: "Urgence sociale (hébergement)", phone: "115" }
+      { label: "Violences femmes info", number: "3919" },
+      { label: "Enfants en danger – Allô", number: "119" }
     ]
   },
   {
-    cat: "Infos santé",
+    group: "Aide sociale / santé",
     items: [
-      { name: "Médecin de garde", phone: "116117" },
-      { name: "Enfant disparu", phone: "116000", url: "https://116000.fr" }
+      { label: "Hébergement d’urgence (Samu social)", number: "115" },
+      { label: "Médecin de garde (soins non programmés)", number: "116 117" }
     ]
   }
 ];
+
+/* ---------- UI ---------- */
+
+function ensureDialog() {
+  let dlg = document.getElementById("resources-dialog");
+  if (dlg) return dlg;
+
+  dlg = document.createElement("dialog");
+  dlg.id = "resources-dialog";
+  dlg.className = "agegate"; // réutilise le style du dialog
+  dlg.innerHTML = `
+    <h3>Ressources & numéros utiles</h3>
+    <div id="resources-body" style="max-height:55vh;overflow:auto;margin:.5rem 0;"></div>
+    <div class="actions"><button id="res-close" class="btn">Fermer</button></div>
+  `;
+  document.body.appendChild(dlg);
+
+  // Remplir la liste
+  const body = dlg.querySelector("#resources-body");
+  RESOURCES.forEach(group => {
+    const wrap = document.createElement("div");
+    wrap.style.marginBottom = ".6rem";
+    const h = document.createElement("h4");
+    h.textContent = group.group;
+    h.style.margin = "0 0 .35rem 0";
+    wrap.appendChild(h);
+
+    group.items.forEach(it => {
+      const line = document.createElement("div");
+      line.className = "tip-line";
+      const tel = it.number ? `<a href="tel:${it.number.replace(/\s+/g,'')}" style="text-decoration:underline">${it.number}</a>` : "";
+      const site = it.site ? ` — <a href="${it.site}" target="_blank" rel="noopener">site</a>` : "";
+      line.innerHTML = `<strong>${it.label}</strong> — ${tel}${site}`;
+      wrap.appendChild(line);
+    });
+
+    body.appendChild(wrap);
+  });
+
+  dlg.querySelector("#res-close")?.addEventListener("click", () => dlg.close());
+  return dlg;
+}
+
+export function openResources() {
+  const dlg = ensureDialog();
+  try { dlg.showModal(); } catch { dlg.classList.remove("hide"); }
+}
+
+export function mountResources() {
+  // Bouton dans Réglages
+  const btn = document.getElementById("btn-resources");
+  if (btn) btn.addEventListener("click", openResources);
+
+  // Lien dans l’Age Gate : s’il n’existe pas, on l’ajoute (comme dans le monolithe)
+  const ageForm = document.querySelector("#agegate .agegate");
+  if (ageForm && !ageForm.querySelector("[data-resources-link]")) {
+    const p = document.createElement("p");
+    p.style.margin = "0 0 .4rem 0";
+    p.innerHTML = `Besoin d'aide ? <a href="#" data-resources-link>Ressources et numéros utiles</a>`;
+    ageForm.insertBefore(p, ageForm.firstElementChild?.nextSibling || ageForm.firstChild);
+  }
+  ageForm?.querySelector("[data-resources-link]")?.addEventListener("click", (e) => {
+    e.preventDefault(); openResources();
+  });
+}
+
+/* Auto-mount au chargement du module */
+try { mountResources(); } catch {}
