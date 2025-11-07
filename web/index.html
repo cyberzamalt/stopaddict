@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>StopAddict</title>
-  <link rel="stylesheet" href="./css/app.css?v=5" />
+  <link rel="stylesheet" href="./css/app.css?v=7" />
 </head>
 <body>
   <!-- Header -->
@@ -22,6 +22,7 @@
       <div class="kpi"><span>🍺+🍷</span> <strong id="hdr-alcohol">0</strong></div>
       <div class="kpi"><span>€</span> <strong id="hdr-cost">0,00€</strong></div>
       <div class="kpi"><span>💶</span> <strong id="hdr-saved">0,00€</strong></div>
+      <button id="btn-open-res" class="btn small" title="Ressources & numéros utiles">ℹ️</button>
     </div>
   </header>
 
@@ -53,7 +54,7 @@
           <h2>Joints</h2>
           <div class="ctr-row">
             <button class="btn" data-action="dec" data-kind="joints">−</button>
-            <div class="ctr-val" id="val-joints">0</div>
+            <div class="ctr-val" id="val-joints">3</div>
             <button class="btn" data-action="inc" data-kind="joints">+</button>
           </div>
           <label class="toggle"><input type="checkbox" id="chk-joints-active" /> Activer</label>
@@ -91,7 +92,12 @@
       </div>
 
       <!-- Conseils -->
-      <section id="tips-root" class="tips-panel"></section>
+      <section id="tips-root" class="tips-panel">
+        <div class="tips-card">
+          <h3>Conseils du jour</h3>
+          <div id="tips-list"></div>
+        </div>
+      </section>
     </section>
 
     <!-- Stats -->
@@ -109,7 +115,8 @@
         <button id="btn-export-json" class="btn small">Exporter JSON</button>
         <label class="btn small">Importer JSON <input id="file-import-json" type="file" accept="application/json" hidden /></label>
       </div>
-      <div class="chart-block"><canvas id="chart-main"></canvas></div>
+      <div class="chart-block"><canvas id="chart-counts"></canvas></div>
+      <div class="chart-block" style="margin-top:.6rem"><canvas id="chart-money"></canvas></div>
     </section>
 
     <!-- Calendrier -->
@@ -222,13 +229,6 @@
       <div class="actions">
         <button id="btn-save-json-settings" class="btn">Sauvegarder JSON</button>
         <label class="btn">Importer JSON <input id="file-import-json-settings" type="file" accept="application/json" hidden /></label>
-      </div>
-
-      <h2 class="section-title">Journal & Debug</h2>
-      <label><input type="checkbox" id="cb-debug-overlay" /> Afficher la console</label>
-      <div class="actions">
-        <button id="btn-copy-logs" class="btn">Copier les logs</button>
-        <button id="btn-clear-logs" class="btn">Vider les logs</button>
         <button id="btn-resources" class="btn">Ressources & numéros utiles</button>
       </div>
 
@@ -240,18 +240,28 @@
   <dialog id="agegate" class="hide">
     <form method="dialog" class="agegate">
       <h3>+18</h3>
-      <p>J'ai plus de 18 ans.</p>
+      <p>J’ai plus de 18 ans.</p>
       <label><input type="checkbox" id="age-18plus" /> Oui</label>
       <label><input type="checkbox" id="age-hide" /> Ne plus afficher</label>
-      <div class="actions"><button id="btn-age-accept" class="btn" disabled>Entrer</button></div>
+      <div class="actions">
+        <button id="btn-age-res" type="button" class="btn">Ressources</button>
+        <button id="btn-age-accept" class="btn" disabled>Entrer</button>
+      </div>
     </form>
+  </dialog>
+
+  <!-- Ressources -->
+  <dialog id="resources-dlg" class="hide">
+    <div class="agegate">
+      <h3>Ressources & numéros utiles</h3>
+      <div id="resources-list"></div>
+      <div class="actions"><button id="btn-res-close" class="btn">Fermer</button></div>
+    </div>
   </dialog>
 
   <!-- Vendor -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <!-- App -->
-  <script type="module" src="./js/app.js?v=6"></script>
-  <!-- Resources (nouveau) -->
-  <script type="module" src="./js/resources.js?v=1"></script>
+  <script type="module" src="./js/app.js?v=7"></script>
 </body>
 </html>
