@@ -1,29 +1,26 @@
-/* Conseils (montage simple + fallback) */
-export function mountTips({ rootSel="#tips-root", listSel="#tips-list", stateGetter }){
-  const root=document.querySelector(rootSel); if(!root) return;
-  const list=document.querySelector(listSel)||root.querySelector("#tips-list");
-  if(!list){ const div=document.createElement("div"); div.id="tips-list"; root.appendChild(div); }
+// Conseils dynamiques minimalistes (toujours quelque chose à afficher)
+export function mountTips({ rootSel, stateGetter }) {
+  const root = document.querySelector(rootSel);
+  if (!root) return;
+  root.innerHTML = `<div class="tips-card"><h3>Conseils du jour</h3><div id="tips-list"></div></div>`;
+  updateTips(stateGetter());
 }
-function computeTips(S){
-  const tips=[];
-  // Fallback par défaut pour afficher quelque chose
-  if(!S) return ["Boire un verre d’eau avant le café.","Sortir 5 minutes pour respirer.","Note rapide : pourquoi je consomme aujourd’hui ?"];
-  const anyPrice = (S.prices.cigarette||S.prices.joint||S.prices.beer||S.prices.hard||S.prices.liqueur)>0;
-  const anyGoal  = (S.goals.cigs||S.goals.joints||S.goals.beer||S.goals.hard||S.goals.liqueur)>0;
-  if(!anyPrice || !anyGoal){
-    return ["Renseigne au moins 1 prix et 1 objectif dans Réglages pour des conseils adaptés.","Fixe un mini-objectif pour aujourd’hui (ex: −1 cigarette)."];
+
+export function updateTips(S) {
+  const box = document.getElementById("tips-list");
+  if (!box) return;
+  const t = [];
+
+  const sum = (S?.today && Object.values(S.today.counters||{}).reduce((a,b)=>a+Number(b||0),0))||0;
+  if (sum === 0) t.push("🎯 Journée sans consommation : excellent départ, pense à noter ce qui t’aide.");
+  const g = S?.goals||{}, c = S?.today?.counters||{};
+  for (const [k,label] of Object.entries({cigs:"cigarettes",joints:"joints",beer:"bières",hard:"alcools forts",liqueur:"liqueurs"})) {
+    const vv = Number(c[k]||0), gg = Number(g[k]||0);
+    if (gg>0 && vv>gg) t.push(`⚠️ Tu dépasses ton objectif ${label} (${vv}/${gg}). Essaye une pause + eau/respiration 2 min.`);
   }
-  if((S.today?.counters?.cigs||0)>0){ tips.push("Astuce tabac : mâche quelque chose après le repas au lieu d’allumer."); }
-  if((S.today?.counters?.beer||0)+(S.today?.counters?.hard||0)+(S.today?.counters?.liqueur||0)>0){ tips.push("Bois un verre d’eau entre deux verres alcoolisés."); }
-  if((S.today?.counters?.joints||0)>0){ tips.push("Remplace 1 joint par une marche de 10 minutes aujourd’hui."); }
-  if(S.economy?.cumulatedSavings>=5){ tips.push("Récompense : mets 5€ de côté pour un petit plaisir non-addictif."); }
-  if(tips.length===0){ tips.push("Fais une pause 3 minutes respiration box (4-4-4-4)."); }
-  return tips;
-}
-export function updateTips(S){
-  const list=document.querySelector("#tips-list"); if(!list) return;
-  list.innerHTML="";
-  computeTips(S).forEach(t=>{
-    const d=document.createElement("div"); d.className="tip-line"; d.textContent=t; list.appendChild(d);
-  });
+  const saved = Number((S?.history?.[S?.today?.date||""]||{}).saved||0);
+  if (saved>0) t.push(`💶 Déjà ${new Intl.NumberFormat('fr-FR',{style:'currency',currency:S?.currency?.code||'EUR'}).format(saved)} économisés aujourd’hui.`);
+
+  if (t.length===0) t.push("🧭 Fixe des objectifs dans « Habitudes » pour recevoir des conseils adaptés.");
+  box.innerHTML = t.slice(0,3).map(s=>`<div class="tip-line">${s}</div>`).join("");
 }
