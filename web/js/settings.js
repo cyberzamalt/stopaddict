@@ -1,131 +1,57 @@
-/* web/js/settings.js — fournit mountSettings() et réutilise la logique du fallback */
-export function mountSettings(ctx) {
-  const { S, DefaultState, saveState, persistTodayIntoHistory, updateHeader, renderChart, reflectCounters, dbg } = ctx;
-  const $  = (sel) => document.querySelector(sel);
-  const $$ = (sel) => document.querySelectorAll(sel);
-
-  // Prénom + langue (minimal, i18n si dispo)
-  $("#profile-name").value = S.profile.name || "";
-  $("#profile-name").addEventListener("input", e => {
-    S.profile.name = e.target.value || "";
-    saveState(S);
-  });
-
-  const langSel = $("#select-language");
-  if (langSel) {
-    if (!langSel.options.length) {
-      langSel.innerHTML = `<option value="fr">Français</option><option value="en">English</option>`;
-    }
-    langSel.value = S.profile.language || "fr";
-    langSel.addEventListener("change", async () => {
-      S.profile.language = langSel.value;
-      saveState(S);
-    });
-  }
-
+/* Réglages : modules, prix, devise, sauvegardes, XOR alcool */
+export function mountSettings(ctx){
+  const { S, DefaultState, saveState, persistToday, updateHeader, renderCharts, reflectCounters } = ctx;
   // Devise
-  $("#currency-symbol").value = S.currency.symbol || "€";
-  $("#currency-before").checked = !!S.currency.before;
-  $("#currency-after").checked  = !S.currency.before;
-  $("#btn-apply-currency").addEventListener("click", () => {
-    const sym = $("#currency-symbol").value || "€";
-    const before = $("#currency-before").checked;
-    S.currency = { symbol: sym, before };
-    updateHeader(); renderChart(); saveState(S);
-    dbg.push("Devise appliquée", "ok");
+  $("#currency-symbol").value = S.currency || "€";
+  (S.currencyPos==="before" ? $("#currency-before") : $("#currency-after")).checked = true;
+  $("#btn-apply-currency")?.addEventListener("click", ()=>{
+    S.currency = $("#currency-symbol").value || "€";
+    S.currencyPos = $("#currency-before").checked ? "before" : "after";
+    saveState(S); updateHeader(); renderCharts();
   });
 
-  // Modules (+ miroirs compteurs)
-  const modIds = {
-    cigs: "#mod-cigs", beer: "#mod-beer", joints: "#mod-joints",
-    hard: "#mod-hard", liqueur: "#mod-liqueur", alcoholGlobal: "#mod-alcohol"
-  };
-  for (const k in modIds) {
-    const el = $(modIds[k]); if (!el) continue;
-    el.checked = !!S.modules[k];
-    el.addEventListener("change", () => {
-      S.modules[k] = el.checked;
-      if (["cigs","joints","beer","hard","liqueur"].includes(k)) {
-        S.today.active[k] = el.checked; reflectCounters();
-      }
-      saveState(S);
-    });
+  // Modules (XOR alcool global ↔ biere/hard/liqueur)
+  const mods=["cigs","joints","beer","hard","liqueur","alcohol"];
+  mods.forEach(m=>{ const el=$("#mod-"+m); if(!el) return; el.checked=!!S.modules[m]; el.addEventListener("change",()=>{ S.modules[m]=el.checked; xorAlcohol(); saveState(S); reflectCounters(); }); });
+  function xorAlcohol(){
+    if(S.modules.alcohol){ S.modules.beer=false; S.modules.hard=false; S.modules.liqueur=false; }
+    // Si un des sous-modules alcool est ON, forcer global à OFF
+    if(S.modules.beer || S.modules.hard || S.modules.liqueur){ S.modules.alcohol=false; }
+    ["beer","hard","liqueur"].forEach(k=>{ const card=$("#ctr-"+k); if(card){ card.style.opacity=S.modules.alcohol?".35":"1"; card.style.pointerEvents=S.modules.alcohol?"none":"auto"; }});
+    const map={beer:"#chk-beer-active",hard:"#chk-hard-active",liqueur:"#chk-liqueur-active"};
+    ["beer","hard","liqueur"].forEach(k=>{ const el=$(map[k]); if(el) el.checked = !S.modules.alcohol && !!S.today.active[k]; });
   }
+  xorAlcohol();
 
-  // Prix unitaires
-  $("#price-cigarette").value = S.prices.cigarette ?? 0;
-  "#price-joint"     in document && ($("#price-joint").value     = S.prices.joint     ?? 0);
-  $("#price-beer").value      = S.prices.beer      ?? 0;
-  $("#price-hard").value      = S.prices.hard      ?? 0;
-  $("#price-liqueur").value   = S.prices.liqueur   ?? 0;
-
-  $("#btn-save-prices").addEventListener("click", () => {
-    S.prices.cigarette = Number($("#price-cigarette").value || 0);
-    "price-joint" in (document.all||{}) && (S.prices.joint = Number($("#price-joint").value || 0));
-    S.prices.beer      = Number($("#price-beer").value || 0);
-    S.prices.hard      = Number($("#price-hard").value || 0);
-    S.prices.liqueur   = Number($("#price-liqueur").value || 0);
-    persistTodayIntoHistory(); updateHeader(); renderChart(); saveState(S);
-    dbg.push("Prix unitaires enregistrés", "ok");
+  // Prix
+  $("#price-cigarette").value=S.prices.cigarette||0;
+  $("#price-joint").value=S.prices.joint||0;
+  $("#price-beer").value=S.prices.beer||0;
+  $("#price-hard").value=S.prices.hard||0;
+  $("#price-liqueur").value=S.prices.liqueur||0;
+  $("#btn-save-prices")?.addEventListener("click",()=>{
+    S.prices.cigarette=+$("#price-cigarette").value||0;
+    S.prices.joint=+$("#price-joint").value||0;
+    S.prices.beer=+$("#price-beer").value||0;
+    S.prices.hard=+$("#price-hard").value||0;
+    S.prices.liqueur=+$("#price-liqueur").value||0;
+    persistToday(); saveState(S); updateHeader(); renderCharts();
   });
-
-  $("#btn-reset-prices").addEventListener("click", () => {
-    S.prices = { ...DefaultState().prices };
-    $("#price-cigarette").value = 0; 
-    "price-joint" in (document.all||{}) && ($("#price-joint").value = 0);
-    $("#price-beer").value = 0; $("#price-hard").value = 0; $("#price-liqueur").value = 0;
-    persistTodayIntoHistory(); updateHeader(); renderChart(); saveState(S);
-    dbg.push("Prix unitaires réinitialisés", "ok");
+  $("#btn-reset-prices")?.addEventListener("click",()=>{
+    S.prices={...DefaultState().prices}; ["#price-cigarette","#price-joint","#price-beer","#price-hard","#price-liqueur"].forEach(s=>$(s).value=0);
+    persistToday(); saveState(S); updateHeader(); renderCharts();
   });
 
   // RAZ & sauvegardes
-  $("#btn-raz-day")?.addEventListener("click", () => {
-    S.today.counters = { cigs:0, joints:0, beer:0, hard:0, liqueur:0 };
-    reflectCounters(); persistTodayIntoHistory(); updateHeader(); renderChart(); saveState(S);
-    dbg.push("RAZ du jour", "ok");
-  });
-  $("#btn-raz-history")?.addEventListener("click", () => {
-    S.history = {}; persistTodayIntoHistory(); renderChart(); saveState(S);
-    dbg.push("RAZ historique", "ok");
-  });
-  $("#btn-raz-factory")?.addEventListener("click", () => {
-    const keepHistory = S.history; const keepToday = S.today; const keepCurrency = S.currency;
-    const fresh = DefaultState(); fresh.history = keepHistory; fresh.today = keepToday; fresh.currency = keepCurrency;
-    Object.assign(S, fresh);
-    // rafraîchir l’UI
-    reflectCounters(); renderChart(); saveState(S);
-    dbg.push("RAZ réglages (usine) + conservation historique", "ok");
-  });
+  $("#btn-raz-day")?.addEventListener("click",()=>{ S.today.counters={cigs:0,joints:0,beer:0,hard:0,liqueur:0}; persistToday(); saveState(S); updateHeader(); renderCharts(); });
+  $("#btn-raz-history")?.addEventListener("click",()=>{ S.history={}; persistToday(); saveState(S); renderCharts(); });
+  $("#btn-raz-factory")?.addEventListener("click",()=>{ const d=DefaultState(); S={...d, today:{...d.today, date:todayKey()}}; saveState(S); location.reload(); });
 
-  $("#btn-save-json-settings")?.addEventListener("click", () => {
-    const blob = new Blob([JSON.stringify(S, null, 2)], {type:"application/json"});
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob); a.download = "stopaddict_settings_backup.json";
-    document.body.appendChild(a); a.click(); a.remove();
-    dbg.push("Sauvegarder JSON (réglages + état) ok", "ok");
+  $("#btn-save-json-settings")?.addEventListener("click",()=>{
+    const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,2)],{type:"application/json"})); a.download="stopaddict_settings.json"; document.body.appendChild(a); a.click(); a.remove();
   });
-  $("#file-import-json-settings")?.addEventListener("change", async (ev) => {
-    const file = ev.target.files?.[0]; if (!file) return;
-    try {
-      const text = await file.text();
-      const obj = JSON.parse(text);
-      const fresh = { ...DefaultState(), ...obj };
-      Object.assign(S, fresh);
-      // best effort rerender
-      reflectCounters(); renderChart(); saveState(S);
-      dbg.push("Import JSON (réglages) ok", "ok");
-    } catch (e) {
-      alert("Import JSON invalide."); dbg.push("Import JSON (réglages) erreur: "+e?.message, "err");
-    } finally { ev.target.value = ""; }
+  $("#file-import-json-settings")?.addEventListener("change", async (ev)=>{
+    const f=ev.target.files?.[0]; if(!f) return;
+    try{ const obj=JSON.parse(await f.text()); Object.assign(S,obj); saveState(S); location.reload(); }catch{ alert("Import invalide."); }finally{ ev.target.value=""; }
   });
-
-  $("#cb-debug-overlay")?.addEventListener("change", e => {
-    const box = $("#debug-console");
-    if (e.target.checked) { box?.classList.remove("hide"); dbg.push("Overlay DEBUG ON","ok"); }
-    else { box?.classList.add("hide"); }
-  });
-  $("#btn-copy-logs")?.addEventListener("click", () => {
-    navigator.clipboard?.writeText((S.debug.logs||[]).join("\n")).catch(()=>{});
-  });
-  $("#btn-clear-logs")?.addEventListener("click", () => { S.debug.logs = []; $("#debug-console").innerHTML = ""; });
 }
