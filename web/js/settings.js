@@ -1,248 +1,272 @@
-/* Settings page wiring (ES module) */
-export function mountSettings(ctx) {
+/* web/js/settings.js — Panneau Réglages (ES module) */
+
+export function mountSettings(ctx){
   const {
     S, DefaultState, saveState,
     persistTodayIntoHistory, updateHeader,
     renderChart, reflectCounters, dbg
   } = ctx;
 
-  const $ = (s) => document.querySelector(s);
+  const $  = (s) => document.querySelector(s);
+  const $$ = (s) => document.querySelectorAll(s);
 
-  /* ---------- helpers ---------- */
-  function setChecked(id, v) { const el = $(id); if (el) el.checked = !!v; }
-  function setVal(id, v)     { const el = $(id); if (el) el.value = v ?? ""; }
-  function num(el)           { return Math.max(0, Number(el.value || 0)); }
+  // ---------- Helpers ----------
+  const setVal = (sel, val="") => { const el=$(sel); if(el) el.value = val ?? ""; };
+  const setNum = (sel, val=0)  => { const el=$(sel); if(el) el.value = Number(val ?? 0); };
+  const setChk = (sel, on=false)=> { const el=$(sel); if(el) el.checked = !!on; };
+  const getNum = (sel) => Number($(sel)?.value || 0);
 
-  function replaceState(newS){
-    // keep same reference object
-    const fresh = typeof newS === "function" ? newS() : newS;
-    for (const k of Object.keys(S)) delete S[k];
-    Object.assign(S, fresh);
-    saveState(S);
-    reflectCounters();
-    updateHeader();
-    renderChart();
-    syncUI();
-  }
-
-  function applyAlcoholExclusivity(){
-    const alcoholGlobal = $("#mod-alcohol")?.checked ?? false;
-
-    const alList = [
-      ["#mod-beer", "beer"],
-      ["#mod-hard", "hard"],
-      ["#mod-liqueur", "liqueur"]
-    ];
-
-    alList.forEach(([sel, key])=>{
-      const box = $(sel);
-      if (!box) return;
-      if (alcoholGlobal){
-        box.checked = false;
-        box.disabled = true;
-        S.modules[key] = false;
-        S.today.active[key] = false;
-      } else {
-        box.disabled = false;
-      }
-    });
-  }
-
-  /* ---------- sync UI from state ---------- */
-  function syncUI(){
-    // Profile / i18n
-    setVal("#profile-name", S.profile?.name ?? "");
-
+  function syncAll(){
+    // Profil
+    setVal("#profile-name", S.profile?.name || "");
+    // Langues (placeholder simple)
     const langSel = $("#select-language");
-    if (langSel && !langSel.options.length){
-      ["fr-FR","en-US","es-ES","de-DE","it-IT"].forEach(l=>{
-        const opt = document.createElement("option");
-        opt.value = l; opt.textContent = l;
-        langSel.appendChild(opt);
-      });
+    if (langSel && !langSel.dataset.bound){
+      langSel.innerHTML = `
+        <option value="fr">Français</option>
+        <option value="en">English</option>
+      `;
+      langSel.dataset.bound = "1";
     }
-    if (langSel) langSel.value = S.locale || "fr-FR";
+    if (langSel) langSel.value = S.language || "fr";
 
-    // Currency
-    setVal("#currency-symbol", S.currency?.symbol ?? "€");
-    setChecked("#currency-before", S.currency?.position === "before");
-    setChecked("#currency-after",  S.currency?.position !== "before");
+    // Devise
+    setVal("#currency-symbol", S.currency?.symbol || "€");
+    const before = S.currency?.position === "before";
+    setChk("#currency-before", before);
+    setChk("#currency-after", !before);
 
     // Modules
-    setChecked("#mod-cigs",    !!S.modules.cigs);
-    setChecked("#mod-joints",  !!S.modules.joints);
-    setChecked("#mod-beer",    !!S.modules.beer);
-    setChecked("#mod-hard",    !!S.modules.hard);
-    setChecked("#mod-liqueur", !!S.modules.liqueur);
-    setChecked("#mod-alcohol", !!S.modules.alcohol);
+    setChk("#mod-cigs",    !!S.modules.cigs);
+    setChk("#mod-joints",  !!S.modules.joints);
+    setChk("#mod-beer",    !!S.modules.beer);
+    setChk("#mod-hard",    !!S.modules.hard);
+    setChk("#mod-liqueur", !!S.modules.liqueur);
+    setChk("#mod-alcohol", !!S.modules.alcohol);
 
-    applyAlcoholExclusivity();
+    // Prix unitaires
+    setNum("#price-cigarette", S.prices?.cigarette ?? 0);
+    setNum("#price-joint",     S.prices?.joint ?? 0);
+    setNum("#price-beer",      S.prices?.beer ?? 0);
+    setNum("#price-hard",      S.prices?.hard ?? 0);
+    setNum("#price-liqueur",   S.prices?.liqueur ?? 0);
 
-    // Prices
-    setVal("#price-cigarette", (S.prices.cigarette ?? 0));
-    setVal("#price-joint",     (S.prices.joint ?? 0));
-    setVal("#price-beer",      (S.prices.beer ?? 0));
-    setVal("#price-hard",      (S.prices.hard ?? 0));
-    setVal("#price-liqueur",   (S.prices.liqueur ?? 0));
-
-    // Debug overlay checkbox reflects visibility
+    // Overlay debug (état = visible ?)
     const dbgBox = $("#debug-console");
-    if ($("#cb-debug-overlay") && dbgBox){
-      $("#cb-debug-overlay").checked = !dbgBox.classList.contains("hide");
-    }
+    setChk("#cb-debug-overlay", dbgBox && !dbgBox.classList.contains("hide"));
   }
 
-  /* ---------- events: profile / i18n ---------- */
-  $("#profile-name")?.addEventListener("input", e=>{
+  // ---------- Listeners (idempotents) ----------
+  // Evite double-câblage si mountSettings est rappelé
+  if (document.body.dataset.settingsBound === "1") {
+    syncAll();
+    return;
+  }
+  document.body.dataset.settingsBound = "1";
+
+  // Profil
+  $("#profile-name")?.addEventListener("input", (e)=>{
+    S.profile = S.profile || {};
     S.profile.name = e.target.value || "";
     saveState(S);
   });
 
-  $("#select-language")?.addEventListener("change", e=>{
-    S.locale = e.target.value || "fr-FR";
+  $("#select-language")?.addEventListener("change", (e)=>{
+    S.language = e.target.value || "fr";
     saveState(S);
+    dbg?.push?.(`Langue: ${S.language}`,"ok");
   });
 
-  /* ---------- events: currency ---------- */
+  // Devise
   $("#btn-apply-currency")?.addEventListener("click", ()=>{
     const sym = $("#currency-symbol")?.value || "€";
-    const before = $("#currency-before")?.checked;
-    S.currency = { symbol: sym, position: before ? "before" : "after", space: false };
+    const posBefore = $("#currency-before")?.checked ? "before" : "after";
+    S.currency = { symbol: sym, position: posBefore };
     saveState(S);
-    updateHeader();
-    renderChart();
+    updateHeader?.();
+    renderChart?.();
     dbg?.push?.("Devise appliquée","ok");
   });
 
-  /* ---------- events: modules (with exclusivity) ---------- */
-  const modMap = [
-    ["#mod-cigs","cigs"], ["#mod-joints","joints"],
-    ["#mod-beer","beer"], ["#mod-hard","hard"], ["#mod-liqueur","liqueur"],
-    ["#mod-alcohol","alcohol"]
-  ];
-  modMap.forEach(([sel,key])=>{
-    $(sel)?.addEventListener("change", (e)=>{
-      const on = !!e.target.checked;
-      S.modules[key] = on;
-
-      // exclusivité alcool global
-      if (key === "alcohol"){
-        applyAlcoholExclusivity();
-      }
-
-      // si module off → inactif côté accueil
-      if (!on && S.today?.active?.[key] !== undefined){
+  // Modules (avec exclusivité Alcool global vs sous-modules)
+  function applyAlcoholExclusivity(){
+    if (S.modules.alcohol) {
+      // désactive sous-modules + actives day flags off
+      ["beer","hard","liqueur"].forEach(k=>{
+        S.modules[k] = false;
+        S.today.active[k] = false;
+        const homeToggle = document.querySelector(`#chk-${k}-active`);
+        if (homeToggle) homeToggle.checked = false;
+      });
+    }
+  }
+  function onModuleToggle(id, key){
+    const el = $(id); if(!el) return;
+    el.addEventListener("change", ()=>{
+      S.modules[key] = !!el.checked;
+      if (!S.modules[key]) {
+        // si module OFF, désactive le “Activer” du jour
         S.today.active[key] = false;
+        const homeToggle = document.querySelector(`#chk-${key}-active`);
+        if (homeToggle) homeToggle.checked = false;
+      } else {
+        // si module ON, on ne force pas le “Activer” (laisse l’utilisateur décider depuis l’accueil)
+        if (typeof S.today.active[key] === "undefined") S.today.active[key] = true;
       }
 
-      saveState(S);
-      reflectCounters();
-      updateHeader();
-      renderChart();
-    });
-  });
+      // Exclusivité alcool
+      if (key === "alcohol") {
+        applyAlcoholExclusivity();
+        setChk("#mod-beer"   , !!S.modules.beer);
+        setChk("#mod-hard"   , !!S.modules.hard);
+        setChk("#mod-liqueur", !!S.modules.liqueur);
+      } else if (["beer","hard","liqueur"].includes(key) && el.checked) {
+        // si un sous-module est activé, on désactive l'alcohol global
+        S.modules.alcohol = false;
+        setChk("#mod-alcohol", false);
+      }
 
-  /* ---------- events: prices ---------- */
+      reflectCounters?.();
+      updateHeader?.();
+      saveState(S);
+      dbg?.push?.(`Module ${key}: ${S.modules[key]?"ON":"OFF"}`, "event");
+    });
+  }
+  onModuleToggle("#mod-cigs"   ,"cigs");
+  onModuleToggle("#mod-joints" ,"joints");
+  onModuleToggle("#mod-beer"   ,"beer");
+  onModuleToggle("#mod-hard"   ,"hard");
+  onModuleToggle("#mod-liqueur","liqueur");
+  onModuleToggle("#mod-alcohol","alcohol");
+
+  // Prix
   $("#btn-save-prices")?.addEventListener("click", ()=>{
-    S.prices.cigarette = num($("#price-cigarette"));
-    S.prices.joint     = num($("#price-joint"));
-    S.prices.beer      = num($("#price-beer"));
-    S.prices.hard      = num($("#price-hard"));
-    S.prices.liqueur   = num($("#price-liqueur"));
+    S.prices = S.prices || {};
+    S.prices.cigarette = getNum("#price-cigarette");
+    S.prices.joint     = getNum("#price-joint");
+    S.prices.beer      = getNum("#price-beer");
+    S.prices.hard      = getNum("#price-hard");
+    S.prices.liqueur   = getNum("#price-liqueur");
+    persistTodayIntoHistory?.();
+    updateHeader?.();
+    renderChart?.();
     saveState(S);
-    persistTodayIntoHistory();
-    updateHeader();
-    renderChart();
     dbg?.push?.("Prix enregistrés","ok");
   });
 
   $("#btn-reset-prices")?.addEventListener("click", ()=>{
-    const def = DefaultState().prices;
-    Object.assign(S.prices, def);
+    const def = DefaultState()?.prices || {};
+    S.prices = { ...def };
+    syncAll();
+    persistTodayIntoHistory?.();
+    updateHeader?.();
+    renderChart?.();
     saveState(S);
-    syncUI();
-    persistTodayIntoHistory();
-    updateHeader();
-    renderChart();
     dbg?.push?.("Prix réinitialisés","ok");
   });
 
-  /* ---------- events: maintenance & backups ---------- */
+  // Maintenance
   $("#btn-raz-day")?.addEventListener("click", ()=>{
-    if (!S.today) S.today = DefaultState().today;
     S.today.counters = { cigs:0, joints:0, beer:0, hard:0, liqueur:0 };
-    persistTodayIntoHistory();
-    reflectCounters();
-    updateHeader();
-    renderChart();
+    persistTodayIntoHistory?.();
+    reflectCounters?.();
+    updateHeader?.();
+    renderChart?.();
     saveState(S);
     dbg?.push?.("RAZ du jour","ok");
   });
 
   $("#btn-raz-history")?.addEventListener("click", ()=>{
     S.history = {};
-    persistTodayIntoHistory();
-    updateHeader();
-    renderChart();
+    persistTodayIntoHistory?.();
+    updateHeader?.();
+    renderChart?.();
     saveState(S);
     dbg?.push?.("RAZ historique","ok");
   });
 
   $("#btn-raz-factory")?.addEventListener("click", ()=>{
-    replaceState(DefaultState);
+    const keepDate = S.today?.date;
+    const fresh = DefaultState();
+    if (keepDate) fresh.today.date = keepDate;
+    // on garde éventuellement le profil/langue pour confort
+    fresh.profile = { ...(S.profile||{}) };
+    fresh.language = S.language || "fr";
+    S.history = fresh.history;
+    S.today   = fresh.today;
+    S.modules = fresh.modules;
+    S.prices  = fresh.prices;
+    S.currency= fresh.currency;
+    S.variants= fresh.variants;
+    S.goals   = fresh.goals;
+    S.dates   = fresh.dates;
+    S.debug   = fresh.debug;
+    syncAll();
+    persistTodayIntoHistory?.();
+    reflectCounters?.();
+    updateHeader?.();
+    renderChart?.();
+    saveState(S);
     dbg?.push?.("RAZ réglages (usine)","ok");
   });
 
+  // Sauvegarde / Import JSON (panneau Réglages)
   $("#btn-save-json-settings")?.addEventListener("click", ()=>{
-    const blob = new Blob([JSON.stringify(S, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(S,null,2)],{type:"application/json"});
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "stopaddict_settings.json";
+    a.download = "stopaddict_settings_export.json";
     document.body.appendChild(a);
-    a.click();
-    a.remove();
-    dbg?.push?.("Export JSON (réglages) ok","ok");
+    a.click(); a.remove();
+    dbg?.push?.("Export JSON (Réglages) ok","ok");
   });
 
   $("#file-import-json-settings")?.addEventListener("change", async (ev)=>{
-    const f = ev.target.files?.[0];
-    if (!f) return;
+    const file = ev.target.files?.[0]; if(!file) return;
     try{
-      const txt = await f.text();
-      const obj = JSON.parse(txt);
-      replaceState(()=>({ ...DefaultState(), ...obj }));
-      dbg?.push?.("Import JSON (réglages) ok","ok");
+      const text = await file.text();
+      const obj  = JSON.parse(text);
+      // merge soft, priorité au JSON importé
+      Object.assign(S, DefaultState(), obj);
+      syncAll();
+      persistTodayIntoHistory?.();
+      reflectCounters?.();
+      updateHeader?.();
+      renderChart?.();
+      saveState(S);
+      dbg?.push?.("Import JSON (Réglages) ok","ok");
     }catch(e){
+      dbg?.push?.("Import JSON (Réglages) erreur: "+(e?.message||e), "err");
       alert("Import JSON invalide.");
-      dbg?.push?.("Import JSON (réglages) erreur: "+(e?.message||e),"err");
     }finally{
       ev.target.value = "";
     }
   });
 
-  /* ---------- events: debug overlay & resources ---------- */
-  $("#cb-debug-overlay")?.addEventListener("change",(e)=>{
+  // Journal & Debug
+  $("#cb-debug-overlay")?.addEventListener("change", (e)=>{
     const box = $("#debug-console");
     if (!box) return;
-    box.classList.toggle("hide", !e.target.checked);
+    if (e.target.checked) box.classList.remove("hide");
+    else box.classList.add("hide");
+    dbg?.push?.("Overlay debug "+(e.target.checked?"ON":"OFF"), "ok");
   });
 
-  $("#btn-copy-logs")?.addEventListener("click", ()=>{
-    const lines = S.debug?.logs || [];
-    navigator.clipboard?.writeText(lines.join("\n")).then(()=>{
+  $("#btn-copy-logs")?.addEventListener("click", ()=> {
+    try{
+      const logs = (S.debug?.logs||[]).join("\n");
+      navigator.clipboard?.writeText(logs);
       dbg?.push?.("Logs copiés","ok");
-    }).catch(()=>{});
+    }catch{}
   });
 
   $("#btn-clear-logs")?.addEventListener("click", ()=>{
     S.debug.logs = [];
     $("#debug-console")?.replaceChildren();
     saveState(S);
-    dbg?.push?.("Logs nettoyés","ok");
+    dbg?.push?.("Logs vidés","ok");
   });
 
-  // resources.js accroche déjà #btn-resources côté module
-
-  /* ---------- init ---------- */
-  syncUI();
+  // Initial UI sync
+  syncAll();
 }
