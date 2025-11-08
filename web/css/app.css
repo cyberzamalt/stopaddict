@@ -1,199 +1,255 @@
-/* ===== StopAddict – STYLE MONOLITHE (full replace) ===== */
+/* web/css/app.css — Style compact "app mobile" */
 
-/* Reset & base */
-* { box-sizing:border-box; }
-html, body { height:100%; }
-body {
+/* ---------- Reset & base ---------- */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+:root{
+  --bg: #0a1020;
+  --bg2: #040811;
+  --surface: #0f172a;
+  --surface2:#0c1222;
+  --border: #1f2b48;
+  --border2:#233355;
+  --accent:#35518a;
+  --text: #eaf0ff;
+  --muted:#c6d7ff;
+}
+body{
   margin:0;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
-  color:#0f172a;                   /* texte foncé */
-  background:#f5f7fb;             /* fond clair type app */
+  color:var(--text);
+  font-family: system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";
+  background: radial-gradient(1200px 600px at 50% -10%, #13214a 0%, transparent 60%), linear-gradient(180deg, var(--bg), var(--bg2));
+  padding: 20px 12px;
 }
-
-/* Utilitaires */
 .hide{ display:none !important; }
-.muted{ opacity:.65; }
 
-/* En-tête */
-.app-header{
-  position:sticky; top:0; z-index:10;
-  display:grid; grid-template-columns:1fr auto; align-items:center;
-  gap:.5rem; padding:.75rem 1rem;
-  background:#ffffff; color:#0f172a;
-  border-bottom:1px solid #e6e8ef; box-shadow:0 1px 6px rgba(16,24,40,.05);
+/* ---------- Cadre "téléphone" (sans changer le HTML) ---------- */
+body > header.app-header,
+body > nav.tabs,
+body > main.pages{
+  width:100%;
+  max-width:420px;          /* largeur type smartphone */
+  margin:0 auto;
+  background:var(--surface);
 }
-.header-left h1{ margin:0; font-size:1.15rem; font-weight:800; letter-spacing:.2px; }
-.date-line{ display:flex; gap:.5rem; align-items:center; font-size:.9rem; color:#4b5563; }
-.status-dot{ width:1.1rem; height:1.1rem; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:#e5e7eb; font-size:.8rem; }
 
-/* Onglets (haut, simple) */
+/* Arrondis & bordures partagées pour l’illusion d’un seul bloc */
+body > header.app-header{
+  border:1px solid var(--border);
+  border-bottom:none;
+  border-radius:20px 20px 0 0;
+  background: linear-gradient(180deg,#111a33, var(--surface) 70%);
+}
+body > nav.tabs{
+  border-left:1px solid var(--border);
+  border-right:1px solid var(--border);
+}
+body > main.pages{
+  border:1px solid var(--border);
+  border-top:none;
+  border-radius:0 0 20px 20px;
+  box-shadow: 0 18px 40px rgba(0,0,0,.35);
+}
+
+/* ---------- Boutons ---------- */
+.btn{
+  border:0;
+  padding:.55rem .9rem;
+  border-radius:.6rem;
+  background:#1e293b;
+  color:var(--text);
+  cursor:pointer;
+  transition:transform .05s ease, background .2s ease, opacity .2s;
+}
+.btn:hover{ background:#273449; }
+.btn:active{ transform: translateY(1px); }
+.btn.small{ padding:.4rem .65rem; font-size:.9rem; }
+
+/* ---------- En-tête ---------- */
+.app-header{
+  display:grid;
+  grid-template-columns:1fr auto;
+  align-items:center;
+  padding:1rem 1.1rem .85rem;
+}
+.header-left h1{ margin:0 0 .25rem 0; font-size:1.15rem; }
+.date-line{ display:flex; align-items:center; gap:.5rem; opacity:.9; font-size:.95rem; }
+.status-dot{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:1.15rem; height:1.15rem; border-radius:50%;
+  background:#1f2b48; color:#cce3ff; font-weight:700; font-size:.85rem;
+}
+.kpis{ display:flex; align-items:center; gap:.4rem; }
+.kpi{
+  background:var(--surface2);
+  border:1px solid var(--border);
+  padding:.35rem .55rem;
+  border-radius:.5rem;
+  display:flex; align-items:center; gap:.4rem;
+  font-size:.95rem;
+}
+
+/* ---------- Onglets ---------- */
 .tabs{
-  display:flex; gap:.4rem; padding:.5rem .75rem; background:#fff;
-  border-bottom:1px solid #e6e8ef; position:sticky; top:56px; z-index:9;
+  display:flex; gap:.35rem;
+  padding:.45rem .6rem;
+  position:sticky; top:0; z-index:9;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
 }
 .tab{
-  appearance:none; border:1px solid #e6e8ef; background:#fff; color:#0f172a;
-  padding:.55rem .9rem; border-radius:.7rem; font-weight:700; cursor:pointer;
+  background:transparent; color:#cde2ff; border:0;
+  padding:.55rem .85rem; cursor:pointer; border-radius:.55rem; font-weight:600;
 }
-.tab.active{ background:#0ea5e9; color:#fff; border-color:#0ea5e9; }
+.tab.active{ background:#15213a; color:#fff; border:1px solid #253154; }
 
-/* Pages conteneur */
-.pages{ padding:1rem; max-width:1100px; margin:0 auto; }
+/* ---------- Pages ---------- */
+.pages{ padding:.9rem .9rem 1.1rem; }
 
-/* ===== Accueil – Compteurs (style cartes monolithe) ===== */
+/* ---------- Grille compteurs ---------- */
 .counters-grid{
-  display:grid; gap:1rem;
-  grid-template-columns: repeat(2,1fr);
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:.8rem;
 }
-@media (min-width:980px){ .counters-grid{ grid-template-columns: repeat(5,1fr); } }
+@media (max-width:430px){ .counters-grid{ grid-template-columns:1fr; } }
 
 .counter-card{
-  position:relative;
-  background:#ffffff; border:1px solid #e6e8ef; border-radius:18px;
-  padding:1rem; min-height:162px;
-  box-shadow:0 2px 10px rgba(16,24,40,.06);
-  display:flex; flex-direction:column; gap:.75rem;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:1rem;
+  padding:.85rem;
+  display:flex; flex-direction:column; gap:.6rem;
+  min-height:160px;
 }
-.counter-card h2{ margin:0; font-size:1.05rem; font-weight:800; color:#0f172a; }
-
-/* Liseré couleur à gauche (comme le monolithe) */
-.counter-card::before{
-  content:""; position:absolute; inset:0 auto 0 0; width:6px; border-radius:18px 0 0 18px;
-  background:#e5e7eb;
-}
-#ctr-cigs::before{ background:#3b82f6; }     /* bleu clopes */
-#ctr-joints::before{ background:#22c55e; }   /* vert joints */
-#ctr-beer::before{ background:#f59e0b; }     /* jaune bière */
-#ctr-hard::before{ background:#a855f7; }     /* violet alcool fort */
-#ctr-liqueur::before{ background:#ec4899; }  /* rose liqueur */
-
-/* Ligne –1 / valeur / +1 */
+.counter-card h2{ margin:0; font-size:1.05rem; color:#f2f7ff; }
 .ctr-row{
-  display:grid; align-items:center; gap:.75rem;
-  grid-template-columns: 82px 1fr 82px;
+  display:grid; grid-template-columns:44px 1fr 44px;
+  align-items:center; gap:.6rem;
 }
 .ctr-val{
-  text-align:center; font-size:1.4rem; font-weight:800; color:#0f172a;
-  background:#f8fafc; border:1px dashed #e6e8ef; border-radius:12px; padding:.65rem .75rem;
+  background:#0b1020; border:1px dashed #2a3a61;
+  padding:.5rem; text-align:center; border-radius:.6rem;
+  font-size:1.2rem; font-weight:700;
 }
+.toggle{ display:flex; align-items:center; gap:.5rem; color:var(--muted); font-size:.95rem; }
 
-/* Boutons ronds – monolithe */
-.btn{
-  appearance:none; border:0; cursor:pointer;
-  transition:transform .04s ease, box-shadow .2s ease, background .2s ease;
-  font-weight:800; border-radius:999px;
-}
-.btn:active{ transform:translateY(1px); }
+/* Désactivation visuelle d’un compteur */
+.counter-card[aria-disabled="true"]{ opacity:.55; pointer-events:none; }
 
-.btn[data-action="dec"]{
-  width:66px; height:66px; font-size:1.4rem; color:#111827;
-  background:#e5e7eb; box-shadow:inset 0 -2px 0 rgba(0,0,0,.08);
-}
-.btn[data-action="dec"]:hover{ background:#dfe3e9; }
-
-.btn[data-action="inc"]{
-  width:66px; height:66px; font-size:1.4rem; color:#ffffff;
-  background:#22c55e; box-shadow:inset 0 -2px 0 rgba(0,0,0,.12);
-}
-.btn[data-action="inc"]:hover{ background:#16a34a; }
-
-/* Toggle “Activer” */
-.toggle{ display:flex; gap:.5rem; align-items:center; color:#334155; font-weight:600; }
-.toggle input{ width:18px; height:18px; }
-
-/* ===== Conseils ===== */
+/* ---------- Conseils ---------- */
 .tips-panel{ margin-top:1rem; }
 .tips-card{
-  background:#ffffff; border:1px dashed #e6e8ef; border-radius:14px; padding:.8rem;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:1rem; padding:.9rem;
 }
+.tips-card h3{ margin:0 0 .55rem 0; }
 .tip-line{
-  display:flex; align-items:flex-start; gap:.5rem;
-  background:#fff; border:1px solid #eef1f6; border-radius:10px;
-  padding:.55rem .65rem; margin:.45rem 0;
+  padding:.35rem .5rem;
+  background:#0b1220;
+  border:1px dashed #24365f;
+  border-radius:.5rem;
+  margin-bottom:.4rem;
 }
-.tip-line .emoji{ font-size:1.1rem; }
 
-/* ===== Stats ===== */
-.kpi-block{ display:flex; align-items:baseline; gap:1rem; margin-bottom:.6rem; }
+/* ---------- Stats ---------- */
+.kpi-block{ display:flex; align-items:baseline; gap:1rem; margin:.4rem 0 1rem 0; }
 .chart-actions{ display:flex; flex-wrap:wrap; gap:.5rem; margin-bottom:.8rem; }
-.chart-actions .btn{
-  border-radius:.6rem; padding:.5rem .8rem; border:1px solid #e6e8ef; background:#fff; color:#0f172a;
-}
-.chart-actions .btn.small{ font-size:.9rem; }
 .chart-block{
-  height:360px; background:#ffffff; border:1px solid #e6e8ef; border-radius:16px;
-  box-shadow:0 2px 10px rgba(16,24,40,.06); padding:.75rem;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:1rem; padding:.5rem; height:360px;
 }
 #chart-main{ width:100%; height:100%; }
 
-/* ===== Calendrier (V2) – habillage clair) ===== */
+/* ---------- Calendrier ---------- */
 .calendar-toolbar{
-  display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.6rem; margin-bottom:.8rem;
+  display:flex; align-items:center; justify-content:space-between;
+  gap:.5rem; margin-bottom:.7rem; flex-wrap:wrap;
 }
-.btn.small{ padding:.42rem .7rem; font-size:.9rem; border-radius:.55rem; }
-.toolbar-center .active{ outline:2px solid #0ea5e9; }
+.toolbar-left{ display:flex; align-items:center; gap:.5rem; }
+.cal-title{ min-width:180px; text-align:center; font-weight:700; }
+.toolbar-center .active{ outline:1px solid #2a3a61; }
+.cal-filters label{ display:inline-flex; align-items:center; gap:.25rem; margin-left:.25rem; }
 
 .cal-grid{
-  background:#ffffff; border:1px solid #e6e8ef; border-radius:16px; overflow:hidden;
-  box-shadow:0 2px 10px rgba(16,24,40,.06);
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:1rem; overflow:hidden;
 }
-.cal-head{ display:grid; grid-template-columns:repeat(7,1fr); background:#f3f4f6; border-bottom:1px solid #e6e8ef; }
-.cal-head>div{ padding:.55rem; text-align:center; font-weight:800; color:#0f172a; }
+.cal-head{
+  display:grid; grid-template-columns:repeat(7,1fr);
+  background:#121a2f; border-bottom:1px solid var(--border);
+}
+.cal-head>div{ padding:.5rem; text-align:center; color:#c9d9ff; font-weight:600; }
 .cal-body{ display:grid; grid-template-columns:repeat(7,1fr); }
-.cal-cell{ min-height:96px; border-right:1px solid #eef1f6; border-bottom:1px solid #eef1f6; padding:.5rem; position:relative; }
+.cal-cell{
+  min-height:90px; border-right:1px solid #1a2744; border-bottom:1px solid #1a2744;
+  padding:.4rem; position:relative;
+}
 .cal-cell:nth-child(7n){ border-right:0; }
 .cal-other{ opacity:.45; }
-.cal-today{ outline:2px solid #0ea5e9; outline-offset:-2px; border-radius:6px; }
-.cal-day{ font-weight:800; color:#0f172a; }
+.cal-today{ outline:2px solid var(--accent); outline-offset:-2px; }
+.cal-day{ font-weight:700; color:#f2f7ff; }
 .cal-mini{ position:absolute; right:.4rem; bottom:.4rem; display:flex; gap:.25rem; }
-.mini-dot{ display:inline-block; padding:.05rem .35rem; border-radius:.5rem; background:#e6e8ef; color:#111827; font-size:.75rem; }
-.mini-euro{ display:inline-block; padding:.05rem .3rem; border-radius:.5rem; border:1px solid #d1d5db; font-size:.75rem; }
+.mini-dot{ display:inline-block; padding:.05rem .35rem; border-radius:.5rem; background:#1f2b48; }
+.mini-euro{ display:inline-block; padding:.05rem .3rem; border-radius:.5rem; border:1px solid #2a3a61; }
 
-/* Détails (jour/semaine) */
-.cal-details{ margin-top:.8rem; }
-.cal-details .cal-box{
-  background:#ffffff; border:1px solid #e6e8ef; border-radius:16px; padding:1rem;
-  box-shadow:0 2px 10px rgba(16,24,40,.06);
+.cal-row{ display:grid; grid-template-columns:repeat(7,1fr); gap:.6rem; }
+.cal-cell.week{ min-height:120px; border:1px solid var(--border); border-radius:.6rem; background:var(--surface2); padding:.6rem; }
+.cal-breakdown{ display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.4rem; }
+
+.cal-dayview .cal-box{
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:1rem; padding:.9rem;
 }
+.cal-box h4{ margin:.2rem 0 .6rem 0; }
+.cal-summary{ display:grid; grid-template-columns:repeat(4,1fr); gap:.45rem; }
+@media(max-width:430px){ .cal-summary{ grid-template-columns:repeat(2,1fr); } }
+.cal-summary>div{
+  background:#0b1020; border:1px dashed #24365f;
+  padding:.5rem; border-radius:.5rem; text-align:center;
+}
+.cal-details{ margin-top:.7rem; }
 .cal-links{ display:flex; gap:.5rem; margin-top:.7rem; }
 
-/* ===== Habitudes / Réglages (grilles propres) ===== */
-.section-title{ margin:1rem 0 .6rem; font-size:1.05rem; font-weight:800; }
-.grid-2{ display:grid; grid-template-columns:repeat(2,1fr); gap:.7rem; }
-@media (max-width:760px){ .grid-2{ grid-template-columns:1fr; } }
-
+/* ---------- Habits & Settings ---------- */
+.section-title{ margin:1rem 0 .6rem 0; font-size:1.05rem; }
+.grid-2{ display:grid; grid-template-columns:repeat(2,1fr); gap:.65rem; }
+@media (max-width:430px){ .grid-2{ grid-template-columns:1fr; } }
 .grid-2 label{
-  display:flex; align-items:center; justify-content:space-between; gap:.75rem;
-  background:#ffffff; border:1px solid #e6e8ef; border-radius:12px; padding:.65rem .8rem;
+  display:flex; align-items:center; justify-content:space-between; gap:.6rem;
+  background:var(--surface2); border:1px solid var(--border);
+  padding:.6rem .7rem; border-radius:.6rem;
 }
 .grid-2 input, .grid-2 select{
-  width:150px; max-width:50vw;
-  padding:.52rem .6rem; border-radius:10px; border:1px solid #d1d5db; background:#fff; color:#0f172a;
+  width:140px; padding:.45rem .55rem; border-radius:.5rem;
+  border:1px solid #2a3a61; background:#0b1020; color:var(--text);
 }
-
 .actions{ display:flex; flex-wrap:wrap; gap:.5rem; margin:.7rem 0; }
-.actions .btn{
-  border:1px solid #e6e8ef; background:#fff; padding:.55rem .85rem; border-radius:.6rem; font-weight:800; color:#0f172a;
-}
-.actions .btn:hover{ background:#f3f4f6; }
+.actions .btn{ margin-right:.1rem; }
 
-/* ===== Debug & Agegate ===== */
-#debug-console{
-  background:#0b1020; color:#eaf0ff; border-radius:10px; border:1px solid #233355;
-  padding:.6rem; height:160px; overflow:auto;
+/* ---------- Dialogs (âge + ressources) ---------- */
+dialog{
+  border:0; border-radius:1rem;
+  background:#0b1020; color:var(--text);
 }
-.debug-line{ font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size:.86rem; }
-
-dialog{ border:0; border-radius:16px; background:#ffffff; color:#0f172a; }
-dialog::backdrop{ background:rgba(2,6,23,.45); }
-.agegate{ min-width:280px; display:grid; gap:.7rem; padding:1rem; }
-.agegate h3{ margin:.1rem 0; font-size:1.15rem; font-weight:900; }
+dialog::backdrop{ background: rgba(2,6,23,.55); }
+.agegate{ min-width:260px; padding:1rem; display:grid; gap:.6rem; }
+.agegate h3{ margin:0; }
 .agegate .actions{ justify-content:flex-end; }
-.agegate a{ color:#0ea5e9; text-decoration:underline; }
 
-/* Petites retouches icônes KPI (en-tête) */
-.kpis{ display:flex; gap:.5rem; align-items:center; }
-.kpi{
-  background:#fff; border:1px solid #e6e8ef; border-radius:10px; padding:.35rem .55rem;
-  display:flex; align-items:center; gap:.35rem; font-weight:700;
+/* ---------- Console debug ---------- */
+#debug-console{
+  margin-top:.6rem; padding:.6rem; height:160px; overflow:auto;
+  background:#0b1020; border:1px solid var(--border2); border-radius:.6rem;
 }
+.debug-line{
+  font-family: ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  font-size:.85rem;
+}
+
+/* ---------- Petits helpers ---------- */
+.kpis, .actions, .grid-2{ gap:.65rem; }
