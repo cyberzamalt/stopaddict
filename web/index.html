@@ -2,10 +2,9 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#0ea5e9" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>StopAddict</title>
-  <link rel="stylesheet" href="./css/app.css?v=monolithe" />
+  <link rel="stylesheet" href="./css/app.css?v=7" />
 </head>
 <body>
   <!-- Header -->
@@ -14,15 +13,15 @@
       <h1 id="app-title">StopAddict</h1>
       <div class="date-line">
         <span id="today-date"></span>
-        <span id="hdr-status" class="status-dot" title="Statut">•</span>
+        <span id="hdr-status" class="status-dot" title="Statut"></span>
       </div>
     </div>
     <div class="header-right kpis">
-      <div class="kpi"><span>🚬</span><strong id="hdr-cigs">0</strong></div>
-      <div class="kpi"><span>🌿</span><strong id="hdr-joints">0</strong></div>
-      <div class="kpi"><span>🍺+🍷</span><strong id="hdr-alcohol">0</strong></div>
-      <div class="kpi"><span>€</span><strong id="hdr-cost">0,00€</strong></div>
-      <div class="kpi"><span>💶</span><strong id="hdr-saved">0,00€</strong></div>
+      <div class="kpi"><span>🚬</span> <strong id="hdr-cigs">0</strong></div>
+      <div class="kpi"><span>🌿</span> <strong id="hdr-joints">0</strong></div>
+      <div class="kpi"><span>🍺+🍷</span> <strong id="hdr-alcohol">0</strong></div>
+      <div class="kpi"><span>€</span> <strong id="hdr-cost">0,00€</strong></div>
+      <div class="kpi"><span>💶</span> <strong id="hdr-saved">0,00€</strong></div>
     </div>
   </header>
 
@@ -43,9 +42,9 @@
         <article id="ctr-cigs" class="counter-card">
           <h2>Cigarettes</h2>
           <div class="ctr-row">
-            <button class="btn" data-action="dec" data-kind="cigs">−1</button>
+            <button class="btn" data-action="dec" data-kind="cigs">−</button>
             <div class="ctr-val" id="val-cigs">0</div>
-            <button class="btn" data-action="inc" data-kind="cigs">+1</button>
+            <button class="btn" data-action="inc" data-kind="cigs">+</button>
           </div>
           <label class="toggle"><input type="checkbox" id="chk-cigs-active" /> Activer</label>
         </article>
@@ -53,9 +52,9 @@
         <article id="ctr-joints" class="counter-card">
           <h2>Joints</h2>
           <div class="ctr-row">
-            <button class="btn" data-action="dec" data-kind="joints">−1</button>
+            <button class="btn" data-action="dec" data-kind="joints">−</button>
             <div class="ctr-val" id="val-joints">0</div>
-            <button class="btn" data-action="inc" data-kind="joints">+1</button>
+            <button class="btn" data-action="inc" data-kind="joints">+</button>
           </div>
           <label class="toggle"><input type="checkbox" id="chk-joints-active" /> Activer</label>
         </article>
@@ -63,9 +62,9 @@
         <article id="ctr-beer" class="counter-card">
           <h2>Bière</h2>
           <div class="ctr-row">
-            <button class="btn" data-action="dec" data-kind="beer">−1</button>
+            <button class="btn" data-action="dec" data-kind="beer">−</button>
             <div class="ctr-val" id="val-beer">0</div>
-            <button class="btn" data-action="inc" data-kind="beer">+1</button>
+            <button class="btn" data-action="inc" data-kind="beer">+</button>
           </div>
           <label class="toggle"><input type="checkbox" id="chk-beer-active" /> Activer</label>
         </article>
@@ -73,9 +72,9 @@
         <article id="ctr-hard" class="counter-card">
           <h2>Alcool fort</h2>
           <div class="ctr-row">
-            <button class="btn" data-action="dec" data-kind="hard">−1</button>
+            <button class="btn" data-action="dec" data-kind="hard">−</button>
             <div class="ctr-val" id="val-hard">0</div>
-            <button class="btn" data-action="inc" data-kind="hard">+1</button>
+            <button class="btn" data-action="inc" data-kind="hard">+</button>
           </div>
           <label class="toggle"><input type="checkbox" id="chk-hard-active" /> Activer</label>
         </article>
@@ -83,20 +82,16 @@
         <article id="ctr-liqueur" class="counter-card">
           <h2>Liqueur</h2>
           <div class="ctr-row">
-            <button class="btn" data-action="dec" data-kind="liqueur">−1</button>
+            <button class="btn" data-action="dec" data-kind="liqueur">−</button>
             <div class="ctr-val" id="val-liqueur">0</div>
-            <button class="btn" data-action="inc" data-kind="liqueur">+1</button>
+            <button class="btn" data-action="inc" data-kind="liqueur">+</button>
           </div>
           <label class="toggle"><input type="checkbox" id="chk-liqueur-active" /> Activer</label>
         </article>
       </div>
 
       <!-- Conseils -->
-      <section id="tips-root" class="tips-panel">
-        <div class="tips-card">
-          <!-- Tips insérés dynamiquement -->
-        </div>
-      </section>
+      <section id="tips-root" class="tips-panel"></section>
     </section>
 
     <!-- Stats -->
@@ -106,19 +101,15 @@
         <div id="stats-date">—</div>
       </div>
       <div class="chart-actions">
-        <button id="btnPeriod-day" class="btn small">Jour</button>
-        <button id="btnPeriod-week" class="btn small">Semaine</button>
-        <button id="btnPeriod-month" class="btn small">Mois</button>
-        <button id="btnPeriod-year" class="btn small">Année</button>
+        <button id="btnPeriod-day" class="btn">Jour</button>
+        <button id="btnPeriod-week" class="btn">Semaine</button>
+        <button id="btnPeriod-month" class="btn">Mois</button>
+        <button id="btnPeriod-year" class="btn">Année</button>
         <button id="btn-export-csv" class="btn small">Exporter CSV</button>
         <button id="btn-export-json" class="btn small">Exporter JSON</button>
-        <label class="btn small">Importer JSON
-          <input id="file-import-json" type="file" accept="application/json" hidden />
-        </label>
+        <label class="btn small">Importer JSON <input id="file-import-json" type="file" accept="application/json" hidden /></label>
       </div>
-      <div class="chart-block">
-        <canvas id="chart-main"></canvas>
-      </div>
+      <div class="chart-block"><canvas id="chart-main"></canvas></div>
     </section>
 
     <!-- Calendrier -->
@@ -184,7 +175,7 @@
       </div>
     </section>
 
-    <!-- Réglages (structure minimale, le JS peut enrichir) -->
+    <!-- Réglages -->
     <section id="page-settings" class="hide">
       <h2 class="section-title">Profil</h2>
       <div class="grid-2">
@@ -243,46 +234,26 @@
         <button id="btn-clear-logs" class="btn">Vider les logs</button>
         <button id="btn-resources" class="btn">Ressources & numéros utiles</button>
       </div>
+
       <div id="debug-console" class="hide"></div>
     </section>
   </main>
 
-  <!-- Age gate -->
+  <!-- Age gate (le lien “Ressources” sera injecté par resources.js) -->
   <dialog id="agegate" class="hide">
     <form method="dialog" class="agegate">
       <h3>+18</h3>
-      <p class="muted">StopAddict est une app d’auto-suivi et d’aide à la réduction/arrêt (tabac, alcool, cannabis).</p>
-      <p>Besoin d’aide ? <a href="#" id="age-resources"
-         onclick="document.getElementById('resources-dialog').showModal();return false;">Ressources et numéros utiles</a></p>
-      <label><input type="checkbox" id="age-18plus" /> J'ai 18 ans ou plus</label>
-      <label><input type="checkbox" id="age-hide" /> Ne plus afficher ce message</label>
-      <div class="actions">
-        <button value="cancel" class="btn">Annuler</button>
-        <button id="btn-age-accept" class="btn" disabled>J'accepte et continue</button>
-      </div>
-    </form>
-  </dialog>
-
-  <!-- Resources dialog (fonctionne même sans fichier externe) -->
-  <dialog id="resources-dialog" class="hide">
-    <form method="dialog" class="agegate">
-      <h3>Ressources & numéros utiles</h3>
-      <div class="tips-card">
-        <div class="tip-line"><span class="emoji">📞</span><div><strong>112</strong> — Urgences (UE) / <strong>15</strong> — SAMU (FR)</div></div>
-        <div class="tip-line"><span class="emoji">🆘</span><div><strong>3114</strong> — Prévention Suicide (FR)</div></div>
-        <div class="tip-line"><span class="emoji">🤝</span><div><strong>0 800 23 13 13</strong> — Alcool Info Service</div></div>
-        <div class="tip-line"><span class="emoji">🍃</span><div><strong>0 800 235 236</strong> — Drogues Info Service</div></div>
-        <div class="tip-line"><span class="emoji">🚭</span><div><strong>39 89</strong> — Tabac Info Service</div></div>
-      </div>
-      <div class="actions">
-        <button class="btn">Fermer</button>
-      </div>
+      <p>J'ai plus de 18 ans.</p>
+      <label><input type="checkbox" id="age-18plus" /> Oui</label>
+      <label><input type="checkbox" id="age-hide" /> Ne plus afficher</label>
+      <div class="actions"><button id="btn-age-accept" class="btn" disabled>Entrer</button></div>
     </form>
   </dialog>
 
   <!-- Vendor -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <!-- App -->
+  <!-- Modules -->
+  <script type="module" src="./js/resources.js?v=7"></script>
   <script type="module" src="./js/app.js?v=7"></script>
 </body>
 </html>
