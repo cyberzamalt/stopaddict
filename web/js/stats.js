@@ -1,265 +1,267 @@
-/* web/js/stats.js — Stats V2 (2 graphiques + axes temps) */
+/* web/js/stats.js — 2 graphiques + abscisses complètes (Jour/Semaine/Mois/Année) */
+import { todayKey } from "./state.js";
 
-import { DefaultState, loadState, saveState, todayKey, fmtMoney } from './state.js';
-
-let chartQty = null;
-let chartMoney = null;
-let _period = "week"; // défaut: semaine
 const KINDS = ["cigs","joints","beer","hard","liqueur"];
-const LABELS = { cigs:"Cigarettes", joints:"Joints", beer:"Bière", hard:"Alcool fort", liqueur:"Liqueur" };
+let charts = { qty: null, money: null };
+let PERIOD = "day";
 
 /* ---------- utils ---------- */
-const $  = (s)=>document.querySelector(s);
-const $$ = (s)=>document.querySelectorAll(s);
-function pad2(n){return String(n).padStart(2,"0");}
-function ymd(d){return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;}
-function frDate(d){return d.toLocaleDateString("fr-FR");}
-function lastDayOfMonth(y,m){return new Date(y,m+1,0).getDate();}
-function monday(d){ const x=new Date(d); const wd=(x.getDay()+6)%7; x.setDate(x.getDate()-wd); return x; }
-function clone(d){ return new Date(d.getTime()); }
-
-/* ---------- DOM upgrade (injecte 2 canvases si absents) ---------- */
-function ensureStatsLayout(){
-  const page = $("#page-stats");
-  if(!page) return;
-
-  // Zone des actions déjà présente (périodes, export/import)
-  let actions = page.querySelector(".chart-actions");
-  if(!actions){
-    actions = document.createElement("div");
-    actions.className = "chart-actions";
-    actions.innerHTML = `
-      <button id="btnPeriod-day" class="btn">Jour</button>
-      <button id="btnPeriod-week" class="btn">Semaine</button>
-      <button id="btnPeriod-month" class="btn">Mois</button>
-      <button id="btnPeriod-year" class="btn">Année</button>
-      <button id="btn-export-csv" class="btn small">Exporter CSV</button>
-      <button id="btn-export-json" class="btn small">Exporter JSON</button>
-      <label class="btn small">Importer JSON <input id="file-import-json" type="file" accept="application/json" hidden /></label>
-    `;
-    page.appendChild(actions);
-  }
-
-  // En-tête période/date
-  let kpi = page.querySelector(".kpi-block");
-  if(!kpi){
-    kpi = document.createElement("div");
-    kpi.className = "kpi-block";
-    kpi.innerHTML = `<h3>Période</h3> <div id="stats-date">—</div>`;
-    page.insertBefore(kpi, actions);
-  } else if(!$("#stats-date")) {
-    const dateDiv = document.createElement("div");
-    dateDiv.id = "stats-date";
-    kpi.appendChild(dateDiv);
-  }
-
-  // Bloc(s) graphiques : 2 canvases
-  if(!$("#chart-qty") || !$("#chart-money")){
-    // Supprime l'ancien bloc unique s'il existe
-    page.querySelectorAll(".chart-block").forEach(el=>el.remove());
-    const block1 = document.createElement("div");
-    block1.className = "chart-block";
-    block1.innerHTML = `<canvas id="chart-qty"></canvas>`;
-    const block2 = document.createElement("div");
-    block2.className = "chart-block";
-    block2.innerHTML = `<canvas id="chart-money"></canvas>`;
-    page.appendChild(block1);
-    page.appendChild(block2);
-  }
+const $  = (s) => document.querySelector(s);
+function rangeDays(start, end){ // [YYYY-MM-DD,...]
+  const a=[]; const d=new Date(start); const e=new Date(end);
+  while (d <= e){ a.push(todayKey(d)); d.setDate(d.getDate()+1); }
+  return a;
+}
+function ymd(date){ // "YYYY-MM-DD" from Date
+  const y=date.getFullYear(), m=String(date.getMonth()+1).padStart(2,"0"), d=String(date.getDate()).padStart(2,"0");
+  return `${y}-${m}-${d}`;
+}
+function weekRange(d=new Date()){ // Mon..Sun around d
+  const n=new Date(d); const wd=(n.getDay()+6)%7; // 0=Mon
+  const s=new Date(n); s.setDate(n.getDate()-wd);
+  const e=new Date(s); e.setDate(s.getDate()+6);
+  return { start: ymd(s), end: ymd(e) };
+}
+function monthRange(d=new Date()){
+  const s=new Date(d.getFullYear(), d.getMonth(), 1);
+  const e=new Date(d.getFullYear(), d.getMonth()+1, 0);
+  return { start: ymd(s), end: ymd(e) };
+}
+function yearRange(d=new Date()){
+  const s=new Date(d.getFullYear(),0,1);
+  const e=new Date(d.getFullYear(),11,31);
+  return { start: ymd(s), end: ymd(e) };
 }
 
-/* ---------- agrégation par période ---------- */
-function buildSeries(period, ref = new Date()){
-  const S = loadState(); // toujours relire l’état courant
+/* ---------- labels (abscisses) ---------- */
+function labelsFor(period, ref=new Date()){
+  if(period==="day")    return ["Nuit","Matin","Après-midi","Soir"];
+  if(period==="week")   return ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
+  if(period==="month")  return Array.from({length:31},(_,i)=>String(i+1));
+  if(period==="year")   return ["Jan","Fév","Mar","Avr","Mai","Jui","Jui","Aoû","Sep","Oct","Nov","Déc"];
+  return [];
+}
+
+/* ---------- binning (répartition) ---------- */
+function binIndexFor(period, isoDate, eventTs){
+  if(period==="day"){
+    const h = eventTs!=null ? new Date(eventTs).getHours() : 12;
+    if (h<6) return 0; if (h<12) return 1; if (h<18) return 2; return 3;
+  }
+  if(period==="week"){
+    const d=new Date(isoDate); return (d.getDay()+6)%7; // 0=Mon..6=Sun
+  }
+  if(period==="month"){
+    return Number(isoDate.slice(8,10)) - 1; // 0..30
+  }
+  if(period==="year"){
+    return Number(isoDate.slice(5,7)) - 1; // 0..11
+  }
+  return 0;
+}
+
+/* ---------- data builder ---------- */
+function buildData(getState, period=PERIOD){
+  const S = getState();
+  const labels = labelsFor(period);
+  const qty = {
+    cigs: Array(labels.length).fill(0),
+    joints: Array(labels.length).fill(0),
+    beer: Array(labels.length).fill(0),
+    hard: Array(labels.length).fill(0),
+    liqueur: Array(labels.length).fill(0),
+  };
+  const money = { cost: Array(labels.length).fill(0), saved: Array(labels.length).fill(0) };
+
+  const todayIso = todayKey(new Date());
   const hist = S.history || {};
+  const events = Array.isArray(S.events) ? S.events : [];
 
-  const qtySeries = { cigs:[], joints:[], beer:[], hard:[], liqueur:[] };
-  const moneySeries = { cost:[], saved:[] };
-  let labels = [];
+  if (period==="day"){
+    // Répartition par tranches horaires, si journal dispo (S.events)
+    const tsDayStart = new Date(todayIso+"T00:00:00").getTime();
+    const tsDayEnd   = new Date(todayIso+"T23:59:59").getTime();
+    const dayEvents = events.filter(ev => typeof ev?.ts==="number" && ev.ts>=tsDayStart && ev.ts<=tsDayEnd);
 
-  if (period === "day") {
-    // Sans journal par tranche horaire, on affiche un total "Aujourd’hui"
-    const k = todayKey(ref);
-    const d = hist[k] || {};
-    labels = ["Aujourd’hui"];
-    KINDS.forEach(kd => qtySeries[kd].push(Number(d[kd]||0)));
-    moneySeries.cost.push(Number(d.cost||0));
-    moneySeries.saved.push(Number(d.saved||0));
-    $("#stats-date") && ($("#stats-date").textContent = frDate(ref));
-  }
-  else if (period === "week") {
-    const start = monday(ref);
-    labels = ["Lun.","Mar.","Mer.","Jeu.","Ven.","Sam.","Dim."];
-    for(let i=0;i<7;i++){
-      const cur = clone(start); cur.setDate(start.getDate()+i);
-      const key = ymd(cur);
-      const d = hist[key] || {};
-      KINDS.forEach(kd => qtySeries[kd].push(Number(d[kd]||0)));
-      moneySeries.cost.push(Number(d.cost||0));
-      moneySeries.saved.push(Number(d.saved||0));
-    }
-    const end = clone(start); end.setDate(start.getDate()+6);
-    $("#stats-date") && ($("#stats-date").textContent = `${frDate(start)} → ${frDate(end)}`);
-  }
-  else if (period === "month") {
-    const y = ref.getFullYear(), m = ref.getMonth();
-    const last = lastDayOfMonth(y,m);
-    labels = Array.from({length:last}, (_,i)=> String(i+1));
-    for(let day=1; day<=last; day++){
-      const key = `${y}-${pad2(m+1)}-${pad2(day)}`;
-      const d = hist[key] || {};
-      KINDS.forEach(kd => qtySeries[kd].push(Number(d[kd]||0)));
-      moneySeries.cost.push(Number(d.cost||0));
-      moneySeries.saved.push(Number(d.saved||0));
-    }
-    $("#stats-date") && ($("#stats-date").textContent = `${pad2(m+1)}/${y}`);
-  }
-  else if (period === "year") {
-    const y = ref.getFullYear();
-    labels = ["Janv.","Févr.","Mars","Avr.","Mai","Juin","Juil.","Août","Sept.","Oct.","Nov.","Déc."];
-    for(let m=0; m<12; m++){
-      let agg = { cigs:0,joints:0,beer:0,hard:0,liqueur:0,cost:0,saved:0 };
-      const ld = lastDayOfMonth(y,m);
-      for(let d=1; d<=ld; d++){
-        const key = `${y}-${pad2(m+1)}-${pad2(d)}`;
-        const h = hist[key] || {};
-        KINDS.forEach(kd => agg[kd] += Number(h[kd]||0));
-        agg.cost  += Number(h.cost||0);
-        agg.saved += Number(h.saved||0);
+    if (dayEvents.length){
+      for (const ev of dayEvents){
+        const k = ev.kind;
+        if (!KINDS.includes(k)) continue;
+        const bin = binIndexFor("day", todayIso, ev.ts);
+        const delta = Number(ev.delta||0);
+        qty[k][bin] += delta;
       }
-      KINDS.forEach(kd => qtySeries[kd].push(agg[kd]));
-      moneySeries.cost.push(agg.cost);
-      moneySeries.saved.push(agg.saved);
+      // Argent du jour via history si dispo
+      const d = hist[todayIso] || {};
+      const b = binIndexFor("day", todayIso, tsDayStart+12*3600e3); // met sur "Après-midi" par défaut
+      money.cost[b]  += Number(d.cost||0);
+      money.saved[b] += Number(d.saved||0);
+    } else {
+      // Pas d'évènements → on met les compteurs du jour dans "Après-midi"
+      const t = S.today?.counters || {};
+      const b = 2;
+      qty.cigs[b]    += Number(t.cigs||0);
+      qty.joints[b]  += Number(t.joints||0);
+      qty.beer[b]    += Number(t.beer||0);
+      qty.hard[b]    += Number(t.hard||0);
+      qty.liqueur[b] += Number(t.liqueur||0);
+      const d = hist[todayIso] || {};
+      money.cost[b]  += Number(d.cost||0);
+      money.saved[b] += Number(d.saved||0);
     }
-    $("#stats-date") && ($("#stats-date").textContent = String(y));
+    $("#stats-date")?.textContent = new Date().toLocaleDateString("fr-FR");
   }
 
-  return { labels, qtySeries, moneySeries, currency: S.currency };
+  else if (period==="week"){
+    const {start,end} = weekRange(new Date());
+    for (const iso of rangeDays(start,end)){
+      const d = hist[iso] || {};
+      const b = binIndexFor("week", iso);
+      qty.cigs[b]    += Number(d.cigs||0);
+      qty.joints[b]  += Number(d.joints||0);
+      qty.beer[b]    += Number(d.beer||0);
+      qty.hard[b]    += Number(d.hard||0);
+      qty.liqueur[b] += Number(d.liqueur||0);
+      money.cost[b]  += Number(d.cost||0);
+      money.saved[b] += Number(d.saved||0);
+    }
+    $("#stats-date")?.textContent = `${start.split("-").reverse().join("/")} → ${end.split("-").reverse().join("/")}`;
+  }
+
+  else if (period==="month"){
+    const {start,end} = monthRange(new Date());
+    for (const iso of rangeDays(start,end)){
+      const d = hist[iso] || {};
+      const b = binIndexFor("month", iso);
+      qty.cigs[b]    += Number(d.cigs||0);
+      qty.joints[b]  += Number(d.joints||0);
+      qty.beer[b]    += Number(d.beer||0);
+      qty.hard[b]    += Number(d.hard||0);
+      qty.liqueur[b] += Number(d.liqueur||0);
+      money.cost[b]  += Number(d.cost||0);
+      money.saved[b] += Number(d.saved||0);
+    }
+    $("#stats-date")?.textContent = new Date().toLocaleDateString("fr-FR", { month:"long", year:"numeric" });
+  }
+
+  else if (period==="year"){
+    const {start,end} = yearRange(new Date());
+    for (const iso of Object.keys(hist)){
+      if (iso<start || iso>end) continue;
+      const d = hist[iso] || {};
+      const b = binIndexFor("year", iso);
+      qty.cigs[b]    += Number(d.cigs||0);
+      qty.joints[b]  += Number(d.joints||0);
+      qty.beer[b]    += Number(d.beer||0);
+      qty.hard[b]    += Number(d.hard||0);
+      qty.liqueur[b] += Number(d.liqueur||0);
+      money.cost[b]  += Number(d.cost||0);
+      money.saved[b] += Number(d.saved||0);
+    }
+    $("#stats-date")?.textContent = new Date().getFullYear();
+  }
+
+  return { labels, qty, money };
 }
 
-/* ---------- rendu Chart.js ---------- */
-function renderCharts(){
-  if (typeof Chart === "undefined") return;
-
-  const ref = new Date();
-  const { labels, qtySeries, moneySeries, currency } = buildSeries(_period, ref);
-
-  // Quantités (stacked bars, 5 datasets)
-  const ctxQ = $("#chart-qty")?.getContext("2d");
-  if (chartQty) chartQty.destroy();
-  if (ctxQ){
-    chartQty = new Chart(ctxQ, {
-      type: "bar",
-      data: {
-        labels,
-        datasets: KINDS.map(k=>({
-          label: LABELS[k],
-          data: qtySeries[k],
-          // couleurs par défaut de Chart.js (on ne fixe pas de couleurs)
-          borderWidth: 1,
-          stack: "qty"
-        }))
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { position: "top" } },
-        scales: {
-          x: { stacked: true },
-          y: { stacked: true, beginAtZero: true, title: { display:true, text: "Quantités" } }
-        }
-      }
-    });
+/* ---------- ensure canvases ---------- */
+function ensureCanvases(){
+  // 1) Quantités (existant)
+  const c1 = $("#chart-main");
+  // 2) Coûts/Économies (créé si absent)
+  let c2 = $("#chart-costs");
+  if (!c2){
+    const wrap = document.createElement("div");
+    wrap.className = "chart-block";
+    c2 = document.createElement("canvas");
+    c2.id = "chart-costs";
+    wrap.appendChild(c2);
+    $("#page-stats")?.appendChild(wrap);
   }
+  return { c1, c2 };
+}
 
-  // Argent (barres côte à côte: coût / économies)
-  const ctxM = $("#chart-money")?.getContext("2d");
-  if (chartMoney) chartMoney.destroy();
-  if (ctxM){
-    chartMoney = new Chart(ctxM, {
-      type: "bar",
-      data: {
-        labels,
-        datasets: [
-          { label: "Coût", data: moneySeries.cost, borderWidth:1 },
-          { label: "Économies", data: moneySeries.saved, borderWidth:1 }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: "top" },
-          tooltip: {
-            callbacks: {
-              label: (ctx)=>{
-                const v = Number(ctx.parsed.y||0);
-                try{ return `${ctx.dataset.label}: ${v.toLocaleString('fr-FR',{style:'currency',currency:currency?.code||'EUR'})}`; }
-                catch{ return `${ctx.dataset.label}: ${fmtMoney(v,currency)}`; }
-              }
-            }
+/* ---------- painters ---------- */
+function draw(getState, fmtMoneyFn){
+  const { labels, qty, money } = buildData(getState, PERIOD);
+  const { c1, c2 } = ensureCanvases();
+  if (!c1 || !c2 || typeof Chart==="undefined") return;
+
+  // Détruit anciens
+  if (charts.qty) charts.qty.destroy();
+  if (charts.money) charts.money.destroy();
+
+  // Graphique quantités (5 jeux de barres)
+  charts.qty = new Chart(c1.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        { label:"Cigarettes", data: qty.cigs },
+        { label:"Joints",     data: qty.joints },
+        { label:"Bière",      data: qty.beer },
+        { label:"Alcool fort",data: qty.hard },
+        { label:"Liqueur",    data: qty.liqueur },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:"bottom" } },
+      scales:{ y:{ beginAtZero:true } }
+    }
+  });
+
+  // Graphique € (2 jeux)
+  charts.money = new Chart(c2.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        { label:"Coûts",      data: money.cost },
+        { label:"Économies",  data: money.saved },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ position:"bottom" },
+        tooltip:{ callbacks:{
+          label: (ctx) => {
+            const v = Number(ctx.parsed.y||0);
+            try { return `${ctx.dataset.label}: ${fmtMoneyFn ? fmtMoneyFn(v) : (v.toFixed(2)+"€")}`; }
+            catch { return `${ctx.dataset.label}: ${v.toFixed(2)}€`; }
           }
-        },
-        scales: {
-          y: { beginAtZero: true, title: { display:true, text: "€" } }
-        }
-      }
-    });
-  }
-}
-
-/* ---------- exports / imports ---------- */
-function bindExportImport(){
-  $("#btn-export-csv")?.addEventListener("click", ()=>{
-    const S = loadState();
-    const rows=[["date","cigs","joints","beer","hard","liqueur","cost","saved"]];
-    const keys=Object.keys(S.history||{}).sort();
-    for(const k of keys){
-      const d=S.history[k]||{};
-      rows.push([k,d.cigs||0,d.joints||0,d.beer||0,d.hard||0,d.liqueur||0,(Number(d.cost||0)).toFixed(2),(Number(d.saved||0)).toFixed(2)]);
-    }
-    const csv=rows.map(r=>r.join(",")).join("\n");
-    const blob=new Blob([csv],{type:"text/csv"});
-    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="stopaddict_stats.csv"; document.body.appendChild(a); a.click(); a.remove();
-  });
-
-  $("#btn-export-json")?.addEventListener("click", ()=>{
-    const S = loadState();
-    const blob=new Blob([JSON.stringify(S,null,2)],{type:"application/json"});
-    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="stopaddict_export.json"; document.body.appendChild(a); a.click(); a.remove();
-  });
-
-  $("#file-import-json")?.addEventListener("change", async (ev)=>{
-    const file=ev.target.files?.[0]; if(!file) return;
-    try{
-      const text=await file.text();
-      const obj=JSON.parse(text);
-      const merged = { ...DefaultState(), ...obj };
-      saveState(merged);
-      renderCharts();
-      alert("Import JSON : OK");
-    }catch(e){
-      alert("Import JSON invalide.");
-    }finally{
-      ev.target.value="";
+        }}
+      },
+      scales:{ y:{ beginAtZero:true } }
     }
   });
 }
 
-/* ---------- périodes ---------- */
-function bindPeriods(){
-  $("#btnPeriod-day")?.addEventListener("click", ()=>{ _period="day"; renderCharts(); });
-  $("#btnPeriod-week")?.addEventListener("click", ()=>{ _period="week"; renderCharts(); });
-  $("#btnPeriod-month")?.addEventListener("click", ()=>{ _period="month"; renderCharts(); });
-  $("#btnPeriod-year")?.addEventListener("click", ()=>{ _period="year"; renderCharts(); });
+/* ---------- mount ---------- */
+export function mountStats({ getState, fmtMoney }){
+  const root = $("#page-stats");
+  if (!root || root.dataset.bound==="1") return;
+  root.dataset.bound = "1";
+
+  const bind = (id, p) => {
+    const b = document.getElementById(id);
+    if (!b) return;
+    b.addEventListener("click", () => {
+      PERIOD = p;
+      draw(getState, fmtMoney);
+    }, { passive:true });
+  };
+
+  bind("btnPeriod-day","day");
+  bind("btnPeriod-week","week");
+  bind("btnPeriod-month","month");
+  bind("btnPeriod-year","year");
+
+  // premier rendu
+  PERIOD = "day";
+  draw(getState, fmtMoney);
 }
 
-/* ---------- montage auto-idempotent ---------- */
-(function mountOnce(){
-  if (document.body.dataset.statsBound === "1") return;
-  document.body.dataset.statsBound = "1";
-  ensureStatsLayout();
-  bindPeriods();
-  bindExportImport();
-  renderCharts();
-})();
+/* ---------- auto-expose (optionnel) ---------- */
+try { window.StopAddictStats = { mountStats }; } catch {}
