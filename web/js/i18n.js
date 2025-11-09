@@ -1,225 +1,260 @@
-// web/js/i18n.js
-// STOPADDICT — Internationalisation via JSON externes + fallback embarqué
-// - Charge /web/i18n/{lang}.json et /web/i18n/_meta.json (liste des langues).
-// - Persistance de la langue (localStorage), évènement 'sa:lang-changed'.
-// - API globale: window.SA_I18N { t, setLang, getLang, apply, getAvailable, categoryLabel }.
-// - Tolérant : si un JSON manque, on retombe sur les dictionnaires intégrés FR/EN.
+/* web/js/i18n.js — Dictionnaires + applyLanguage (ES module, autonome)
+   Usage:
+     import { t, getLanguage, setLanguage, applyLanguage } from "./i18n.js";
+   - Stocke la langue dans localStorage (LS_LANG)
+   - Met à jour les libellés visibles sans toucher à la logique
+   - S’accroche sur #select-language si présent
+*/
 
-"use strict";
+const LS_LANG = "stopaddict_lang";
 
-const STORE_KEY = "stopaddict_lang";
-const META_URL  = "web/i18n/_meta.json";
-const FILE_URL  = (lang) => `web/i18n/${lang}.json`;
-
-// --- Fallbacks intégrés (minimum vital)
-const EMBED = {
+const DICT = {
   fr: {
-    "nav.home": "Accueil", "nav.stats":"Stats", "nav.calendar":"Calendrier", "nav.habits":"Habitudes", "nav.settings":"Réglages",
-    "today.title":"Aujourd’hui", "counts.cigs":"Clopes", "counts.weed":"Joints", "counts.alcohol":"Alcool",
-    "cost":"Coût", "savings":"Économies", "tips.title":"Conseils", "resources":"Ressources & numéros utiles", "activate":"Activer",
-    "cat.cigs":"Cigarettes", "cat.weed":"Joints", "cat.beer":"Bière", "cat.strong":"Alcool fort", "cat.liquor":"Liqueur",
-    "stats.totals":"Totaux", "stats.cost_total":"Coût total", "stats.savings_total":"Économies",
-    "range.day":"Jour", "range.week":"Semaine", "range.month":"Mois", "range.year":"Année",
-    "stats.header":"Bilan {range} — {title}",
-    "export.csv":"Exporter CSV", "export.json":"Exporter TOUT (JSON)", "import.json":"Importer (JSON)", "export.include_charts":"Inclure images des graphiques",
-    "calendar.month":"Mois — Année",
-    "habits.title":"Habitudes", "habits.objectives":"Objectifs quotidiens", "habits.dates":"Dates clés",
-    "btn.save":"Enregistrer", "btn.reset":"Réinitialiser", "btn.clear":"Effacer", "btn.close":"Fermer",
-    "tip.fill_prices":"Renseigne le prix de {list} dans Réglages pour voir des coûts/économies réalistes.",
-    "tip.zero_today":"🎯 Zéro aujourd’hui — parfait ! Garde ce rythme.",
-    "tip.below_goal":"Bien joué : en dessous de l’objectif pour {list}.",
-    "tip.micro_goal":"Micro-objectif 💡: {label} — vise {n} au prochain passage.",
-    "cost.today":"Coût du jour : {n} {sym}. Un pas de moins réduit la note dès aujourd’hui.",
+    title: "StopAddict",
+    tabs: { home: "Accueil", stats: "Stats", calendar: "Calendrier", habits: "Habitudes", settings: "Réglages" },
+    counters: {
+      cigs: "Cigarettes", joints: "Joints", beer: "Bière", hard: "Alcool fort", liqueur: "Liqueur",
+      alcoholGlobal: "Alcool (global)", enable: "Activer", minus: "−", plus: "+"
+    },
+    stats: {
+      period: "Période",
+      day: "Jour", week: "Semaine", month: "Mois", year: "Année",
+      exportCSV: "Exporter CSV", exportJSON: "Exporter JSON", importJSON: "Importer JSON",
+      qtyChart: "Quantités", moneyChart: "Coûts / Économies"
+    },
+    cal: { day: "Jour", week: "Semaine", month: "Mois", openStats: "Ouvrir Stats", openHabits: "Ouvrir Habitudes" },
+    habits: { goals: "Objectifs par jour", dates: "Dates clés" },
+    settings: {
+      profile: "Profil", name: "Prénom", language: "Langue",
+      currency: "Devise", symbol: "Symbole", before: "Avant", after: "Après", apply: "Appliquer",
+      modules: "Modules",
+      prices: "Prix unitaires",
+      price: { cigs: "Cigarette (€)", joints: "Joint (€)", beer: "Bière (€)", hard: "Alcool fort (€)", liqueur: "Liqueur (€)" },
+      pricesSave: "Enregistrer les prix", pricesReset: "Réinitialiser les prix",
+      maintenance: "Maintenance & sauvegardes",
+      razDay: "RAZ du jour", razHist: "RAZ historique", razFactory: "RAZ réglages (usine)",
+      saveJSON: "Sauvegarder JSON", importJSON: "Importer JSON",
+      debug: "Journal & Debug", showConsole: "Afficher la console",
+      copyLogs: "Copier les logs", clearLogs: "Vider les logs", resources: "Ressources & numéros utiles"
+    },
+    age: { title: "+18", text: "J'ai plus de 18 ans.", yes: "Oui", hide: "Ne plus afficher", enter: "Entrer", help: "Besoin d'aide ? " },
+    daysShort: ["Lu","Ma","Me","Je","Ve","Sa","Di"]
   },
+
   en: {
-    "nav.home":"Home", "nav.stats":"Stats", "nav.calendar":"Calendar", "nav.habits":"Habits", "nav.settings":"Settings",
-    "today.title":"Today", "counts.cigs":"Cigs", "counts.weed":"Joints", "counts.alcohol":"Alcohol",
-    "cost":"Cost", "savings":"Savings", "tips.title":"Tips", "resources":"Resources & helplines", "activate":"Enable",
-    "cat.cigs":"Cigarettes", "cat.weed":"Joints", "cat.beer":"Beer", "cat.strong":"Spirits", "cat.liquor":"Liqueur",
-    "stats.totals":"Totals", "stats.cost_total":"Total cost", "stats.savings_total":"Savings",
-    "range.day":"Day", "range.week":"Week", "range.month":"Month", "range.year":"Year",
-    "stats.header":"{range} summary — {title}",
-    "export.csv":"Export CSV", "export.json":"Export ALL (JSON)", "import.json":"Import (JSON)", "export.include_charts":"Include chart images",
-    "calendar.month":"Month — Year",
-    "habits.title":"Habits", "habits.objectives":"Daily goals", "habits.dates":"Key dates",
-    "btn.save":"Save", "btn.reset":"Reset", "btn.clear":"Clear", "btn.close":"Close",
-    "tip.fill_prices":"Fill the price of {list} in Settings to get realistic costs/savings.",
-    "tip.zero_today":"🎯 Zero today — great! Keep it up.",
-    "tip.below_goal":"Nice: below the goal for {list}.",
-    "tip.micro_goal":"Micro-goal 💡: {label} — aim {n} next time.",
-    "cost.today":"Today’s cost: {n} {sym}. One less already reduces the bill.",
-  },
+    title: "StopAddict",
+    tabs: { home: "Home", stats: "Stats", calendar: "Calendar", habits: "Habits", settings: "Settings" },
+    counters: {
+      cigs: "Cigarettes", joints: "Joints", beer: "Beer", hard: "Spirits", liqueur: "Liqueur",
+      alcoholGlobal: "Alcohol (global)", enable: "Enable", minus: "−", plus: "+"
+    },
+    stats: {
+      period: "Period",
+      day: "Day", week: "Week", month: "Month", year: "Year",
+      exportCSV: "Export CSV", exportJSON: "Export JSON", importJSON: "Import JSON",
+      qtyChart: "Quantities", moneyChart: "Costs / Savings"
+    },
+    cal: { day: "Day", week: "Week", month: "Month", openStats: "Open Stats", openHabits: "Open Habits" },
+    habits: { goals: "Daily goals", dates: "Key dates" },
+    settings: {
+      profile: "Profile", name: "First name", language: "Language",
+      currency: "Currency", symbol: "Symbol", before: "Before", after: "After", apply: "Apply",
+      modules: "Modules",
+      prices: "Unit prices",
+      price: { cigs: "Cigarette (€)", joints: "Joint (€)", beer: "Beer (€)", hard: "Spirits (€)", liqueur: "Liqueur (€)" },
+      pricesSave: "Save prices", pricesReset: "Reset prices",
+      maintenance: "Maintenance & backups",
+      razDay: "Reset today", razHist: "Reset history", razFactory: "Factory reset",
+      saveJSON: "Save JSON", importJSON: "Import JSON",
+      debug: "Logs & Debug", showConsole: "Show console",
+      copyLogs: "Copy logs", clearLogs: "Clear logs", resources: "Resources & helplines"
+    },
+    age: { title: "+18", text: "I am over 18.", yes: "Yes", hide: "Don't show again", enter: "Enter", help: "Need help? " },
+    daysShort: ["Mo","Tu","We","Th","Fr","Sa","Su"]
+  }
 };
 
-// --- État interne
-let current = detectLang();
-let dicts   = { ...EMBED };   // cache (fr/en préremplis)
-let meta    = null;            // liste des langues disponibles (si _meta.json chargé)
-
-// --- Détection langue
-function detectLang() {
-  try {
-    const saved = localStorage.getItem(STORE_KEY);
-    if (saved) return saved;
-  } catch {}
-  try {
-    const nav = (navigator.language || navigator.userLanguage || "fr").toLowerCase();
-    if (nav.startsWith("fr")) return "fr";
-  } catch {}
-  return "en";
+/* ---------------- Core API ---------------- */
+export function getLanguage(){
+  return localStorage.getItem(LS_LANG) || "fr";
+}
+export function setLanguage(lang){
+  if (!DICT[lang]) lang = "fr";
+  localStorage.setItem(LS_LANG, lang);
 }
 
-// --- Utilitaires texte
-function interpolate(str, vars) {
-  if (!vars) return str;
-  return str.replace(/\{(\w+)\}/g, (_, k) => (k in vars ? String(vars[k]) : `{${k}}`));
+export function t(path, fallback=""){
+  const lang = getLanguage();
+  const dict = DICT[lang] || DICT.fr;
+  return path.split(".").reduce((o,k)=> (o && o[k]!=null ? o[k] : undefined), dict) ?? fallback;
 }
 
-function t(key, vars) {
-  const d = dicts[current] || dicts.fr || dicts.en || {};
-  let out = d[key];
-  if (out == null) {
-    const fb = (dicts.fr && dicts.fr[key]) || (dicts.en && dicts.en[key]);
-    out = fb != null ? fb : key;
+/* Applique les libellés connus sans exiger data-i18n (index.html existant) */
+export function applyLanguage(lang = getLanguage()){
+  setLanguage(lang);
+
+  // Title & Tabs
+  setText("#app-title", t("title"));
+  setText('#tabs .tab[data-tab="home"]', t("tabs.home"));
+  setText('#tabs .tab[data-tab="stats"]', t("tabs.stats"));
+  setText('#tabs .tab[data-tab="calendar"]', t("tabs.calendar"));
+  setText('#tabs .tab[data-tab="habits"]', t("tabs.habits"));
+  setText('#tabs .tab[data-tab="settings"]', t("tabs.settings"));
+
+  // Home counters
+  setText("#ctr-cigs h2", t("counters.cigs"));
+  setText("#ctr-joints h2", t("counters.joints"));
+  setText("#ctr-beer h2", t("counters.beer"));
+  setText("#ctr-hard h2", t("counters.hard"));
+  setText("#ctr-liqueur h2", t("counters.liqueur"));
+  // Toggle labels (“Activer / Enable”)
+  document.querySelectorAll(".toggle").forEach(lbl=>{
+    const input = lbl.querySelector("input");
+    if (input){
+      // Conserve l’input et remplace le texte à côté
+      const txt = document.createTextNode(" " + t("counters.enable"));
+      // Nettoie tous les nœuds après l’input
+      while (input.nextSibling) input.nextSibling.remove();
+      input.after(txt);
+    }
+  });
+
+  // Stats
+  setText("#page-stats .kpi-block h3", t("stats.period"));
+  setText("#btnPeriod-day", t("stats.day"));
+  setText("#btnPeriod-week", t("stats.week"));
+  setText("#btnPeriod-month", t("stats.month"));
+  setText("#btnPeriod-year", t("stats.year"));
+  setAttr("#btn-export-csv", "data-i18n-label", t("stats.exportCSV"));
+  setAttr("#btn-export-json", "data-i18n-label", t("stats.exportJSON"));
+  // Le label d'import est un <label> contenant l’input : on remplace son texte visible
+  const importLbl = document.querySelector('#page-stats label.btn.small input#file-import-json')?.parentElement;
+  if (importLbl){
+    importLbl.childNodes.forEach(n=>{ if(n.nodeType===Node.TEXT_NODE) n.textContent = t("stats.importJSON")+" "; });
   }
-  return typeof out === "string" ? interpolate(out, vars) : key;
+
+  // Calendar toolbar buttons (si présents)
+  setText('button[data-cal-mode="day"]', t("cal.day"));
+  setText('button[data-cal-mode="week"]', t("cal.week"));
+  setText('button[data-cal-mode="month"]', t("cal.month"));
+  setText("#cal-open-stats", t("cal.openStats"));
+  setText("#cal-open-habits", t("cal.openHabits"));
+
+  // Habits & Settings section headers (ordre actuel du DOM)
+  const setH2 = (rootSel, keys) => {
+    const hs = document.querySelectorAll(`${rootSel} h2.section-title`);
+    keys.forEach((k, i)=>{ if(hs[i]) hs[i].textContent = t(k); });
+  };
+  setH2("#page-habits", ["habits.goals","habits.dates"]);
+  setH2("#page-settings", ["settings.profile","settings.currency","settings.modules","settings.prices","settings.maintenance","settings.debug"]);
+
+  // Settings controls
+  setLabelText("#profile-name", t("settings.name"));
+  const langSel = document.getElementById("select-language");
+  if (langSel){
+    ensureLangOptions(langSel);
+    langSel.value = lang;
+  }
+  setLabelText("#currency-symbol", t("settings.symbol"));
+  setText("#btn-apply-currency", t("settings.apply"));
+  // Prices block buttons
+  setText("#btn-save-prices", t("settings.pricesSave"));
+  setText("#btn-reset-prices", t("settings.pricesReset"));
+  // Maintenance buttons
+  setText("#btn-raz-day", t("settings.razDay"));
+  setText("#btn-raz-history", t("settings.razHist"));
+  setText("#btn-raz-factory", t("settings.razFactory"));
+  // JSON buttons
+  setText("#btn-save-json-settings", t("settings.saveJSON"));
+  const importLbl2 = document.querySelector('#page-settings label.btn input#file-import-json-settings')?.parentElement;
+  if (importLbl2){
+    importLbl2.childNodes.forEach(n=>{ if(n.nodeType===Node.TEXT_NODE) n.textContent = t("settings.importJSON")+" "; });
+  }
+  // Debug & resources
+  setLabelForCheckbox("#cb-debug-overlay", t("settings.showConsole"));
+  setText("#btn-copy-logs", t("settings.copyLogs"));
+  setText("#btn-clear-logs", t("settings.clearLogs"));
+  setText("#btn-resources", t("settings.resources"));
+
+  // Age Gate
+  setText("#agegate h3", t("age.title"));
+  setText("#agegate p", t("age.text"));
+  // Les deux labels contiennent un input + texte
+  replaceLabelText("#age-18plus", t("age.yes"));
+  replaceLabelText("#age-hide", t("age.hide"));
+  setText("#btn-age-accept", t("age.enter"));
+  // (Le lien "Ressources…" est injecté par resources.js, son texte peut être ajusté là-bas au besoin)
 }
 
-// --- Application DOM
-//   <span data-i18n="nav.settings"></span>
-//   <input data-i18n="habits.title" data-i18n-attr="placeholder">
-//   <span data-i18n="tips.title" data-i18n-html="1"></span>
-function apply(root = document) {
-  const nodes = root.querySelectorAll("[data-i18n]");
-  nodes.forEach((el) => {
-    const key  = el.getAttribute("data-i18n");
-    const attr = el.getAttribute("data-i18n-attr");
-    const html = el.getAttribute("data-i18n-html") === "1";
-    if (!key) return;
-    const txt = t(key);
-    if (attr) el.setAttribute(attr, txt);
-    else if (html) el.innerHTML = txt;
-    else el.textContent = txt;
+/* ---------------- DOM utils ---------------- */
+function setText(sel, text){
+  const el = document.querySelector(sel);
+  if (el && typeof text === "string") el.textContent = text;
+}
+function setAttr(sel, attr, val){
+  const el = document.querySelector(sel);
+  if (el) el.setAttribute(attr, val);
+}
+function ensureLangOptions(selectEl){
+  if (selectEl.options.length===0){
+    const opts = [
+      { v:"fr", l:"Français" },
+      { v:"en", l:"English" }
+    ];
+    opts.forEach(o=>{
+      const op = document.createElement("option");
+      op.value = o.v; op.textContent = o.l;
+      selectEl.appendChild(op);
+    });
+  }
+}
+function setLabelText(inputSel, labelText){
+  const input = document.querySelector(inputSel);
+  if (!input) return;
+  const label = input.closest("label");
+  if (label){
+    // Conserve l’input/select et remplace le texte autour
+    const nodeText = Array.from(label.childNodes).find(n=> n.nodeType===Node.TEXT_NODE);
+    if (nodeText) nodeText.textContent = labelText + " ";
+    else label.prepend(document.createTextNode(labelText + " "));
+  }
+}
+function setLabelForCheckbox(cbSel, text){
+  const cb = document.querySelector(cbSel);
+  if (!cb) return;
+  const lbl = cb.closest("label");
+  if (lbl){
+    while (cb.nextSibling) cb.nextSibling.remove();
+    cb.after(document.createTextNode(" " + text));
+  }
+}
+function replaceLabelText(inputIdSel, text){
+  const input = document.querySelector(inputIdSel);
+  if (!input) return;
+  const lbl = input.closest("label");
+  if (!lbl) return;
+  while (input.nextSibling) input.nextSibling.remove();
+  input.after(document.createTextNode(" " + text));
+}
+
+/* ---------------- Auto-mount ---------------- */
+function bindLanguageSelector(){
+  const sel = document.getElementById("select-language");
+  if (!sel) return;
+  sel.addEventListener("change", ()=>{
+    const val = sel.value || "fr";
+    setLanguage(val);
+    applyLanguage(val);
+    // Optionnel: signaler aux autres modules que la langue a changé
+    document.dispatchEvent(new CustomEvent("sa:lang-changed", { detail:{ lang: val }}));
   });
 }
 
-// --- Labels de catégories
-function categoryLabel(kind) {
-  switch (kind) {
-    case "cigs":   return t("cat.cigs");
-    case "weed":   return t("cat.weed");
-    case "beer":   return t("cat.beer");
-    case "strong": return t("cat.strong");
-    case "liquor": return t("cat.liquor");
-    default:       return kind;
-  }
-}
+try{
+  // Applique immédiatement la langue stockée (ou fr)
+  applyLanguage(getLanguage());
+  bindLanguageSelector();
+}catch{}
 
-// --- Chargement JSON (_meta + dictionnaires)
-async function loadMetaOnce() {
-  if (meta) return meta;
-  try {
-    const res = await fetch(META_URL, { cache: "no-cache" });
-    if (!res.ok) throw new Error(res.status);
-    meta = await res.json();
-    return meta;
-  } catch {
-    meta = { languages: [{ code: "fr", label: "Français" }, { code: "en", label: "English" }] };
-    return meta;
-  }
-}
-
-async function loadDict(lang) {
-  if (dicts[lang]) return dicts[lang];
-  try {
-    const res = await fetch(FILE_URL(lang), { cache: "no-cache" });
-    if (!res.ok) throw new Error(res.status);
-    const json = await res.json();
-    dicts[lang] = json && typeof json === "object" ? json : {};
-  } catch {
-    // garde fallback embarqué si échec
-    dicts[lang] = dicts[lang] || {};
-  }
-  return dicts[lang];
-}
-
-// --- Changement de langue
-async function setLang(lang) {
-  if (!lang) lang = "fr";
-  current = lang;
-  try { localStorage.setItem(STORE_KEY, lang); } catch {}
-
-  // Attributs HTML
-  try {
-    const html = document.documentElement;
-    if (html) { html.setAttribute("lang", lang); html.setAttribute("dir", "ltr"); }
-  } catch {}
-
-  // Charger le JSON externe (si besoin), puis appliquer
-  await loadDict(lang);
-  apply();
-
-  // Optionnel : suggérer une devise via le JSON si présent (currency.symbol/position)
-  // → currency.js peut écouter et décider d’appliquer ou non.
-  try {
-    const d = dicts[lang];
-    if (d && d.currency && (d.currency.symbol || d.currency.position)) {
-      document.dispatchEvent(new CustomEvent("sa:currency-suggest", { detail: { ...d.currency } }));
-    }
-  } catch {}
-
-  // Notification globale
-  try { document.dispatchEvent(new CustomEvent("sa:lang-changed", { detail: { lang } })); } catch {}
-}
-
-function getLang() { return current; }
-
-// --- Langues disponibles (pour Réglages)
-async function getAvailable() {
-  await loadMetaOnce();
-  // meta.languages : [{code:"fr", label:"Français"}, ...]
-  return Array.isArray(meta.languages) && meta.languages.length
-    ? meta.languages
-    : [{ code: "fr", label: "Français" }, { code: "en", label: "English" }];
-}
-
-// --- Initialisation
-export async function initI18n() {
-  // Charger meta + dictionnaire courant, puis appliquer
-  await Promise.race([
-    (async () => { await loadMetaOnce(); await loadDict(current); })(),
-    // garde-fou pour ne pas bloquer l’app si CDN/GitHub flanche
-    new Promise((resolve) => setTimeout(resolve, 1200)),
-  ]);
-
-  // Mettre lang sur <html>
-  try {
-    const html = document.documentElement;
-    if (html) { html.setAttribute("lang", current); html.setAttribute("dir", "ltr"); }
-  } catch {}
-
-  // Appliquer au DOM existant
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => apply(), { once: true });
-  } else {
-    apply();
-  }
-
-  // Bouton optionnel (si présent dans l’UI)
-  const toggle = document.getElementById("toggle-lang");
-  if (toggle) {
-    toggle.addEventListener("click", async () => {
-      const next = getLang() === "fr" ? "en" : "fr";
-      await setLang(next);
-    });
-  }
-
-  // Exposer l’API globale
-  try {
-    window.SA_I18N = { t, setLang, getLang, apply, getAvailable, categoryLabel };
-  } catch {}
-}
-
-// Exports nommés
-export { t, setLang, getLang, apply, getAvailable, categoryLabel };
-export default { initI18n, t, setLang, getLang, apply, getAvailable, categoryLabel };
+/* Expose global (facultatif) */
+try { window.StopAddictI18N = { t, getLanguage, setLanguage, applyLanguage }; } catch {}
