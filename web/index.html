@@ -4,10 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>StopAddict</title>
-  <link rel="stylesheet" href="./css/app.css?v=8" />
+  <link rel="stylesheet" href="./css/app.css?v=7" />
 </head>
 <body>
-  <div class="app"><!-- wrapper style appli -->
+  <div class="app"><!-- wrapper look appli -->
 
     <!-- Header -->
     <header class="app-header">
@@ -15,7 +15,7 @@
         <h1 id="app-title">StopAddict</h1>
         <div class="date-line">
           <span id="today-date"></span>
-          <span id="hdr-status" class="status-dot" title="Statut"></span>
+          <span id="hdr-status" class="status-dot" title="Statut">•</span>
         </div>
       </div>
       <div class="header-right kpis">
@@ -90,18 +90,30 @@
             </div>
             <label class="toggle"><input type="checkbox" id="chk-liqueur-active" /> Activer</label>
           </article>
+
+          <!-- Toggle “Alcool global” (pas de compteur, juste l’activation) -->
+          <article id="ctr-alcohol" class="counter-card">
+            <h2>Alcool global</h2>
+            <div class="ctr-row">
+              <div></div>
+              <div class="ctr-val">—</div>
+              <div></div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="chk-alcohol-active" /> Activer</label>
+          </article>
         </div>
 
         <!-- Conseils -->
         <section id="tips-root" class="tips-panel"></section>
       </section>
 
-      <!-- Stats (2 graphes + abscisses) -->
+      <!-- Stats -->
       <section id="page-stats" class="hide">
         <div class="kpi-block">
           <h3>Période</h3>
           <div id="stats-date">—</div>
         </div>
+
         <div class="chart-actions">
           <button id="btnPeriod-day" class="btn">Jour</button>
           <button id="btnPeriod-week" class="btn">Semaine</button>
@@ -109,15 +121,15 @@
           <button id="btnPeriod-year" class="btn">Année</button>
           <button id="btn-export-csv" class="btn small">Exporter CSV</button>
           <button id="btn-export-json" class="btn small">Exporter JSON</button>
-          <label class="btn small">Importer JSON
-            <input id="file-import-json" type="file" accept="application/json" hidden />
-          </label>
+          <label class="btn small">Importer JSON <input id="file-import-json" type="file" accept="application/json" hidden /></label>
         </div>
+
+        <!-- 2 graphes attendus -->
         <div class="chart-block"><canvas id="chart-qty"></canvas></div>
-        <div class="chart-block" style="margin-top:.75rem"><canvas id="chart-money"></canvas></div>
+        <div class="chart-block"><canvas id="chart-money"></canvas></div>
       </section>
 
-      <!-- Calendrier (grille type monolithe) -->
+      <!-- Calendrier -->
       <section id="page-calendar" class="hide">
         <div class="calendar-toolbar">
           <div class="toolbar-left">
@@ -224,9 +236,7 @@
         </div>
         <div class="actions">
           <button id="btn-save-json-settings" class="btn">Sauvegarder JSON</button>
-          <label class="btn">Importer JSON
-            <input id="file-import-json-settings" type="file" accept="application/json" hidden />
-          </label>
+          <label class="btn">Importer JSON <input id="file-import-json-settings" type="file" accept="application/json" hidden /></label>
         </div>
 
         <h2 class="section-title">Journal & Debug</h2>
@@ -240,26 +250,26 @@
         <div id="debug-console" class="hide"></div>
       </section>
     </main>
+  </div><!-- /app wrapper -->
 
-    <!-- Age gate (pas de lien Ressources statique ici) -->
-    <dialog id="agegate" class="hide">
-      <form method="dialog" class="agegate">
-        <h3>+18</h3>
-        <p>J'ai plus de 18 ans.</p>
-        <label><input type="checkbox" id="age-18plus" /> Oui</label>
-        <label><input type="checkbox" id="age-hide" /> Ne plus afficher</label>
-        <div class="actions"><button id="btn-age-accept" class="btn" disabled>Entrer</button></div>
-      </form>
-    </dialog>
-
-  </div><!-- /app -->
+  <!-- Age gate (le lien “Ressources…” sera injecté par resources.js) -->
+  <dialog id="agegate" class="hide">
+    <form method="dialog" class="agegate">
+      <h3>+18</h3>
+      <p>J’ai plus de 18 ans.</p>
+      <label><input type="checkbox" id="age-18plus" /> Oui</label>
+      <label><input type="checkbox" id="age-hide" /> Ne plus afficher</label>
+      <div class="actions"><button id="btn-age-accept" class="btn" disabled>Entrer</button></div>
+    </form>
+  </dialog>
 
   <!-- Vendor -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-  <!-- Modules (ordre OK) -->
-  <script type="module" src="./js/resources.js?v=8"></script>
-  <script type="module" src="./js/stats.js?v=8"></script>
-  <script type="module" src="./js/app.js?v=8"></script>
+  <!-- Modules -->
+  <!-- (optionnel) i18n : décommente si i18n.js est présent -->
+  <!-- <script type="module" src="./js/i18n.js"></script> -->
+  <script type="module" src="./js/stats.js?v=7"></script>
+  <script type="module" src="./js/app.js?v=7"></script>
 </body>
 </html>
