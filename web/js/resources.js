@@ -1,4 +1,6 @@
-/* web/js/resources.js — Ressources & numéros utiles (FR, safe mount) */
+/* web/js/resources.js — Ressources & numéros utiles (FR) */
+/* Objectif: un seul lien “Ressources…” (pas de doublon), ouverture sans gel
+   même si l’AgeGate (dialog) est déjà ouvert. Auto-mount. */
 
 const RESOURCES = [
   {
@@ -41,7 +43,7 @@ const RESOURCES = [
   }
 ];
 
-/* ---------- UI ---------- */
+/* -------------- UI -------------- */
 
 function ensureDialog() {
   let dlg = document.getElementById("resources-dialog");
@@ -49,7 +51,7 @@ function ensureDialog() {
 
   dlg = document.createElement("dialog");
   dlg.id = "resources-dialog";
-  dlg.className = "agegate"; // réutilise le style du dialog (déjà présent)
+  dlg.className = "agegate"; // réutilise style dialog
   dlg.innerHTML = `
     <h3>Ressources & numéros utiles</h3>
     <div id="resources-body" style="max-height:55vh;overflow:auto;margin:.5rem 0;"></div>
@@ -57,7 +59,6 @@ function ensureDialog() {
   `;
   document.body.appendChild(dlg);
 
-  // Liste
   const body = dlg.querySelector("#resources-body");
   RESOURCES.forEach(group => {
     const wrap = document.createElement("div");
@@ -80,42 +81,72 @@ function ensureDialog() {
     body.appendChild(wrap);
   });
 
-  // Fermeture
+  // Fermer
   dlg.querySelector("#res-close")?.addEventListener("click", () => dlg.close());
-  dlg.addEventListener("close", () => {
-    // rien de spécial, mais évite de laisser un état bloqué si besoin
-  });
+  dlg.addEventListener("cancel", (e) => { e.preventDefault(); dlg.close(); });
 
   return dlg;
 }
 
 export function openResources() {
   const dlg = ensureDialog();
-  try { dlg.showModal(); } catch { dlg.classList.remove("hide"); }
+
+  // Évite l’erreur “already open modally” si l’AgeGate est ouvert
+  const someOpenDialog = document.querySelector("dialog[open]");
+  try {
+    if (someOpenDialog && someOpenDialog !== dlg) {
+      // Ouvre en non-modal pour éviter le gel
+      dlg.show();                       // pas modal
+      dlg.style.position = "fixed";
+      dlg.style.top = "50%";
+      dlg.style.left = "50%";
+      dlg.style.transform = "translate(-50%,-50%)";
+      dlg.style.zIndex = "2147483647";  // au-dessus
+    } else {
+      dlg.removeAttribute("style");
+      dlg.showModal();                  // modal classique
+    }
+  } catch {
+    // Fallback si showModal indisponible
+    dlg.show();
+    dlg.style.position = "fixed";
+    dlg.style.top = "50%";
+    dlg.style.left = "50%";
+    dlg.style.transform = "translate(-50%,-50%)";
+    dlg.style.zIndex = "2147483647";
+  }
+
+  // Focus sur le bouton pour accessibilité
+  dlg.querySelector("#res-close")?.focus();
 }
 
 export function mountResources() {
-  if (window.__StopAddict_ResMounted) return; // anti double-montage
-  window.__StopAddict_ResMounted = true;
+  // Évite double-montage
+  if (window.__RESOURCES_MOUNTED__) return;
+  window.__RESOURCES_MOUNTED__ = true;
 
   // Bouton dans Réglages
   const btn = document.getElementById("btn-resources");
-  if (btn) btn.addEventListener("click", (e) => { e.preventDefault(); openResources(); });
+  if (btn && !btn.__bound) {
+    btn.addEventListener("click", (e) => { e.preventDefault(); openResources(); });
+    btn.__bound = true;
+  }
 
-  // Lien unique dans l’Age Gate
+  // Lien dans l’AgeGate : ajouter UNE seule fois
   const ageForm = document.querySelector("#agegate .agegate");
   if (ageForm && !ageForm.querySelector("[data-resources-link]")) {
     const p = document.createElement("p");
     p.style.margin = "0 0 .4rem 0";
     p.innerHTML = `Besoin d'aide ? <a href="#" data-resources-link>Ressources et numéros utiles</a>`;
-    // place après le titre (2e enfant si possible)
     ageForm.insertBefore(p, ageForm.firstElementChild?.nextSibling || ageForm.firstChild);
+
+    const link = ageForm.querySelector("[data-resources-link]");
+    link?.addEventListener("click", (e) => {
+      e.preventDefault();
+      openResources();
+    });
   }
-  ageForm?.querySelector("[data-resources-link]")?.addEventListener("click", (e) => {
-    e.preventDefault();
-    openResources();
-  });
 }
 
-/* Auto-mount au chargement du module (safe) */
+/* Auto-mount au chargement du module */
 try { mountResources(); } catch {}
