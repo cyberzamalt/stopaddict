@@ -1,196 +1,161 @@
-/* web/css/app.css — Look “application” (wrapper type smartphone) */
-
-/* ---------- Reset & variables ---------- */
-* { box-sizing: border-box; }
-html, body { height: 100%; }
-:root{
-  --bg: #0b1220;
-  --bg2:#0f172a;
-  --panel:#0c1222;
-  --line:#1f2b48;
-  --line2:#22304a;
-  --text:#eaf0ff;
-  --muted:#c6d7ff;
-  --accent:#15213a;
-  --accent2:#273449;
-  --good:#124232;
-  --card-radius: 16px;
-  --btn-radius: 10px;
-  --app-w: 430px; /* largeur “téléphone” */
-}
+/* ===== Reset & base ===== */
+* { box-sizing: border-box }
+html, body { height: 100% }
 body{
   margin:0;
-  color:var(--text);
-  background: radial-gradient(1200px 800px at 20% -10%, #1a2442 0, #0a0f1a 52%, #060910 100%);
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+  font-family: system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";
+  color:#eaf0ff;
+  background: radial-gradient(1200px 600px at 50% 0%, #0b1220, #060a14 60%, #04070e 100%);
 }
 
-/* ---------- Wrapper application ---------- */
-/* S’applique si vous avez .app-shell ; sinon, #app (fallback) */
-.app-shell, #app{
-  width: min(100%, var(--app-w));
-  margin: clamp(10px, 3vh, 28px) auto;
-  background: var(--bg2);
-  border: 1px solid var(--line2);
+/* Util */
+.hide{ display:none !important; }
+
+/* ===== Wrapper “app” (look mobile) ===== */
+.app{
+  width: min(420px, 100%);
+  min-height: 100dvh;
+  margin: 0 auto;
+  background: #0f172a;
+  border: 1px solid #1b2946;
   border-radius: 22px;
-  box-shadow: 0 20px 40px rgba(0,0,0,.45), 0 4px 0 rgba(255,255,255,.03) inset;
+  box-shadow:
+    0 20px 60px rgba(0,0,0,.55),
+    0 2px 0 rgba(255,255,255,.02) inset;
   overflow: clip;
 }
-.app-inner{ display:block; }
 
-/* ---------- Utils ---------- */
-.hide{ display:none!important; }
-.btn{
-  border:0;
-  padding:.55rem .9rem;
-  border-radius: var(--btn-radius);
-  background:#1e293b;
-  color:var(--text);
-  cursor:pointer;
-  transition:transform .05s ease, background .2s ease;
-}
-.btn:hover{ background:var(--accent2); }
-.btn:active{ transform: translateY(1px); }
-.btn.small{ padding:.38rem .6rem; font-size:.9rem; }
-.kpis,.actions,.grid-2{ gap:.75rem; }
-
-/* ---------- Header ---------- */
+/* ===== Header ===== */
 .app-header{
-  display:grid; grid-template-columns:1fr auto; align-items:center;
-  padding: .9rem 1.1rem;
-  border-bottom:1px solid var(--line2);
-  background: linear-gradient(180deg, #111a33, var(--bg2) 70%);
-  position: sticky; top:0; z-index:10;
+  display:grid;
+  grid-template-columns:1fr auto;
+  align-items:center;
+  padding: 1rem 1.2rem;
+  border-bottom:1px solid #22304a;
+  background:linear-gradient(180deg,#111a33,#0f172a 70%);
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
-.header-left h1{ margin:0 0 .2rem 0; font-size:1.15rem; }
-.date-line{ display:flex; align-items:center; gap:.5rem; opacity:.9; }
+.header-left h1{ margin:0 0 .25rem 0; font-size:1.25rem }
+.date-line{ display:flex; align-items:center; gap:.5rem; opacity:.9 }
 .status-dot{
   display:inline-flex; align-items:center; justify-content:center;
-  width:1.1rem; height:1.1rem; border-radius:50%;
-  background:#1f2b48; color:#cce3ff; font-weight:700; font-size:.8rem;
+  width:1.15rem; height:1.15rem; border-radius:50%;
+  background:#1f2b48; color:#cce3ff; font-weight:700; font-size:.85rem;
 }
-.kpis{ display:flex; align-items:center; }
+.kpis{ display:flex; align-items:center; gap:.4rem }
 .kpi{
-  background:#0c1222; border:1px solid var(--line);
-  padding:.35rem .55rem; border-radius:.5rem; display:flex; align-items:center; gap:.4rem;
+  background:#0c1222; border:1px solid #1f2b48;
+  padding:.35rem .5rem; border-radius:.55rem; display:flex; align-items:center; gap:.4rem;
 }
 
-/* ---------- Tabs ---------- */
+/* ===== Tabs ===== */
 .tabs{
   display:flex; gap:.35rem; padding:.45rem .7rem;
-  border-bottom:1px solid var(--line);
-  position: sticky; top:58px; z-index:9; background:var(--bg2);
+  border-bottom:1px solid #1f2b48; position: sticky; top: 64px; z-index: 19; background:#0f172a;
 }
 .tab{
-  background:transparent; color:#cde2ff; border:0;
-  padding:.56rem .85rem; cursor:pointer; border-radius:.55rem; font-weight:600;
+  background:transparent; color:#cde2ff; border:0; padding:.6rem .9rem;
+  cursor:pointer; border-radius:.55rem; font-weight:600;
 }
-.tab.active{ background:var(--accent); color:#fff; border:1px solid #253154; }
+.tab.active{ background:#15213a; color:#fff; border:1px solid #253154 }
 
-/* ---------- Pages ---------- */
-.pages{ padding: .9rem; }
-.pages section{ min-height: 62vh; }
+/* ===== Pages ===== */
+.pages{ padding:1rem }
 
-/* ---------- Counters (Accueil) ---------- */
-.counters-grid{ display:grid; grid-template-columns: repeat(2, 1fr); gap:.9rem; }
-@media (min-width:560px){ .counters-grid{ grid-template-columns: repeat(3, 1fr); } }
+/* ===== Buttons ===== */
+.btn{
+  border:0; padding:.55rem .9rem; border-radius:.6rem;
+  background:#1e293b; color:#eaf0ff; cursor:pointer;
+  transition: transform .05s ease, background .2s ease;
+}
+.btn:hover{ background:#273449 }
+.btn:active{ transform: translateY(1px) }
+.btn.small{ padding:.4rem .65rem; font-size:.9rem }
+
+/* ===== Counters (Accueil) ===== */
+.counters-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:.9rem }
+@media (min-width:480px){ .counters-grid{ grid-template-columns:repeat(2,1fr) } }
 .counter-card{
-  background:var(--panel); border:1px solid var(--line);
-  border-radius: var(--card-radius);
-  padding: .85rem; display:flex; flex-direction:column; gap:.6rem; min-height:160px;
+  background:#0c1222; border:1px solid #1f2b48; border-radius:1rem; padding:.9rem;
+  display:flex; flex-direction:column; gap:.6rem; min-height:150px;
 }
-.counter-card h2{ margin:0; font-size:1.02rem; color:#f2f7ff; }
-.ctr-row{ display:grid; grid-template-columns:44px 1fr 44px; align-items:center; gap:.55rem; }
+.counter-card h2{ margin:0; font-size:1.05rem; color:#f2f7ff }
+.ctr-row{
+  display:grid; grid-template-columns:44px 1fr 44px; align-items:center; gap:.6rem;
+}
 .ctr-val{
-  background:#0b1020; border:1px dashed #2a3a61;
-  padding:.5rem; text-align:center; border-radius:.6rem; font-size:1.2rem; font-weight:700;
+  background:#0b1020; border:1px dashed #2a3a61; padding:.5rem;
+  text-align:center; border-radius:.6rem; font-size:1.2rem; font-weight:700;
 }
-.toggle{ display:flex; align-items:center; gap:.55rem; color:var(--muted); }
+.toggle{ display:flex; align-items:center; gap:.5rem; color:#c6d7ff; font-size:.95rem }
 
-/* ---------- Tips (Conseils) ---------- */
-.tips-panel{ margin-top: .9rem; }
+/* ===== Tips ===== */
+.tips-panel{ margin-top:1rem }
 .tips-card{
-  background:var(--panel); border:1px solid var(--line);
-  border-radius: var(--card-radius); padding:.85rem;
+  background:#0c1222; border:1px solid #1f2b48; border-radius:1rem; padding:.9rem
 }
-.tips-card h3{ margin:0 0 .5rem 0; font-size:1rem; }
+.tips-card h3{ margin:0 0 .5rem 0 }
 .tip-line{
-  padding:.35rem .5rem; background:#0b1220;
-  border:1px dashed #24365f; border-radius:.5rem; margin-bottom:.4rem;
+  padding:.35rem .5rem; background:#0b1220; border:1px dashed #24365f; border-radius:.5rem; margin-bottom:.4rem
 }
 
-/* ---------- Stats ---------- */
-.kpi-block{ display:flex; align-items:baseline; gap:1rem; margin:.3rem 0 .8rem 0; }
-.chart-actions{ display:flex; flex-wrap:wrap; gap:.5rem; margin-bottom:.8rem; }
-.chart-card{
-  background:var(--panel); border:1px solid var(--line);
-  border-radius: var(--card-radius); padding:.6rem; height:320px;
+/* ===== Stats ===== */
+.kpi-block{ display:flex; align-items:baseline; gap:1rem; margin:.4rem 0 1rem 0 }
+.chart-actions{ display:flex; flex-wrap:wrap; gap:.5rem; margin-bottom:.8rem }
+.chart-block{
+  background:#0c1222; border:1px solid #1f2b48; border-radius:1rem;
+  padding:.5rem; height:280px; margin-bottom:.8rem;
 }
-.chart-card + .chart-card{ margin-top:.8rem; }
-#chart-qty, #chart-money{ width:100%; height:100%; }
+#chart-qty,#chart-money{ width:100%; height:100% }
 
-/* ---------- Calendar (vue type monolith) ---------- */
+/* ===== Calendar (vue mois) ===== */
 .calendar-toolbar{
   display:flex; align-items:center; justify-content:space-between; gap:.5rem;
-  margin-bottom:.7rem; flex-wrap:wrap;
+  margin-bottom:.7rem; flex-wrap:wrap
 }
-.cal-title{ min-width:180px; text-align:center; font-weight:700; }
-.cal-grid{
-  background:var(--panel); border:1px solid var(--line);
-  border-radius: var(--card-radius); overflow:hidden;
-}
-.cal-head{ display:grid; grid-template-columns:repeat(7,1fr); background:#121a2f; border-bottom:1px solid var(--line); }
-.cal-head>div{ padding:.5rem; text-align:center; color:#c9d9ff; font-weight:600; }
-.cal-body{ display:grid; grid-template-columns:repeat(7,1fr); }
-.cal-cell{
-  min-height:94px; border-right:1px solid #1a2744; border-bottom:1px solid #1a2744;
-  padding:.45rem; position:relative;
-}
-.cal-cell:nth-child(7n){ border-right:0; }
-.cal-other{ opacity:.45; }
-.cal-today{ outline:2px solid #35518a; outline-offset:-2px; }
-.cal-day{ font-weight:700; color:#f2f7ff; }
-.cal-mini{ position:absolute; right:.4rem; bottom:.4rem; display:flex; gap:.25rem; }
-.mini-dot{ display:inline-block; padding:.05rem .35rem; border-radius:.5rem; background:#1f2b48; }
-.mini-euro{ display:inline-block; padding:.05rem .3rem; border-radius:.5rem; border:1px solid #2a3a61; }
-.cal-details{ margin-top:.75rem; }
-.cal-box{
-  background:var(--panel); border:1px solid var(--line);
-  border-radius: var(--card-radius); padding:.85rem; margin-bottom:.6rem;
-}
-.cal-summary{ display:grid; grid-template-columns: repeat(4,1fr); gap:.45rem; }
-@media(max-width:420px){ .cal-summary{ grid-template-columns: repeat(2,1fr); } }
-.cal-summary>div{
-  background:#0b1020; border:1px dashed #24365f; padding:.5rem; border-radius:.5rem; text-align:center;
-}
+.cal-title{ min-width:180px; text-align:center; font-weight:700 }
+.cal-filters label{ display:inline-flex; align-items:center; gap:.25rem; margin-left:.25rem }
 
-/* ---------- Habits / Settings ---------- */
-.section-title{ margin:1rem 0 .6rem 0; font-size:1.05rem; }
-.grid-2{ display:grid; grid-template-columns: 1fr 1fr; gap:.6rem; }
-@media (max-width:540px){ .grid-2{ grid-template-columns:1fr; } }
+.cal-grid{
+  background:#0c1222; border:1px solid #1f2b48; border-radius:1rem; overflow:hidden
+}
+.cal-head{ display:grid; grid-template-columns:repeat(7,1fr); background:#121a2f; border-bottom:1px solid #1f2b48 }
+.cal-head>div{ padding:.5rem; text-align:center; color:#c9d9ff; font-weight:600 }
+.cal-body{ display:grid; grid-template-columns:repeat(7,1fr) }
+.cal-cell{
+  min-height:88px; border-right:1px solid #1a2744; border-bottom:1px solid #1a2744;
+  padding:.4rem; position:relative
+}
+.cal-cell:nth-child(7n){ border-right:0 }
+.cal-other{ opacity:.45 }
+.cal-today{ outline:2px solid #35518a; outline-offset:-2px }
+.cal-day{ font-weight:700; color:#f2f7ff }
+.cal-mini{ position:absolute; right:.4rem; bottom:.4rem; display:flex; gap:.25rem; flex-wrap:wrap }
+.mini-dot{ display:inline-block; padding:.05rem .35rem; border-radius:.5rem; background:#1f2b48; font-size:.75rem }
+.mini-euro{ display:inline-block; padding:.05rem .3rem; border-radius:.5rem; border:1px solid #2a3a61; font-size:.75rem }
+
+.cal-details{ margin-top:.7rem }
+.cal-details .cal-box{
+  background:#0c1222; border:1px solid #1f2b48; border-radius:1rem; padding:.9rem
+}
+.cal-box h4{ margin:.2rem 0 .6rem 0 }
+
+/* ===== Habits / Settings ===== */
+.section-title{ margin:1rem 0 .6rem 0; font-size:1.05rem }
+.grid-2{ display:grid; grid-template-columns:repeat(2,1fr); gap:.75rem }
+@media (max-width:540px){ .grid-2{ grid-template-columns:1fr } }
 .grid-2 label{
   display:flex; align-items:center; justify-content:space-between; gap:.6rem;
-  background:var(--panel); border:1px solid var(--line);
-  padding:.6rem .7rem; border-radius:.6rem;
+  background:#0c1222; border:1px solid #1f2b48; padding:.6rem .7rem; border-radius:.6rem
 }
-.grid-2 input, .grid-2 select{
-  width: 150px; padding:.45rem .55rem; border-radius:.5rem;
-  border:1px solid #2a3a61; background:#0b1020; color:var(--text);
+.grid-2 input,.grid-2 select{
+  width:140px; padding:.45rem .55rem; border-radius:.5rem; border:1px solid #2a3a61; background:#0b1020; color:#eaf0ff
 }
-.actions{ display:flex; flex-wrap:wrap; margin:.7rem 0; }
-.actions .btn{ margin-right:.5rem; }
+.actions{ display:flex; flex-wrap:wrap; gap:.5rem; margin:.7rem 0 }
 
-/* ---------- Dialogs (Age gate & Resources) ---------- */
-dialog{
-  border:0; border-radius: 18px;
-  background:#0b1020; color:var(--text);
-}
-dialog::backdrop{ background: rgba(2,6,23,.55); }
-.agegate{ min-width:260px; padding:1rem; display:grid; gap:.6rem; }
-.agegate h3{ margin:0; }
-.agegate .actions{ justify-content: flex-end; }
-
-/* ---------- Debug ---------- */
+/* ===== Debug ===== */
 #debug-console{
   margin-top:.6rem; padding:.6rem; height:160px; overflow:auto;
   background:#0b1020; border:1px solid #233355; border-radius:.6rem;
@@ -199,3 +164,28 @@ dialog::backdrop{ background: rgba(2,6,23,.55); }
   font-family: ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
   font-size:.85rem;
 }
+
+/* ===== Dialogs (AgeGate + Resources) ===== */
+dialog{
+  border:0; border-radius:16px;
+  background:#0b1020; color:#eaf0ff;
+  padding:0;
+  max-width:min(92vw, 420px);
+  z-index:1001; /* base */
+}
+dialog::backdrop{
+  background: rgba(2,6,23,.55);
+}
+#agegate{ z-index:1001 }          /* AgeGate */
+#resources-dialog{ z-index:1002 }  /* Toujours au-dessus si ouvert depuis AgeGate */
+
+.agegate{ min-width:260px; padding:1rem; display:grid; gap:.6rem }
+.agegate h3{ margin:0 }
+
+/* ===== Links ===== */
+a{ color:#b8d3ff }
+a:hover{ color:#d6e6ff }
+
+/* ===== Misc ===== */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button{ -webkit-appearance: none; margin:0 }
