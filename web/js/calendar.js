@@ -1,239 +1,206 @@
-/* web/js/calendar.js — Vue Mois type monolithe (grille + mini-résumés + détail du jour) */
-import { fmtMoney, todayKey } from "./state.js";
+/* web/js/calendar.js — Grille mensuelle type monolithe (mini-récaps + détail jour) */
 
-export function mountCalendar({ S, getState = () => S, showTab } = {}) {
-  const $  = (s, r = document) => r.querySelector(s);
-  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+import { loadState, todayKey, fmtMoney } from "./state.js";
 
-  const elTitle   = $("#cal-title");
-  const elPrev    = $("#cal-prev");
-  const elNext    = $("#cal-next");
-  const elGrid    = $("#calendar-grid");
-  const elDetails = $("#calendar-details");
+/* ---------- Config ---------- */
+const KINDS = ["cigs","joints","beer","hard","liqueur"];
+const LABELS = {
+  cigs:"Cigarettes", joints:"Joints", beer:"Bière", hard:"Alcool fort", liqueur:"Liqueur"
+};
+const EMOJI = { cigs:"🚬", joints:"🌿", beer:"🍺", hard:"🥃", liqueur:"🍸" };
 
-  const MONTHS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
-  const WEEKDAYS = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
-  const KINDS = ["cigs","joints","beer","hard","liqueur"];
-  const EMOJI = { cigs:"🚬", joints:"🌿", beer:"🍺", hard:"🥃", liqueur:"🍸" };
+/* ---------- Helpers ---------- */
+const ISO = d => d.toISOString().slice(0,10);
+function firstOfMonth(d){ const x=new Date(d); x.setDate(1); x.setHours(0,0,0,0); return x; }
+function startOfGrid(d){
+  const f = firstOfMonth(d);
+  // grille Lundi→Dimanche (6 semaines)
+  const wd = (f.getDay()+6)%7; // 0=Lundi
+  f.setDate(f.getDate()-wd);
+  return f;
+}
+function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function isSameMonth(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth(); }
+function isToday(d){ return ISO(d)===ISO(new Date()); }
 
-  let cur = new Date();
+/* ---------- State (module) ---------- */
+let curDate = new Date(); // mois courant
+let filters = { cigs:true, joints:true, beer:true, hard:true, liqueur:true };
+let refs = {}; // DOM refs
+let external = { getState: null, showTab: null };
 
-  function ymd(d){ return todayKey(d); }
-  function daysInMonth(y,m){ return new Date(y, m+1, 0).getDate(); }
-  function mondayIdx(d){ return (d.getDay()+6)%7; } // Lundi=0
-  function filters(){
-    const f = { cigs:true, joints:true, beer:true, hard:true, liqueur:true };
-    $$('[data-cal-filter]').forEach(cb => { const k = cb.getAttribute('data-cal-filter'); if (k in f) f[k] = cb.checked; });
-    return f;
-  }
-  function unitSumForDay(dayObj, f){
-    let sum = 0;
-    for (const k of KINDS){ if (f[k]) sum += Number(dayObj?.[k]||0); }
-    return sum;
-  }
-  function costForDay(dayObj, f){
-    // On affiche le coût stocké si présent ; sinon on approxime en sommant coûts filtrés si le monolithe les avait
-    // Ici on utilise dayObj.cost si disponible (cohérent avec app/state)
-    return Number(dayObj?.cost||0);
-  }
-  function savedForDay(dayObj){ return Number(dayObj?.saved||0); }
+/* ---------- Rendering ---------- */
+function setTitleMonth(d){
+  const el = refs.title;
+  if (!el) return;
+  el.textContent = d.toLocaleDateString("fr-FR", { month:"long", year:"numeric" });
+}
 
-  function monthMatrix(date){
-    const y = date.getFullYear();
-    const m = date.getMonth();
-    const first = new Date(y,m,1);
-    const dmo = daysInMonth(y,m);
-    const startPad = mondayIdx(first); // nb de cases avant le 1er
-    const prevDays = daysInMonth(y, (m+11)%12); // jours du mois précédent (pour padding)
-    const totalCells = Math.ceil((startPad + dmo) / 7) * 7;
+function renderGrid(S){
+  const root = refs.grid; if (!root) return;
+  root.innerHTML = "";
 
-    const cells = [];
-    for (let i=0; i<totalCells; i++){
-      const dayNum = i - startPad + 1;
-      let cellDate, other=false;
-      if (dayNum < 1){
-        // Mois précédent
-        const d = prevDays + dayNum;
-        const pm = (m+11)%12;
-        const py = m===0 ? y-1 : y;
-        cellDate = new Date(py, pm, d); other = true;
-      } else if (dayNum > dmo){
-        // Mois suivant
-        const d = dayNum - dmo;
-        const nm = (m+1)%12;
-        const ny = m===11 ? y+1 : y;
-        cellDate = new Date(ny, nm, d); other = true;
-      } else {
-        cellDate = new Date(y, m, dayNum);
-      }
-      cells.push({ date: cellDate, other, iso: ymd(cellDate) });
-    }
-    return cells;
-  }
+  const start = startOfGrid(curDate);
+  const cells = [];
+  for (let i=0;i<42;i++){
+    const d = addDays(start,i);
+    const iso = ISO(d);
+    const data = S.history?.[iso] || {};
+    const other = !isSameMonth(d, curDate);
 
-  function renderHead(){
-    // En-tête des jours
-    const head = document.createElement("div");
-    head.className = "cal-head";
-    WEEKDAYS.forEach(lbl=>{
-      const d = document.createElement("div");
-      d.textContent = lbl;
-      head.appendChild(d);
-    });
-    return head;
-  }
-
-  function renderMonth(){
-    const Scur = getState();
-    const f = filters();
-    const nowIso = todayKey(new Date());
-
-    if (elTitle) elTitle.textContent = `${MONTHS[cur.getMonth()]} ${cur.getFullYear()}`;
-
-    // Reset grid
-    elGrid.replaceChildren();
-
-    // Head
-    elGrid.appendChild(renderHead());
-
-    // Body
-    const body = document.createElement("div");
-    body.className = "cal-body";
-
-    const cells = monthMatrix(cur);
-    cells.forEach(({date, other, iso})=>{
-      const dayObj = Scur.history?.[iso] || {};
-      const sumUnits = unitSumForDay(dayObj, f);
-      const cost = costForDay(dayObj, f);
-
-      const cell = document.createElement("div");
-      cell.className = "cal-cell";
-      if (other) cell.classList.add("cal-other");
-      if (iso === nowIso) cell.classList.add("cal-today");
-      cell.dataset.iso = iso;
-
-      // Jour
-      const dayTop = document.createElement("div");
-      dayTop.className = "cal-day";
-      dayTop.textContent = String(date.getDate());
-      cell.appendChild(dayTop);
-
-      // Mini résumé (emoji présents + €)
-      const mini = document.createElement("div");
-      mini.className = "cal-mini";
-      // icônes actives
-      for (const k of KINDS){
-        if (!f[k]) continue;
-        const v = Number(dayObj?.[k]||0);
-        if (v>0){
-          const dot = document.createElement("span");
-          dot.className = "mini-dot";
-          dot.title = `${EMOJI[k]} × ${v}`;
-          dot.textContent = EMOJI[k];
-          mini.appendChild(dot);
-        }
-      }
-      if (cost>0){
-        const eur = document.createElement("span");
-        eur.className = "mini-euro";
-        eur.title = `Coût: ${fmtMoney(cost, Scur.currency)}`;
-        eur.textContent = "€";
-        mini.appendChild(eur);
-      }
-      cell.appendChild(mini);
-
-      // Click => détail
-      cell.addEventListener("click", ()=> selectDay(iso));
-
-      body.appendChild(cell);
-    });
-
-    elGrid.appendChild(body);
-
-    // Détail: par défaut, aujourd'hui si visible sinon 1er du mois
-    const firstIso = ymd(new Date(cur.getFullYear(),cur.getMonth(),1));
-    selectDay(cells.some(c=>c.iso===nowIso && !c.other) ? nowIso : firstIso);
-  }
-
-  function selectDay(iso){
-    const Scur = getState();
-    const f = filters();
-    const d = Scur.history?.[iso] || {};
-    const dateObj = new Date(iso);
-    elDetails.replaceChildren();
-
-    const box = document.createElement("div");
-    box.className = "cal-box";
-    const h4 = document.createElement("h4");
-    h4.textContent = dateObj.toLocaleDateString("fr-FR", { weekday:"long", day:"2-digit", month:"long", year:"numeric" });
-    box.appendChild(h4);
-
-    // Summary 4 colonnes
-    const sum = document.createElement("div");
-    sum.className = "cal-summary";
-    const addSum = (label, value) => {
-      const dv = document.createElement("div");
-      dv.innerHTML = `<strong>${label}</strong><br>${value}`;
-      sum.appendChild(dv);
-    };
-    const qTotal = unitSumForDay(d, f);
-    addSum("Total unités", qTotal);
-    addSum("Coût", fmtMoney(Number(d.cost||0), Scur.currency));
-    addSum("Économies", fmtMoney(Number(d.saved||0), Scur.currency));
-    addSum("Modules actifs", Object.keys(filters()).filter(k=>filters()[k]).length);
-    box.appendChild(sum);
-
-    // Breakdown par type
-    const details = document.createElement("div");
-    details.className = "cal-breakdown";
+    // mini récap par type filtré
+    const minis = [];
     for (const k of KINDS){
-      if (!f[k]) continue;
-      const v = Number(d[k]||0);
-      const chip = document.createElement("div");
-      chip.className = "mini-dot";
-      chip.style.display = "inline-block";
-      chip.style.padding = ".15rem .45rem";
-      chip.textContent = `${EMOJI[k]} ${v}`;
-      details.appendChild(chip);
+      const v = Number(data[k]||0);
+      if (!v) continue;
+      if (!filters[k]) continue;
+      const chip = `<span class="mini-dot" title="${LABELS[k]}">${EMOJI[k]} ${v}</span>`;
+      minis.push(chip);
     }
-    box.appendChild(details);
+    // coût mini
+    if ((data.cost||0) > 0){
+      minis.push(`<span class="mini-euro" title="Coût">${(data.cost||0).toFixed(0)}€</span>`);
+    }
 
-    // Liens rapides
-    const links = document.createElement("div");
-    links.className = "cal-links";
-    const bStats = document.createElement("button");
-    bStats.className="btn small"; bStats.textContent="Ouvrir Stats";
-    bStats.addEventListener("click", ()=> showTab?.("stats"));
-    const bHab = document.createElement("button");
-    bHab.className="btn small"; bHab.textContent="Ouvrir Habitudes";
-    bHab.addEventListener("click", ()=> showTab?.("habits"));
-    links.appendChild(bStats); links.appendChild(bHab);
-    box.appendChild(links);
+    const classes = ["cal-cell"];
+    if (other) classes.push("cal-other");
+    if (isToday(d)) classes.push("cal-today");
 
-    elDetails.appendChild(box);
-
-    // Marque la sélection visuelle
-    $$(".cal-cell").forEach(c=> c.classList.toggle("active", c.dataset.iso===iso));
+    cells.push(`
+      <div class="${classes.join(" ")}" data-date="${iso}">
+        <div class="cal-day">${d.getDate()}</div>
+        <div class="cal-mini">${minis.join("")}</div>
+      </div>
+    `);
   }
 
-  function onNav(delta){
-    cur = new Date(cur.getFullYear(), cur.getMonth()+delta, 1);
-    renderMonth();
-  }
+  root.innerHTML = `
+    <div class="cal-head">
+      <div>Lu</div><div>Ma</div><div>Me</div><div>Je</div><div>Ve</div><div>Sa</div><div>Di</div>
+    </div>
+    <div class="cal-body">
+      ${cells.join("")}
+    </div>
+  `;
 
-  // Events
-  elPrev?.addEventListener("click", ()=> onNav(-1));
-  elNext?.addEventListener("click", ()=> onNav(1));
-  $$('[data-cal-filter]').forEach(cb=> cb.addEventListener("change", ()=> renderMonth()));
-  $("#cal-open-stats")?.addEventListener("click", ()=> showTab?.("stats"));
-  $("#cal-open-habits")?.addEventListener("click", ()=> showTab?.("habits"));
+  // Click handlers -> détail jour
+  root.querySelectorAll(".cal-cell").forEach(cell=>{
+    cell.addEventListener("click", ()=>{
+      const iso = cell.getAttribute("data-date");
+      showDayDetails(S, iso);
+    });
+  });
+}
 
-  // First render
-  renderMonth();
+function showDayDetails(S, iso){
+  const box = refs.details; if (!box) return;
+  const d = S.history?.[iso] || {};
+  const dateLabel = new Date(iso+"T12:00:00").toLocaleDateString("fr-FR",{weekday:"long", day:"2-digit", month:"long", year:"numeric"});
+
+  const lines = KINDS.map(k=>{
+    return `
+      <div class="tip-line">
+        <strong>${EMOJI[k]} ${LABELS[k]}</strong>
+        <span style="float:right">${Number(d[k]||0)}</span>
+      </div>
+    `;
+  }).join("");
+
+  const cur = loadState(); // pour la devise
+  const money = `
+    <div class="cal-summary">
+      <div><div><strong>Coût</strong></div><div>${fmtMoney(+d.cost||0, cur.currency)}</div></div>
+      <div><div><strong>Économies</strong></div><div>${fmtMoney(+d.saved||0, cur.currency)}</div></div>
+    </div>
+  `;
+
+  box.innerHTML = `
+    <div class="cal-box">
+      <h4>${dateLabel}</h4>
+      ${money}
+      <div class="cal-breakdown">
+        ${lines}
+      </div>
+      <div class="cal-links">
+        <button id="cal-open-stats" class="btn small">Ouvrir Stats</button>
+        <button id="cal-open-habits" class="btn small">Ouvrir Habitudes</button>
+      </div>
+    </div>
+  `;
+
+  // Liens -> onglets
+  box.querySelector("#cal-open-stats")?.addEventListener("click", ()=>{
+    external.showTab?.("stats");
+  });
+  box.querySelector("#cal-open-habits")?.addEventListener("click", ()=>{
+    external.showTab?.("habits");
+  });
+}
+
+/* ---------- Events ---------- */
+function bindToolbar(){
+  refs.prev?.addEventListener("click", ()=>{
+    const d=new Date(curDate); d.setMonth(d.getMonth()-1); curDate=d;
+    setTitleMonth(curDate);
+    renderGrid(external.getState ? external.getState() : loadState());
+  });
+  refs.next?.addEventListener("click", ()=>{
+    const d=new Date(curDate); d.setMonth(d.getMonth()+1); curDate=d;
+    setTitleMonth(curDate);
+    renderGrid(external.getState ? external.getState() : loadState());
+  });
+
+  // Filtres (si présents)
+  (refs.filterWrap?.querySelectorAll("[data-cal-filter]")||[]).forEach(cb=>{
+    const k = cb.getAttribute("data-cal-filter");
+    if (k && k in filters){
+      cb.checked = filters[k];
+      cb.addEventListener("change", ()=>{
+        filters[k] = cb.checked;
+        renderGrid(external.getState ? external.getState() : loadState());
+      });
+    }
+  });
+}
+
+/* ---------- Public API ---------- */
+export function mountCalendar({ S, getState, showTab }={}){
+  external.getState = typeof getState==="function" ? getState : null;
+  external.showTab = typeof showTab==="function" ? showTab : null;
+
+  refs = {
+    title:   document.getElementById("cal-title"),
+    prev:    document.getElementById("cal-prev"),
+    next:    document.getElementById("cal-next"),
+    grid:    document.getElementById("calendar-grid"),
+    details: document.getElementById("calendar-details"),
+    filterWrap: document.querySelector(".cal-filters")
+  };
+
+  // Init mois et rendu
+  curDate = new Date();
+  setTitleMonth(curDate);
+  bindToolbar();
+  renderGrid(S || loadState());
+
+  // Pré-sélection : afficher le détail d’aujourd’hui si visible
+  const isoToday = todayKey(new Date());
+  showDayDetails(S || loadState(), isoToday);
 
   return {
-    update(Snew){ /* on re-render sans casser la navigation en cours */
-      renderMonth();
+    update(newState){
+      // Appelé depuis d’autres modules (counters/habits/settings)
+      renderGrid(newState || (external.getState ? external.getState() : loadState()));
+      // Si le jour affiché est aujourd’hui, rafraîchir panel
+      showDayDetails(newState || loadState(), isoToday);
     }
   };
 }
+
+/* Auto-mount si utilisé seul (optionnel) */
+try {
+  if (!window.__calMounted){
+    window.__calMounted = true;
+    mountCalendar({ S: loadState() });
+  }
+} catch {}
