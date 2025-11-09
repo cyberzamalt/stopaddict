@@ -1,144 +1,164 @@
-/* web/js/tips.js — Conseils contextuels (toujours présents, puis affinés) */
+/* web/js/tips.js — Conseils dynamiques (toujours visibles, personnalisés) */
 
-let ROOT = null;
-let GET_STATE = () => ({});
+import { fmtMoney } from "./state.js";
 
-/* ---------- Helpers ---------- */
+let _root = null;
+let _getState = null;
 
-function todayKey(d = new Date()){
-  const y = d.getFullYear();
-  const m = String(d.getMonth()+1).padStart(2,"0");
-  const da = String(d.getDate()).padStart(2,"0");
-  return `${y}-${m}-${da}`;
+function daysBetween(a, b) {
+  const d1 = new Date(a), d2 = new Date(b);
+  d1.setHours(0,0,0,0); d2.setHours(0,0,0,0);
+  return Math.round((d2 - d1) / 86400000);
 }
 
-// Prix unitaire minimal (utilise les prix simples si disponibles)
-function unitPrice(S, kind){
+function todayISO(d=new Date()){
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), day=String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+
+function unitApprox(S, kind){
+  // Approximations simples (on utilise les prix directs si fournis)
   const p = S?.prices || {};
   switch(kind){
-    case "cigs":    return Number(p.cigarette||0);
-    case "joints":  return Number(p.joint||0);
-    case "beer":    return Number(p.beer||0);
-    case "hard":    return Number(p.hard||0);
-    case "liqueur": return Number(p.liqueur||0);
+    case "cigs":    return Number(p.cigarette || 0);
+    case "joints":  return Number(p.joint || 0);
+    case "beer":    return Number(p.beer || 0);
+    case "hard":    return Number(p.hard || 0);
+    case "liqueur": return Number(p.liqueur || 0);
     default: return 0;
   }
 }
 
-function fmtMoney(n, cur=S?.currency){
-  const sym = cur?.symbol ?? "€";
-  const pos = cur?.position ?? "after";
-  const v = (Number(n)||0).toFixed(2).replace(".",",");
-  return pos==="before" ? `${sym}${v}` : `${v}${sym}`;
-}
-
-/* ---------- Génération de conseils ---------- */
-
-function baseTips(){
-  return [
-    { icon:"🕒", text:"Repousse l’envie de 10 minutes, puis 10 de plus." },
-    { icon:"🚶", text:"Fais 5 minutes de marche ou d’étirements." },
-    { icon:"💧", text:"Bois un grand verre d’eau." },
-    { icon:"🫁", text:"Respiration 4-7-8 : 4s inspire, 7s bloque, 8s expire." },
-    { icon:"🪥", text:"Brosse-toi les dents ou mâche un chewing-gum." },
-    { icon:"✍️", text:"Note l’envie (heure, contexte, intensité)." },
-  ];
-}
-
-function contextualTips(S){
-  const tips = [];
-
-  // Récap objectif / progression
+function todayCostApprox(S){
+  const t = S?.today || {}, c = t.counters || {}, cur = S?.currency;
   const kinds = ["cigs","joints","beer","hard","liqueur"];
-  const labels = { cigs:"cigarettes", joints:"joints", beer:"bières", hard:"alcools forts", liqueur:"liqueurs" };
-
+  let sum = 0;
   kinds.forEach(k=>{
-    if (!S.modules?.[k]) return;
-    const goal = Number(S.goals?.[k]||0);
-    const val  = Number(S.today?.counters?.[k]||0);
-    if (goal>0){
-      if (val<goal){
-        const rest = goal - val;
-        tips.push({icon:"🎯", text:`Objectif ${labels[k]} : il t’en reste ${rest} pour aujourd’hui.`});
-      } else if (val===goal){
-        tips.push({icon:"✅", text:`Objectif ${labels[k]} atteint pour aujourd’hui — bravo !`});
-      } else {
-        tips.push({icon:"🔁", text:`Tu as dépassé l’objectif ${labels[k]} de ${val-goal}. Pause et reset possible demain.`});
-      }
+    if (!S.modules?.[k] || !S.today?.active?.[k]) return;
+    sum += Number(c[k]||0) * unitApprox(S,k);
+  });
+  return fmtMoney(sum, cur);
+}
+
+function tip(text){
+  const div = document.createElement("div");
+  div.className = "tip-line";
+  div.textContent = text;
+  return div;
+}
+
+function tipHTML(html){
+  const div = document.createElement("div");
+  div.className = "tip-line";
+  div.innerHTML = html;
+  return div;
+}
+
+function renderTips(S){
+  if (!_root) return;
+  _root.innerHTML = ""; // reset
+
+  // Carte conseils
+  const card = document.createElement("div");
+  card.className = "tips-card";
+  const name = (S?.profile?.name || "").trim();
+  const title = document.createElement("h3");
+  title.textContent = name ? `Conseils pour ${name}` : "Conseils du jour";
+  card.appendChild(title);
+
+  // — Conseils génériques (toujours présents)
+  card.appendChild(tip("Note chaque consommation avec +/−. Tu peux activer/désactiver des modules sur l’Accueil."));
+  card.appendChild(tip("Règle tes objectifs et les prix dans Réglages pour un suivi plus précis."));
+  card.appendChild(tip("Tu peux exporter/importer tes données (JSON/CSV) depuis la page Stats/Réglages."));
+
+  // — Personnalisation : objectifs
+  const goals = S?.goals || {};
+  const counters = S?.today?.counters || {};
+  const modules  = S?.modules || {};
+  const act      = S?.today?.active || {};
+  const goalKinds = ["cigs","joints","beer","hard","liqueur"];
+  let hasGoal = false;
+
+  goalKinds.forEach(k=>{
+    const g = Number(goals[k]||0);
+    if (!g || !modules[k]) return;
+    hasGoal = true;
+    const cur = Number(counters[k]||0);
+    const left = Math.max(0, g - cur);
+    if (left > 0) {
+      card.appendChild(tip(`Objectif ${k}: il reste ${left} avant d’atteindre ta limite du jour (${g}).`));
+    } else {
+      card.appendChild(tip(`Objectif ${k}: ✅ tu as atteint ou dépassé ton objectif (${g}).`));
     }
   });
 
-  // Coût du jour (approx. via prix simples)
-  try{
-    const cost = kinds.reduce((s,k)=> s + (Number(S.today?.counters?.[k]||0)*unitPrice(S,k)), 0);
-    if (cost>0) tips.push({icon:"💶", text:`Coût estimé aujourd’hui : ${fmtMoney(cost, S.currency)}.`});
-  }catch{}
-
-  // Dates clés (arrêts/étapes)
-  const D = S.dates || {};
-  const today = todayKey();
-  const praise = [];
-  [["stopGlobal","arrêt global"],["stopCigs","arrêt clopes"],["stopJoints","arrêt joints"],["stopAlcohol","arrêt alcool"]]
-    .forEach(([key,label])=>{
-      const iso = D[key]; if (!iso) return;
-      if (iso <= today) praise.push(label);
-    });
-  if (praise.length){
-    tips.push({icon:"🏁", text:`Étapes déjà posées : ${praise.join(", ")} — tiens le cap.`});
+  if (!hasGoal) {
+    card.appendChild(tip("Aucun objectif défini : ajoute-en un dans Habitudes pour recevoir des conseils ciblés."));
   }
 
-  // Journée clean
-  const sum = kinds.reduce((s,k)=> s + Number(S.today?.counters?.[k]||0), 0);
-  if (sum===0) tips.push({icon:"🌟", text:"Journée clean pour l’instant. Continue comme ça !"});
-
-  return tips;
-}
-
-/* ---------- Rendu ---------- */
-
-function render(S){
-  if (!ROOT) return;
-  ROOT.innerHTML = ""; // reset
-  const wrap = document.createElement("div");
-  wrap.className = "tips-card";
-
-  const h3 = document.createElement("h3");
-  h3.textContent = "Conseils du jour";
-  wrap.appendChild(h3);
-
-  const list = document.createElement("div");
-
-  // Toujours au moins 1–2 conseils génériques
-  const tips = [...baseTips().slice(0,2), ...contextualTips(S)];
-
-  if (!tips.length){
-    const line = document.createElement("div");
-    line.className = "tip-line";
-    line.textContent = "Fixe des objectifs dans « Habitudes » pour recevoir des conseils adaptés.";
-    list.appendChild(line);
+  // — Personnalisation : prix / coût du jour
+  const anyPrice = ["cigarette","joint","beer","hard","liqueur"].some(k=> Number(S?.prices?.[k]||0) > 0);
+  if (anyPrice) {
+    card.appendChild(tip(`Coût estimé aujourd’hui : ${todayCostApprox(S)} (affine tes prix dans Réglages).`));
   } else {
-    tips.forEach(t=>{
-      const line = document.createElement("div");
-      line.className = "tip-line";
-      line.textContent = `${t.icon} ${t.text}`;
-      list.appendChild(line);
-    });
+    card.appendChild(tip("Ajoute tes prix (cigarette, bière, etc.) dans Réglages pour estimer tes coûts/économies."));
   }
 
-  wrap.appendChild(list);
-  ROOT.appendChild(wrap);
+  // — Personnalisation : dates clés
+  const D = S?.dates || {};
+  const today = todayISO();
+  const keys = [
+    ["stopGlobal","Arrêt global"],
+    ["stopAlcohol","Arrêt alcool"],
+    ["reduceCigs","Début réduction clopes"],
+    ["quitCigsObj","Objectif arrêt clopes"],
+    ["noMoreCigs","Plus jamais clopes"],
+    ["reduceJoints","Début réduction joints"],
+    ["quitJointsObj","Objectif arrêt joints"],
+    ["noMoreJoints","Plus jamais joints"],
+    ["reduceAlcohol","Début réduction alcool"],
+    ["quitAlcoholObj","Objectif arrêt alcool"],
+    ["noMoreAlcohol","Plus jamais alcool"],
+  ];
+  let hasDate=false;
+  keys.forEach(([k, label])=>{
+    const v = (D[k]||"").trim();
+    if (!v) return;
+    hasDate=true;
+    const d = daysBetween(v, today);
+    if (d === 0)      card.appendChild(tip(`${label}: c’est aujourd’hui — courage !`));
+    else if (d > 0)  card.appendChild(tip(`${label}: +${d} jour(s) depuis cette étape — continue !`));
+    else             card.appendChild(tip(`${label}: dans ${Math.abs(d)} jour(s) — prépare-toi.`));
+  });
+  if (!hasDate){
+    card.appendChild(tip("Ajoute des dates clés (début réduction, objectif, plus jamais…) pour des repères concrets."));
+  }
+
+  // — Personnalisation : modules / alcool global
+  const alcoholGlobal = !!modules.alcohol;
+  const drinksOn = ["beer","hard","liqueur"].some(k => modules[k] && act[k]);
+  if (alcoholGlobal && drinksOn){
+    card.appendChild(tip("“Alcool global” activé : les boissons unitaires seront désactivées pour éviter les doublons."));
+  } else if (!alcoholGlobal && !drinksOn && (modules.beer||modules.hard||modules.liqueur)) {
+    card.appendChild(tip("Active au choix “Alcool global” ou tes boissons (bière/alcool fort/liqueur) pour suivre l’alcool."));
+  }
+
+  // — Personnalisation : prénom
+  if (name){
+    card.appendChild(tip(`Bravo ${name} pour le suivi régulier — pense à exporter tes données chaque semaine.`));
+  }
+
+  _root.appendChild(card);
 }
 
-/* ---------- API ---------- */
-
-export function mountTips({ rootSel="#tips-root", stateGetter } = {}){
-  ROOT = document.querySelector(rootSel);
-  GET_STATE = typeof stateGetter==="function" ? stateGetter : ()=>({});
-
-  if (!ROOT) return;
-  try { render(GET_STATE()); } catch {}
+export function mountTips({ rootSel, stateGetter }){
+  _root = document.querySelector(rootSel || "#tips-root");
+  _getState = stateGetter || (()=> (window?.S || null));
+  if (_root) renderTips(_getState());
 }
 
 export function updateTips(S){
-  try { render(S || GET_STATE()); } catch {}
+  const state = S || (_getState ? _getState() : null);
+  if (!_root) return;
+  renderTips(state);
 }
