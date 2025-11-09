@@ -1,272 +1,187 @@
-/* web/js/settings.js — Panneau Réglages (ES module) */
+/* web/js/settings.js — Réglages + exclusivité “Alcool global” */
 
-export function mountSettings(ctx){
-  const {
-    S, DefaultState, saveState,
-    persistTodayIntoHistory, updateHeader,
-    renderChart, reflectCounters, dbg
-  } = ctx;
+export function mountSettings({
+  S,
+  DefaultState,
+  saveState,
+  onChange = ()=>{},
+  afterFactoryReset = ()=>{}
+} = {}) {
 
-  const $  = (s) => document.querySelector(s);
-  const $$ = (s) => document.querySelectorAll(s);
+  const $  = (s, r=document) => r.querySelector(s);
+  const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
 
-  // ---------- Helpers ----------
-  const setVal = (sel, val="") => { const el=$(sel); if(el) el.value = val ?? ""; };
-  const setNum = (sel, val=0)  => { const el=$(sel); if(el) el.value = Number(val ?? 0); };
-  const setChk = (sel, on=false)=> { const el=$(sel); if(el) el.checked = !!on; };
-  const getNum = (sel) => Number($(sel)?.value || 0);
+  /* ---------- Helpers ---------- */
+  const num = (v)=> Number.isFinite(+v) ? +v : 0;
 
-  function syncAll(){
-    // Profil
-    setVal("#profile-name", S.profile?.name || "");
-    // Langues (placeholder simple)
-    const langSel = $("#select-language");
-    if (langSel && !langSel.dataset.bound){
-      langSel.innerHTML = `
-        <option value="fr">Français</option>
-        <option value="en">English</option>
-      `;
-      langSel.dataset.bound = "1";
+  function paintModules(){
+    $("#mod-cigs").checked    = !!S.modules.cigs;
+    $("#mod-joints").checked  = !!S.modules.joints;
+    $("#mod-beer").checked    = !!S.modules.beer;
+    $("#mod-hard").checked    = !!S.modules.hard;
+    $("#mod-liqueur").checked = !!S.modules.liqueur;
+    $("#mod-alcohol").checked = !!S.modules.alcohol;
+
+    // Exclusivité UI (désactive les 3 détaillés si “global” actif)
+    const globalOn = !!S.modules.alcohol;
+    ["#mod-beer","#mod-hard","#mod-liqueur"].forEach(sel=>{
+      const el=$(sel); if(!el) return;
+      el.disabled = globalOn;
+      el.parentElement?.classList.toggle("disabled", globalOn);
+    });
+  }
+
+  function paintPrices(){
+    $("#price-cigarette").value = S.prices.cigarette ?? "";
+    $("#price-joint").value     = S.prices.joint ?? "";
+    $("#price-beer").value      = S.prices.beer ?? "";
+    $("#price-hard").value      = S.prices.hard ?? "";
+    $("#price-liqueur").value   = S.prices.liqueur ?? "";
+  }
+
+  function paintCurrency(){
+    $("#currency-symbol").value = S.currency.symbol ?? "€";
+    const before = !!S.currency.before;
+    $("#currency-before").checked = before;
+    $("#currency-after").checked  = !before;
+  }
+
+  function paintProfile(){
+    $("#profile-name").value = S.profile?.name ?? "";
+    const sel = $("#select-language");
+    if (sel && sel.children.length===0){
+      [["fr","Français"],["en","English"]].forEach(([v,lab])=>{
+        const o=document.createElement("option"); o.value=v; o.textContent=lab; sel.appendChild(o);
+      });
     }
-    if (langSel) langSel.value = S.language || "fr";
-
-    // Devise
-    setVal("#currency-symbol", S.currency?.symbol || "€");
-    const before = S.currency?.position === "before";
-    setChk("#currency-before", before);
-    setChk("#currency-after", !before);
-
-    // Modules
-    setChk("#mod-cigs",    !!S.modules.cigs);
-    setChk("#mod-joints",  !!S.modules.joints);
-    setChk("#mod-beer",    !!S.modules.beer);
-    setChk("#mod-hard",    !!S.modules.hard);
-    setChk("#mod-liqueur", !!S.modules.liqueur);
-    setChk("#mod-alcohol", !!S.modules.alcohol);
-
-    // Prix unitaires
-    setNum("#price-cigarette", S.prices?.cigarette ?? 0);
-    setNum("#price-joint",     S.prices?.joint ?? 0);
-    setNum("#price-beer",      S.prices?.beer ?? 0);
-    setNum("#price-hard",      S.prices?.hard ?? 0);
-    setNum("#price-liqueur",   S.prices?.liqueur ?? 0);
-
-    // Overlay debug (état = visible ?)
-    const dbgBox = $("#debug-console");
-    setChk("#cb-debug-overlay", dbgBox && !dbgBox.classList.contains("hide"));
+    if (sel) sel.value = S.profile?.language || "fr";
   }
 
-  // ---------- Listeners (idempotents) ----------
-  // Evite double-câblage si mountSettings est rappelé
-  if (document.body.dataset.settingsBound === "1") {
-    syncAll();
-    return;
+  function repaint(){
+    paintModules();
+    paintPrices();
+    paintCurrency();
+    paintProfile();
   }
-  document.body.dataset.settingsBound = "1";
 
-  // Profil
-  $("#profile-name")?.addEventListener("input", (e)=>{
-    S.profile = S.profile || {};
-    S.profile.name = e.target.value || "";
+  /* ---------- Exclusivité “Alcool global” ---------- */
+  function applyAlcoholExclusivity(trigger){
+    const global = $("#mod-alcohol").checked;
+
+    if (global){
+      // Activer “global”, couper les 3 détaillés
+      S.modules.alcohol  = true;
+      S.modules.beer     = false;
+      S.modules.hard     = false;
+      S.modules.liqueur  = false;
+
+      // Pour le jour courant : activer “global” visuellement via Accueil (les cases Accueil restent gérées par app.js)
+      S.today.active.beer     = false;
+      S.today.active.hard     = false;
+      S.today.active.liqueur  = false;
+    } else {
+      // Désactivation du “global” -> ré-autoriser les 3 (sans les forcer cochés)
+      S.modules.alcohol = false;
+      // Les 3 redeviennent modifiables côté UI (leurs états actuels sont conservés)
+    }
+
     saveState(S);
+    repaint();
+    onChange();
+  }
+
+  /* ---------- Écoutes ---------- */
+  // Modules
+  $("#mod-cigs")?.addEventListener("change",  e=>{ S.modules.cigs   = !!e.target.checked; saveState(S); onChange(); });
+  $("#mod-joints")?.addEventListener("change",e=>{ S.modules.joints = !!e.target.checked; saveState(S); onChange(); });
+  $("#mod-beer")?.addEventListener("change",  e=>{
+    if ($("#mod-alcohol").checked){ e.preventDefault(); e.target.checked=false; return; }
+    S.modules.beer = !!e.target.checked; saveState(S); onChange();
   });
+  $("#mod-hard")?.addEventListener("change",  e=>{
+    if ($("#mod-alcohol").checked){ e.preventDefault(); e.target.checked=false; return; }
+    S.modules.hard = !!e.target.checked; saveState(S); onChange();
+  });
+  $("#mod-liqueur")?.addEventListener("change",e=>{
+    if ($("#mod-alcohol").checked){ e.preventDefault(); e.target.checked=false; return; }
+    S.modules.liqueur = !!e.target.checked; saveState(S); onChange();
+  });
+  $("#mod-alcohol")?.addEventListener("change", ()=> applyAlcoholExclusivity("toggle"));
 
-  $("#select-language")?.addEventListener("change", (e)=>{
-    S.language = e.target.value || "fr";
-    saveState(S);
-    dbg?.push?.(`Langue: ${S.language}`,"ok");
+  // Prix unitaires
+  $("#btn-save-prices")?.addEventListener("click", ()=>{
+    S.prices.cigarette = num($("#price-cigarette").value);
+    S.prices.joint     = num($("#price-joint").value);
+    S.prices.beer      = num($("#price-beer").value);
+    S.prices.hard      = num($("#price-hard").value);
+    S.prices.liqueur   = num($("#price-liqueur").value);
+    saveState(S); onChange();
+  });
+  $("#btn-reset-prices")?.addEventListener("click", ()=>{
+    S.prices = {...DefaultState().prices};
+    repaint(); saveState(S); onChange();
   });
 
   // Devise
   $("#btn-apply-currency")?.addEventListener("click", ()=>{
-    const sym = $("#currency-symbol")?.value || "€";
-    const posBefore = $("#currency-before")?.checked ? "before" : "after";
-    S.currency = { symbol: sym, position: posBefore };
-    saveState(S);
-    updateHeader?.();
-    renderChart?.();
-    dbg?.push?.("Devise appliquée","ok");
+    S.currency.symbol = ($("#currency-symbol").value || "€").slice(0,3);
+    S.currency.before = !!$("#currency-before").checked;
+    saveState(S); onChange();
   });
 
-  // Modules (avec exclusivité Alcool global vs sous-modules)
-  function applyAlcoholExclusivity(){
-    if (S.modules.alcohol) {
-      // désactive sous-modules + actives day flags off
-      ["beer","hard","liqueur"].forEach(k=>{
-        S.modules[k] = false;
-        S.today.active[k] = false;
-        const homeToggle = document.querySelector(`#chk-${k}-active`);
-        if (homeToggle) homeToggle.checked = false;
-      });
-    }
-  }
-  function onModuleToggle(id, key){
-    const el = $(id); if(!el) return;
-    el.addEventListener("change", ()=>{
-      S.modules[key] = !!el.checked;
-      if (!S.modules[key]) {
-        // si module OFF, désactive le “Activer” du jour
-        S.today.active[key] = false;
-        const homeToggle = document.querySelector(`#chk-${key}-active`);
-        if (homeToggle) homeToggle.checked = false;
-      } else {
-        // si module ON, on ne force pas le “Activer” (laisse l’utilisateur décider depuis l’accueil)
-        if (typeof S.today.active[key] === "undefined") S.today.active[key] = true;
-      }
-
-      // Exclusivité alcool
-      if (key === "alcohol") {
-        applyAlcoholExclusivity();
-        setChk("#mod-beer"   , !!S.modules.beer);
-        setChk("#mod-hard"   , !!S.modules.hard);
-        setChk("#mod-liqueur", !!S.modules.liqueur);
-      } else if (["beer","hard","liqueur"].includes(key) && el.checked) {
-        // si un sous-module est activé, on désactive l'alcohol global
-        S.modules.alcohol = false;
-        setChk("#mod-alcohol", false);
-      }
-
-      reflectCounters?.();
-      updateHeader?.();
-      saveState(S);
-      dbg?.push?.(`Module ${key}: ${S.modules[key]?"ON":"OFF"}`, "event");
-    });
-  }
-  onModuleToggle("#mod-cigs"   ,"cigs");
-  onModuleToggle("#mod-joints" ,"joints");
-  onModuleToggle("#mod-beer"   ,"beer");
-  onModuleToggle("#mod-hard"   ,"hard");
-  onModuleToggle("#mod-liqueur","liqueur");
-  onModuleToggle("#mod-alcohol","alcohol");
-
-  // Prix
-  $("#btn-save-prices")?.addEventListener("click", ()=>{
-    S.prices = S.prices || {};
-    S.prices.cigarette = getNum("#price-cigarette");
-    S.prices.joint     = getNum("#price-joint");
-    S.prices.beer      = getNum("#price-beer");
-    S.prices.hard      = getNum("#price-hard");
-    S.prices.liqueur   = getNum("#price-liqueur");
-    persistTodayIntoHistory?.();
-    updateHeader?.();
-    renderChart?.();
-    saveState(S);
-    dbg?.push?.("Prix enregistrés","ok");
+  // Profil
+  $("#profile-name")?.addEventListener("change", e=>{
+    S.profile.name = String(e.target.value||"").trim(); saveState(S); onChange();
+  });
+  $("#select-language")?.addEventListener("change", e=>{
+    S.profile.language = e.target.value || "fr"; saveState(S); onChange();
   });
 
-  $("#btn-reset-prices")?.addEventListener("click", ()=>{
-    const def = DefaultState()?.prices || {};
-    S.prices = { ...def };
-    syncAll();
-    persistTodayIntoHistory?.();
-    updateHeader?.();
-    renderChart?.();
-    saveState(S);
-    dbg?.push?.("Prix réinitialisés","ok");
-  });
-
-  // Maintenance
+  // Maintenance & sauvegardes
   $("#btn-raz-day")?.addEventListener("click", ()=>{
-    S.today.counters = { cigs:0, joints:0, beer:0, hard:0, liqueur:0 };
-    persistTodayIntoHistory?.();
-    reflectCounters?.();
-    updateHeader?.();
-    renderChart?.();
-    saveState(S);
-    dbg?.push?.("RAZ du jour","ok");
+    S.today.counters = {cigs:0,joints:0,beer:0,hard:0,liqueur:0};
+    saveState(S); onChange();
   });
-
   $("#btn-raz-history")?.addEventListener("click", ()=>{
-    S.history = {};
-    persistTodayIntoHistory?.();
-    updateHeader?.();
-    renderChart?.();
-    saveState(S);
-    dbg?.push?.("RAZ historique","ok");
+    S.history = {}; saveState(S); onChange();
   });
-
   $("#btn-raz-factory")?.addEventListener("click", ()=>{
-    const keepDate = S.today?.date;
     const fresh = DefaultState();
-    if (keepDate) fresh.today.date = keepDate;
-    // on garde éventuellement le profil/langue pour confort
-    fresh.profile = { ...(S.profile||{}) };
-    fresh.language = S.language || "fr";
-    S.history = fresh.history;
-    S.today   = fresh.today;
-    S.modules = fresh.modules;
-    S.prices  = fresh.prices;
-    S.currency= fresh.currency;
-    S.variants= fresh.variants;
-    S.goals   = fresh.goals;
-    S.dates   = fresh.dates;
-    S.debug   = fresh.debug;
-    syncAll();
-    persistTodayIntoHistory?.();
-    reflectCounters?.();
-    updateHeader?.();
-    renderChart?.();
+    // Conserver l’ACK majorité si existant
+    const keepAge = localStorage.getItem("STOPADDICT_AGE_ACK")==="1";
+    Object.keys(S).forEach(k=> delete S[k]);
+    Object.assign(S, fresh);
+    if (keepAge) localStorage.setItem("STOPADDICT_AGE_ACK","1");
     saveState(S);
-    dbg?.push?.("RAZ réglages (usine)","ok");
+    afterFactoryReset();
   });
 
-  // Sauvegarde / Import JSON (panneau Réglages)
+  // Export / Import JSON (réglages étendus)
   $("#btn-save-json-settings")?.addEventListener("click", ()=>{
-    const blob = new Blob([JSON.stringify(S,null,2)],{type:"application/json"});
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "stopaddict_settings_export.json";
-    document.body.appendChild(a);
-    a.click(); a.remove();
-    dbg?.push?.("Export JSON (Réglages) ok","ok");
+    const blob = new Blob([JSON.stringify(S,null,2)], {type:"application/json"});
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+    a.download="stopaddict_settings.json"; document.body.appendChild(a); a.click(); a.remove();
   });
-
   $("#file-import-json-settings")?.addEventListener("change", async (ev)=>{
-    const file = ev.target.files?.[0]; if(!file) return;
+    const f = ev.target.files?.[0]; if(!f) return;
     try{
-      const text = await file.text();
-      const obj  = JSON.parse(text);
-      // merge soft, priorité au JSON importé
-      Object.assign(S, DefaultState(), obj);
-      syncAll();
-      persistTodayIntoHistory?.();
-      reflectCounters?.();
-      updateHeader?.();
-      renderChart?.();
+      const obj = JSON.parse(await f.text());
+      // Merge “doux” dans S
+      Object.assign(S, obj);
       saveState(S);
-      dbg?.push?.("Import JSON (Réglages) ok","ok");
-    }catch(e){
-      dbg?.push?.("Import JSON (Réglages) erreur: "+(e?.message||e), "err");
-      alert("Import JSON invalide.");
-    }finally{
-      ev.target.value = "";
-    }
+      repaint();
+      onChange();
+    }catch(e){ alert("Import JSON invalide."); }
+    finally{ ev.target.value=""; }
   });
 
-  // Journal & Debug
+  // Debug overlay (optionnelle)
   $("#cb-debug-overlay")?.addEventListener("change", (e)=>{
     const box = $("#debug-console");
     if (!box) return;
-    if (e.target.checked) box.classList.remove("hide");
-    else box.classList.add("hide");
-    dbg?.push?.("Overlay debug "+(e.target.checked?"ON":"OFF"), "ok");
+    box.classList.toggle("hide", !e.target.checked);
   });
 
-  $("#btn-copy-logs")?.addEventListener("click", ()=> {
-    try{
-      const logs = (S.debug?.logs||[]).join("\n");
-      navigator.clipboard?.writeText(logs);
-      dbg?.push?.("Logs copiés","ok");
-    }catch{}
-  });
-
-  $("#btn-clear-logs")?.addEventListener("click", ()=>{
-    S.debug.logs = [];
-    $("#debug-console")?.replaceChildren();
-    saveState(S);
-    dbg?.push?.("Logs vidés","ok");
-  });
-
-  // Initial UI sync
-  syncAll();
+  // Paint initial
+  repaint();
 }
