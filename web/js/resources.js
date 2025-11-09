@@ -1,7 +1,6 @@
-/* web/js/resources.js — Ressources & numéros utiles (FR) */
-/* Objectif: un seul lien “Ressources…” (pas de doublon), ouverture sans gel
-   même si l’AgeGate (dialog) est déjà ouvert. Auto-mount. */
+/* web/js/resources.js — Dialog Ressources & numéros utiles (unique, non gélant) */
 
+/* --------- Données FR par défaut --------- */
 const RESOURCES = [
   {
     group: "Urgences",
@@ -43,110 +42,122 @@ const RESOURCES = [
   }
 ];
 
-/* -------------- UI -------------- */
-
-function ensureDialog() {
-  let dlg = document.getElementById("resources-dialog");
-  if (dlg) return dlg;
-
-  dlg = document.createElement("dialog");
-  dlg.id = "resources-dialog";
-  dlg.className = "agegate"; // réutilise style dialog
+/* --------- UI --------- */
+function buildDialogContent(dlg) {
   dlg.innerHTML = `
-    <h3>Ressources & numéros utiles</h3>
-    <div id="resources-body" style="max-height:55vh;overflow:auto;margin:.5rem 0;"></div>
-    <div class="actions"><button id="res-close" class="btn">Fermer</button></div>
+    <form method="dialog" class="agegate" style="min-width:280px">
+      <h3>Ressources & numéros utiles</h3>
+      <div id="resources-body" style="max-height:55vh;overflow:auto;margin:.5rem 0;"></div>
+      <div class="actions" style="justify-content:flex-end"><button id="res-close" class="btn">Fermer</button></div>
+    </form>
   `;
-  document.body.appendChild(dlg);
 
   const body = dlg.querySelector("#resources-body");
   RESOURCES.forEach(group => {
-    const wrap = document.createElement("div");
-    wrap.style.marginBottom = ".6rem";
+    const block = document.createElement("div");
+    block.style.marginBottom = ".6rem";
 
     const h = document.createElement("h4");
     h.textContent = group.group;
     h.style.margin = "0 0 .35rem 0";
-    wrap.appendChild(h);
+    block.appendChild(h);
 
     group.items.forEach(it => {
       const line = document.createElement("div");
       line.className = "tip-line";
-      const tel = it.number ? `<a href="tel:${it.number.replace(/\s+/g,'')}" style="text-decoration:underline">${it.number}</a>` : "";
+      const tel = it.number ? `<a href="tel:${it.number.replace(/\s+/g,'')}" rel="nofollow">${it.number}</a>` : "";
       const site = it.site ? ` — <a href="${it.site}" target="_blank" rel="noopener">site</a>` : "";
       line.innerHTML = `<strong>${it.label}</strong> — ${tel}${site}`;
-      wrap.appendChild(line);
+      block.appendChild(line);
     });
 
-    body.appendChild(wrap);
+    body.appendChild(block);
   });
 
-  // Fermer
-  dlg.querySelector("#res-close")?.addEventListener("click", () => dlg.close());
-  dlg.addEventListener("cancel", (e) => { e.preventDefault(); dlg.close(); });
+  dlg.querySelector("#res-close")?.addEventListener("click", () => {
+    try { dlg.close(); } catch {}
+  });
 
+  // ESC pour fermer, utile si ouvert en non-modal (show())
+  dlg.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      try { dlg.close(); } catch {}
+    }
+  });
+}
+
+function ensureDialog() {
+  let dlg = document.getElementById("resources-dialog");
+  if (!dlg) {
+    dlg = document.createElement("dialog");
+    dlg.id = "resources-dialog";
+    dlg.setAttribute("aria-label", "Ressources et numéros utiles");
+    document.body.appendChild(dlg);
+    buildDialogContent(dlg);
+  }
   return dlg;
 }
 
 export function openResources() {
   const dlg = ensureDialog();
+  const age = document.getElementById("agegate");
+  const ageOpen = !!(age && age.open);
 
-  // Évite l’erreur “already open modally” si l’AgeGate est ouvert
-  const someOpenDialog = document.querySelector("dialog[open]");
+  // Évite le gel / la superposition bloquante : si AgeGate est ouvert, on ouvre en non-modal
   try {
-    if (someOpenDialog && someOpenDialog !== dlg) {
-      // Ouvre en non-modal pour éviter le gel
-      dlg.show();                       // pas modal
-      dlg.style.position = "fixed";
-      dlg.style.top = "50%";
-      dlg.style.left = "50%";
-      dlg.style.transform = "translate(-50%,-50%)";
-      dlg.style.zIndex = "2147483647";  // au-dessus
+    if (ageOpen) {
+      dlg.show(); // non-modal au-dessus via CSS (z-index)
+      dlg.style.zIndex = 1002;
     } else {
-      dlg.removeAttribute("style");
-      dlg.showModal();                  // modal classique
+      dlg.showModal();
+      dlg.style.removeProperty("z-index");
     }
   } catch {
-    // Fallback si showModal indisponible
-    dlg.show();
-    dlg.style.position = "fixed";
-    dlg.style.top = "50%";
-    dlg.style.left = "50%";
-    dlg.style.transform = "translate(-50%,-50%)";
-    dlg.style.zIndex = "2147483647";
+    dlg.show(); // fallback
+    dlg.style.zIndex = 1002;
   }
-
-  // Focus sur le bouton pour accessibilité
-  dlg.querySelector("#res-close")?.focus();
 }
 
-export function mountResources() {
-  // Évite double-montage
-  if (window.__RESOURCES_MOUNTED__) return;
-  window.__RESOURCES_MOUNTED__ = true;
-
-  // Bouton dans Réglages
-  const btn = document.getElementById("btn-resources");
-  if (btn && !btn.__bound) {
-    btn.addEventListener("click", (e) => { e.preventDefault(); openResources(); });
-    btn.__bound = true;
-  }
-
-  // Lien dans l’AgeGate : ajouter UNE seule fois
+function injectAgeGateLink() {
   const ageForm = document.querySelector("#agegate .agegate");
-  if (ageForm && !ageForm.querySelector("[data-resources-link]")) {
+  if (!ageForm) return;
+
+  // Empêche les doublons : on vérifie l'existence par un sélecteur unique
+  if (!ageForm.querySelector("[data-resources-link='1']")) {
     const p = document.createElement("p");
     p.style.margin = "0 0 .4rem 0";
-    p.innerHTML = `Besoin d'aide ? <a href="#" data-resources-link>Ressources et numéros utiles</a>`;
-    ageForm.insertBefore(p, ageForm.firstElementChild?.nextSibling || ageForm.firstChild);
+    p.innerHTML = `Besoin d'aide ? <a href="#" data-resources-link="1">Ressources et numéros utiles</a>`;
+    // Après le titre si présent, sinon au début
+    ageForm.insertBefore(p, ageForm.children[1] || ageForm.firstChild);
+  }
 
-    const link = ageForm.querySelector("[data-resources-link]");
-    link?.addEventListener("click", (e) => {
+  const link = ageForm.querySelector("[data-resources-link='1']");
+  if (link && !link.dataset.bound) {
+    link.dataset.bound = "1";
+    link.addEventListener("click", (e) => {
       e.preventDefault();
       openResources();
     });
   }
 }
 
-/* Auto-mount au chargement du module */
+function bindSettingsButton() {
+  const btn = document.getElementById("btn-resources");
+  if (btn && !btn.dataset.bound) {
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", openResources);
+  }
+}
+
+export function mountResources() {
+  // Monte le bouton (Réglages) + lien unique dans l’AgeGate
+  bindSettingsButton();
+  injectAgeGateLink();
+
+  // Si le dialog existe déjà (hot reload), s’assurer qu’il est correctement construit
+  ensureDialog();
+}
+
+/* Auto-mount à l’import du module */
 try { mountResources(); } catch {}
