@@ -1,7 +1,9 @@
-/* web/js/resources.js — Ressources & numéros utiles (FR) */
-/* Objectif: vrai modal (showModal), 1 seule instance, bouton Fermer, un seul lien injecté dans l’AgeGate, pas de “gel”. */
+// web/js/resources.js — Modal “Ressources & numéros utiles” (ES module)
 
-export const RESOURCES = [
+import { LS_AGE } from "./state.js";
+
+/* ----------------- Données ----------------- */
+const RESOURCES = [
   {
     group: "Urgences",
     items: [
@@ -22,9 +24,7 @@ export const RESOURCES = [
   },
   {
     group: "Soutien psychologique",
-    items: [
-      { label: "Prévention du suicide", number: "3114", site: "https://3114.fr" }
-    ]
+    items: [{ label: "Prévention du suicide", number: "3114", site: "https://3114.fr" }]
   },
   {
     group: "Violences et protection",
@@ -42,37 +42,28 @@ export const RESOURCES = [
   }
 ];
 
-let _dlg = null;
+/* ----------------- UI / Modal ----------------- */
+function ensureDialog() {
+  let dlg = document.getElementById("resources-dialog");
+  if (dlg) return dlg;
 
-/* ---------- Construction dialog (1 seule instance) ---------- */
-function buildDialog() {
-  // Si déjà présent dans le DOM, réutiliser
-  const existing = document.getElementById("resources-dialog");
-  if (existing) {
-    _dlg = existing;
-    if (!_dlg.dataset.wired) wireDialogOnce(_dlg);
-    return _dlg;
-  }
-
-  // Créer le <dialog>
-  _dlg = document.createElement("dialog");
-  _dlg.id = "resources-dialog";
-  _dlg.setAttribute("aria-label", "Ressources et numéros utiles");
-  // Laisse le style aux CSS (z-index/backdrop), ici structure simple
-  _dlg.innerHTML = `
+  dlg = document.createElement("dialog");
+  dlg.id = "resources-dialog";
+  dlg.setAttribute("aria-label", "Ressources et numéros utiles");
+  // (Style via CSS; contenu minimal ici)
+  dlg.innerHTML = `
     <form method="dialog" class="agegate" style="min-width:280px;max-width:640px">
-      <h3 style="margin:0 0 .25rem 0">Ressources & numéros utiles</h3>
+      <h3>Ressources & numéros utiles</h3>
       <div id="resources-body" style="max-height:55vh;overflow:auto;margin:.5rem 0;"></div>
-      <div class="actions" style="justify-content:flex-end">
-        <button id="res-close" class="btn">Fermer</button>
+      <div class="actions" style="display:flex;justify-content:flex-end;gap:.5rem">
+        <button value="close" class="btn" id="res-close">Fermer</button>
       </div>
     </form>
   `;
-  document.body.appendChild(_dlg);
+  document.body.appendChild(dlg);
 
-  // Remplir la liste
-  const body = _dlg.querySelector("#resources-body");
-  body.textContent = ""; // reset
+  // Remplir la liste (une seule fois)
+  const body = dlg.querySelector("#resources-body");
   RESOURCES.forEach(group => {
     const wrap = document.createElement("div");
     wrap.style.marginBottom = ".6rem";
@@ -85,12 +76,8 @@ function buildDialog() {
     group.items.forEach(it => {
       const line = document.createElement("div");
       line.className = "tip-line";
-      const tel = it.number
-        ? `<a href="tel:${String(it.number).replace(/\s+/g,'')}" style="text-decoration:underline">${it.number}</a>`
-        : "";
-      const site = it.site
-        ? ` — <a href="${it.site}" target="_blank" rel="noopener">site</a>`
-        : "";
+      const tel = it.number ? `<a href="tel:${String(it.number).replace(/\s+/g,'')}" rel="noopener">${it.number}</a>` : "";
+      const site = it.site ? ` — <a href="${it.site}" target="_blank" rel="noopener">site</a>` : "";
       line.innerHTML = `<strong>${it.label}</strong> — ${tel}${site}`;
       wrap.appendChild(line);
     });
@@ -98,104 +85,65 @@ function buildDialog() {
     body.appendChild(wrap);
   });
 
-  wireDialogOnce(_dlg);
-  return _dlg;
-}
-
-/* ---------- Wiring dialog (une seule fois) ---------- */
-function wireDialogOnce(dlg) {
-  if (dlg.dataset.wired === "1") return;
-  dlg.dataset.wired = "1";
-
-  const btnClose = dlg.querySelector("#res-close");
-  if (btnClose) {
-    btnClose.addEventListener("click", (e) => {
-      e.preventDefault();
-      closeResources();
-    }, { once: false });
-  }
-
-  // ESC ferme (événement cancel sur <dialog>)
+  // ESC = fermer proprement
   dlg.addEventListener("cancel", (e) => {
-    // laisser le comportement par défaut, puis garantir l’état propre
-    setTimeout(closeResources, 0);
+    e.preventDefault();
+    dlg.close();
   });
 
-  // Double sécurité: si l’API dialog n’est pas dispo, on simule l’ouverture/fermeture par classe.
-  if (typeof dlg.showModal !== "function") {
-    dlg.classList.add("hide");
-  }
-}
-
-/* ---------- API ---------- */
-export function openResources() {
-  const dlg = buildDialog();
-  try {
-    if (typeof dlg.showModal === "function") {
-      if (!dlg.open) dlg.showModal();
-    } else {
-      dlg.classList.remove("hide");
-      dlg.setAttribute("open", "");
+  // En fermeture, si l’AgeGate devait rester ouvert, on le rouvre
+  dlg.addEventListener("close", () => {
+    const age = document.getElementById("agegate");
+    if (age?.dataset.reopen === "1") {
+      delete age.dataset.reopen;
+      if (localStorage.getItem(LS_AGE) !== "1") {
+        try { age.showModal?.(); } catch { age.classList.remove("hide"); }
+      }
     }
-  } catch {
-    // Fallback dur
+  });
+
+  return dlg;
+}
+
+export function openResources() {
+  const dlg = ensureDialog();
+
+  // Si l’AgeGate est ouvert, on le ferme temporairement puis on le rouvrira après.
+  const age = document.getElementById("agegate");
+  const ageOpen = !!age?.open;
+  if (ageOpen) {
+    age.dataset.reopen = "1";
+    try { age.close(); } catch {}
+    age.classList.add("hide");
+  }
+
+  try { dlg.showModal(); }
+  catch {
+    // Fallback non-modal si showModal indisponible
     dlg.classList.remove("hide");
-    dlg.setAttribute("open", "");
-  }
-  // Mettre le focus dans le dialog (évite “gel” perçu)
-  const firstBtn = dlg.querySelector("#res-close");
-  firstBtn?.focus({ preventScroll: true });
-}
-
-export function closeResources() {
-  if (!_dlg) return;
-  try {
-    if (_dlg.open && typeof _dlg.close === "function") _dlg.close();
-    _dlg.classList.add("hide");
-    _dlg.removeAttribute("open");
-  } catch {
-    _dlg.classList.add("hide");
-    _dlg.removeAttribute("open");
   }
 }
 
-/* ---------- Mount: bouton Réglages + lien injecté dans l’AgeGate (anti-doublon) ---------- */
 export function mountResources() {
-  // Bouton dans Réglages
+  // Bouton dans Réglages (ne pas lier plusieurs fois)
   const btn = document.getElementById("btn-resources");
-  if (btn && btn.dataset.wiredRes !== "1") {
+  if (btn && !btn.dataset.resBound) {
     btn.addEventListener("click", (e) => { e.preventDefault(); openResources(); });
-    btn.dataset.wiredRes = "1";
+    btn.dataset.resBound = "1";
   }
 
-  // Lien unique dans l’AgeGate
+  // Lien dans l’AgeGate : injecter UNE FOIS
   const ageForm = document.querySelector("#agegate .agegate");
   if (ageForm && !ageForm.querySelector("[data-resources-link]")) {
     const p = document.createElement("p");
     p.style.margin = "0 0 .4rem 0";
-    const a = document.createElement("a");
-    a.href = "#";
-    a.textContent = "Ressources et numéros utiles";
-    a.setAttribute("data-resources-link", "1");
-    p.append("Besoin d'aide ? ", a);
-    // Injection après le titre si possible
-    const after = ageForm.firstElementChild?.nextSibling || ageForm.firstChild;
-    ageForm.insertBefore(p, after);
+    p.innerHTML = `Besoin d'aide ? <a href="#" data-resources-link>Ressources et numéros utiles</a>`;
+    // après le titre, avant le reste
+    ageForm.insertBefore(p, ageForm.children[1] || ageForm.firstChild);
   }
-  const link = document.querySelector("#agegate .agegate [data-resources-link]");
-  if (link && link.dataset.wiredRes !== "1") {
-    link.addEventListener("click", (e) => { e.preventDefault(); openResources(); });
-    link.dataset.wiredRes = "1";
+  const a = ageForm?.querySelector("[data-resources-link]");
+  if (a && !a.dataset.resBound) {
+    a.addEventListener("click", (e) => { e.preventDefault(); openResources(); });
+    a.dataset.resBound = "1";
   }
 }
-
-/* ---------- Auto-mount robuste (multi-passes sans doublons) ---------- */
-function tryMountLater() { try { mountResources(); } catch {} }
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", tryMountLater, { once: true });
-} else {
-  tryMountLater();
-}
-// En cas de rendu tardif de l’AgeGate, observer le DOM et monter une seule fois.
-const _mo = new MutationObserver(() => tryMountLater());
-_mo.observe(document.documentElement, { childList: true, subtree: true });
