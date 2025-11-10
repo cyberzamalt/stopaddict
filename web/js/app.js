@@ -1,100 +1,89 @@
 /* web/js/app.js — Orchestrateur StopAddict (ES module) */
+import { LS_AGE, DefaultState, loadState, saveState, todayKey, fmtMoney } from './state.js';
 
-import {
-  LS_AGE,
-  DefaultState, loadState, saveState,
-  todayKey, fmtMoney, recordEvent
-} from "./state.js";
+let Settings = null, Tips = null, Calendar = null, Resources = null, Stats = null, Habits = null;
+try { Settings  = await import('./settings.js'); } catch {}
+try { Tips      = await import('./tips.js'); }     catch {}
+try { Calendar  = await import('./calendar.js'); } catch {}
+try { Resources = await import('./resources.js'); }catch {}
+try { Stats     = await import('./stats.js'); }    catch {}
+try { Habits    = await import('./habits.js'); }   catch {}
 
-let mountSettings = null;
-let Tips = null;
-let CalendarMod = null;
-let Stats = null;
-let mountResources = null;
+const $  = (s)=>document.querySelector(s);
+const $$ = (s)=>document.querySelectorAll(s);
 
-try { const m = await import("./settings.js"); if (typeof m?.mountSettings === "function") mountSettings = m.mountSettings; } catch {}
-try { const m = await import("./tips.js");      if (typeof m?.mountTips === "function") Tips = m; } catch {}
-try { const m = await import("./calendar.js");  if (typeof m?.mountCalendar === "function") CalendarMod = m; } catch {}
-try { const m = await import("./stats.js");     if (typeof m?.initStats === "function") Stats = m; } catch {}
-try { const m = await import("./resources.js"); if (typeof m?.mountResources === "function") mountResources = m.mountResources; } catch {}
+let S = loadState(); if(!S || !S.today) S = DefaultState();
 
-const $  = (s) => document.querySelector(s);
-const $$ = (s) => document.querySelectorAll(s);
-
-let S = loadState();
-
-/* ---------------- Debug léger ---------------- */
+/* ---------- Logger simple (console UI) ---------- */
 const dbg = {
   push(msg, type="info"){
     const line = `[${new Date().toLocaleTimeString()}] [${type}] ${msg}`;
+    S.debug = S.debug || {};
     S.debug.logs = S.debug.logs || [];
     S.debug.logs.push(line);
-    if (S.debug.logs.length > 500) S.debug.logs.shift();
+    if(S.debug.logs.length>1000) S.debug.logs.shift();
+
+    const box = $("#debug-console");
+    if (box && !box.classList.contains("hide")){
+      const div = document.createElement("div");
+      div.className = "debug-line";
+      div.textContent = line;
+      box.appendChild(div);
+      box.scrollTop = box.scrollHeight;
+    }
+    saveState(S);
+  },
+  syncVisibilityFromCheckbox(){
+    const cb = $("#cb-debug-overlay");
+    const box = $("#debug-console");
+    if(!box) return;
+    const on = !!cb?.checked;
+    box.classList.toggle("hide", !on);
   }
 };
 
-/* ---------------- Age gate ------------------- */
+/* ---------- Age Gate (+18) ---------- */
 function initAgeGate(){
-  const ack = localStorage.getItem(LS_AGE);
   const dlg = $("#agegate");
   const btn = $("#btn-age-accept");
-  const cb18 = $("#age-18plus");
+  const cb18   = $("#age-18plus");
   const cbHide = $("#age-hide");
-  if (!dlg || !btn || !cb18) return;
 
-  const close = ()=>{ try{ dlg.close(); }catch{} dlg.classList.add("hide"); };
-  const open  = ()=>{ dlg.classList.remove("hide"); try{ dlg.showModal(); }catch{} };
+  // Cases NON pré-cochées par défaut (sauf si déjà validé en LS)
+  if(localStorage.getItem(LS_AGE)==="1"){
+    try{ dlg?.close(); }catch{}
+    dlg?.classList.add("hide");
+  } else {
+    if(cb18)  cb18.checked  = false;
+    if(cbHide)cbHide.checked = false;
+    try{ dlg?.showModal(); }catch{ dlg?.classList.remove("hide"); }
+    if(btn) btn.disabled = true;
 
-  if (ack === "1"){ close(); }
-  else{
-    open();
-    btn.disabled = true;
-    cb18.addEventListener("change", ()=> btn.disabled = !cb18.checked);
-    btn.addEventListener("click", ()=>{
-      if (cb18.checked){
-        if (cbHide.checked) localStorage.setItem(LS_AGE,"1");
-        close();
+    cb18?.addEventListener("change", ()=>{ if(btn) btn.disabled = !cb18.checked; });
+    btn?.addEventListener("click", ()=>{
+      if(cb18?.checked){
+        if(cbHide?.checked) localStorage.setItem(LS_AGE,"1");
+        try{ dlg.close(); }catch{}
+        dlg.classList.add("hide");
+        dbg.push("AgeGate validated","ok");
       }
     });
   }
 }
 
-/* ---------------- Tabs ---------------------- */
+/* ---------- Tabs ---------- */
 const PAGES = { home:"#page-home", stats:"#page-stats", calendar:"#page-calendar", habits:"#page-habits", settings:"#page-settings" };
 function showTab(id){
   Object.values(PAGES).forEach(sel => $(sel)?.classList.add("hide"));
   $(PAGES[id])?.classList.remove("hide");
-  $$("#tabs .tab").forEach(b => b.classList.toggle("active", b.dataset.tab === id));
-  if (id === "stats" && Stats?.renderAllCharts) Stats.renderAllCharts(S);
+  $$("#tabs .tab").forEach(b => b.classList.toggle("active", b.dataset.tab===id));
+  dbg.push(`Tab -> ${id}`,"nav");
 }
 
-/* ---------------- Compteurs ----------------- */
+/* ---------- Counters & header ---------- */
 const KINDS = ["cigs","joints","beer","hard","liqueur"];
-
-function unitPrice(kind){
-  const p = S.prices, v = S.variants;
-  switch(kind){
-    case "cigs":
-      if (p.cigarette>0) return p.cigarette;
-      if (v.classic.use && v.classic.packPrice>0 && v.classic.cigsPerPack>0) return v.classic.packPrice/v.classic.cigsPerPack;
-      if (v.rolled.use  && v.rolled.tobacco30gPrice>0 && v.rolled.cigsPer30g>0) return v.rolled.tobacco30gPrice/v.rolled.cigsPer30g;
-      return 0;
-    case "joints":
-      if (p.joint>0) return p.joint;
-      if (v.cannabis.use && v.cannabis.gramPrice>0 && v.cannabis.gramsPerJoint>0) return v.cannabis.gramPrice * v.cannabis.gramsPerJoint;
-      return 0;
-    case "beer":    return p.beer>0    ? p.beer    : (v.alcohol.beer.enabled    && v.alcohol.beer.unitPrice>0   ? v.alcohol.beer.unitPrice   : 0);
-    case "hard":    return p.hard>0    ? p.hard    : (v.alcohol.hard.enabled    && v.alcohol.hard.dosePrice>0   ? v.alcohol.hard.dosePrice   : 0);
-    case "liqueur": return p.liqueur>0 ? p.liqueur : (v.alcohol.liqueur.enabled && v.alcohol.liqueur.dosePrice>0? v.alcohol.liqueur.dosePrice: 0);
-    default: return 0;
-  }
-}
-function computeCost(counters=S.today.counters){
-  let t=0; for (const k of KINDS){ if(!S.modules[k] || !S.today.active[k]) continue; t += Number(counters[k]||0)*unitPrice(k); } return t;
-}
-function computeSaved(counters=S.today.counters){
-  let s=0; for (const k of KINDS){ const g=Number(S.goals[k]||0), a=Number(counters[k]||0); if(g>0 && a<g) s += (g-a)*unitPrice(k);} return s;
-}
+function computeCost(c=S.today.counters){ let t=0; for(const k of KINDS){ if(!S.modules[k]||!S.today.active[k]) continue; const p=S.prices[k]||0; t += (Number(c[k]||0))*Number(p||0); } return t; }
+function computeSaved(c=S.today.counters){ let s=0; for(const k of KINDS){ const g=Number(S.goals[k]||0), a=Number(c[k]||0); if(g>0 && a<g) s += (g-a)*Number(S.prices[k]||0);} return s; }
 
 function reflectCounters(){
   $("#val-cigs").textContent    = S.today.counters.cigs ?? 0;
@@ -103,145 +92,128 @@ function reflectCounters(){
   $("#val-hard").textContent    = S.today.counters.hard ?? 0;
   $("#val-liqueur").textContent = S.today.counters.liqueur ?? 0;
 
-  // Griser uniquement la rangée des +/- quand inactif, laisser la case "Activer" cliquable
-  const gray = (id, on)=>{ const row = $(`${id} .ctr-row`); if(!row) return; row.style.opacity = on ? ".45" : "1"; };
-  gray("#ctr-cigs",    !S.today.active.cigs   || !S.modules.cigs);
-  gray("#ctr-joints",  !S.today.active.joints || !S.modules.joints);
-  gray("#ctr-beer",    !S.today.active.beer   || !S.modules.beer);
-  gray("#ctr-hard",    !S.today.active.hard   || !S.modules.hard);
-  gray("#ctr-liqueur", !S.today.active.liqueur|| !S.modules.liqueur);
+  const setDis=(id,on)=>{ const el=$(id); if(!el) return; el.style.opacity=on?"0.55":"1"; el.style.pointerEvents=on?"none":"auto"; };
+  setDis("#ctr-cigs",!S.today.active.cigs||!S.modules.cigs);
+  setDis("#ctr-joints",!S.today.active.joints||!S.modules.joints);
+  setDis("#ctr-beer",!S.today.active.beer||!S.modules.beer);
+  setDis("#ctr-hard",!S.today.active.hard||!S.modules.hard);
+  setDis("#ctr-liqueur",!S.today.active.liqueur||!S.modules.liqueur);
 
-  // Cases "Activer" sur Accueil
-  const map={cigs:"#chk-cigs-active", joints:"#chk-joints-active", beer:"#chk-beer-active", hard:"#chk-hard-active", liqueur:"#chk-liqueur-active"};
-  for (const k of KINDS){ const el=$(map[k]); if (el) el.checked = !!S.today.active[k]; }
+  // Cases "Activer" Accueil reflètent l'état courant
+  $("#chk-cigs-active").checked    = !!S.today.active.cigs;
+  $("#chk-joints-active").checked  = !!S.today.active.joints;
+  $("#chk-beer-active").checked    = !!S.today.active.beer;
+  $("#chk-hard-active").checked    = !!S.today.active.hard;
+  $("#chk-liqueur-active").checked = !!S.today.active.liqueur;
 }
 
 function persistTodayIntoHistory(){
   const key = todayKey();
   if (S.today.date !== key){
-    S.history[S.today.date] = {...S.today.counters, cost:computeCost(S.today.counters), saved:computeSaved(S.today.counters)};
+    S.history[S.today.date] = {...S.today.counters, cost:computeCost(), saved:computeSaved()};
     S.today.date = key;
-    S.today.counters = { cigs:0, joints:0, beer:0, hard:0, liqueur:0 };
+    S.today.counters = {cigs:0,joints:0,beer:0,hard:0,liqueur:0};
   }
-  S.history[key] = {...S.today.counters, cost:computeCost(S.today.counters), saved:computeSaved(S.today.counters)};
+  S.history[key] = {...S.today.counters, cost:computeCost(), saved:computeSaved()};
 }
 
 function updateHeader(){
   $("#today-date").textContent = new Date().toLocaleDateString("fr-FR");
   $("#hdr-cigs").textContent   = S.today.counters.cigs ?? 0;
   $("#hdr-joints").textContent = S.today.counters.joints ?? 0;
-  $("#hdr-alcohol").textContent = (S.today.counters.beer + S.today.counters.hard + S.today.counters.liqueur) || 0;
+  $("#hdr-alcohol").textContent= (S.today.counters.beer+S.today.counters.hard+S.today.counters.liqueur)||0;
   $("#hdr-cost").textContent   = fmtMoney(computeCost(), S.currency);
   $("#hdr-saved").textContent  = fmtMoney(computeSaved(), S.currency);
-  const sum = KINDS.reduce((acc,k)=> acc + (S.today.counters[k]||0), 0);
-  const badge = $("#hdr-status");
-  if (badge){ badge.textContent = sum===0 ? "✓" : "•"; badge.style.background = sum===0 ? "#124232" : "#1f2b48"; }
+  const sum = KINDS.reduce((acc,k)=>acc+(S.today.counters[k]||0),0);
+  const badge=$("#hdr-status");
+  if(badge){ badge.textContent = sum===0 ? "✓" : "•"; badge.style.background = sum===0 ? "#124232" : "#1f2b48"; }
 }
 
+/* ---------- Journal d’événements pour Stats (Jour 4 tranches) ---------- */
+function logEvent(kind, delta){
+  S.events = S.events || [];
+  S.events.push({ ts: Date.now(), kind, delta });
+  if (S.events.length > 5000) S.events.shift();
+}
+
+/* ---------- Wiring des interactions ---------- */
 function initCounters(){
-  // Boutons +/- (protégés par today.active & modules)
+  // Boutons +/-
   $$("[data-action]").forEach(btn=>{
     btn.addEventListener("click", ()=>{
-      const kind = btn.dataset.kind;
+      const kind   = btn.dataset.kind;
       const action = btn.dataset.action;
-      if (!KINDS.includes(kind)) return;
-      if (!S.modules[kind] || !S.today.active[kind]) return;
+      if(!KINDS.includes(kind)) return;
+      if(!S.modules[kind] || !S.today.active[kind]) return;
 
       const cur = Number(S.today.counters[kind]||0);
-      S.today.counters[kind] = action === "inc" ? cur + 1 : Math.max(0, cur - 1);
+      const delta = action==="inc" ? 1 : -1;
+      S.today.counters[kind] = Math.max(0, cur + delta);
 
-      recordEvent(S, action === "inc" ? "inc" : "dec", { kind, value: S.today.counters[kind] });
-
+      logEvent(kind, delta);
       persistTodayIntoHistory();
       reflectCounters();
       updateHeader();
       saveState(S);
 
       Tips?.updateTips?.(S);
-      Cal?.update?.(S);
-      Stats?.renderAllCharts?.(S);
+      Calendar?.update?.(S);
+      Stats?.refresh?.(S);
+
+      dbg.push(`Counter ${kind} ${delta>0?"+":"-"}1`,"event");
     });
   });
 
-  // Cases "Activer" sur Accueil (sync avec S.today.active)
-  const map={cigs:"#chk-cigs-active", joints:"#chk-joints-active", beer:"#chk-beer-active", hard:"#chk-hard-active", liqueur:"#chk-liqueur-active"};
-  for (const k of KINDS){
-    const el = $(map[k]);
-    if (!el) continue;
-    el.checked = !!S.today.active[k];
+  // Cases "Activer" (Accueil)
+  const mapActive = {
+    cigs:"#chk-cigs-active", joints:"#chk-joints-active",
+    beer:"#chk-beer-active", hard:"#chk-hard-active", liqueur:"#chk-liqueur-active"
+  };
+  for(const k of KINDS){
+    const el = $(mapActive[k]);
+    if(!el) continue;
     el.addEventListener("change", ()=>{
       S.today.active[k] = !!el.checked;
-      recordEvent(S, "toggle", { kind:k, active: S.today.active[k] });
       reflectCounters();
-      updateHeader();
       saveState(S);
       Tips?.updateTips?.(S);
-      Cal?.update?.(S);
-      Stats?.renderAllCharts?.(S);
+      Calendar?.update?.(S);
+      Stats?.refresh?.(S);
+      dbg.push(`Today.active ${k} = ${S.today.active[k]}`,"state");
     });
   }
 }
 
-/* ---------------- Hydrate ------------------- */
-function hydrateUI(){
-  $("#app-title").textContent = "StopAddict";
-  $("#today-date").textContent = new Date().toLocaleDateString("fr-FR");
-  reflectCounters();
-  updateHeader();
-  Tips?.updateTips?.(S);
-}
-
-/* ---------------- Boot ---------------------- */
-let Cal = null;
-
+/* ---------- Boot ---------- */
 (function initApp(){
-  if (!S.today?.date) S.today.date = todayKey();
-
-  // UI
-  $$("#tabs .tab").forEach(btn => btn.addEventListener("click", ()=> showTab(btn.dataset.tab)));
+  // Tabs
+  $$("#tabs .tab").forEach(b=> b.addEventListener("click", ()=> showTab(b.dataset.tab)));
   showTab("home");
 
+  // AgeGate
   initAgeGate();
+
+  // Modules optionnels
+  Resources?.mountResources?.();
+  Calendar = Calendar?.mountCalendar ? Calendar.mountCalendar({ S, getState:()=>S, showTab }) : Calendar;
+  Settings?.mountSettings?.({ S, DefaultState, saveState, persistTodayIntoHistory, updateHeader, reflectCounters, dbg });
+  Habits?.mountHabits?.({ S, saveState, updateHeader, reflectCounters, dbg });
+  Tips?.mountTips?.({ rootSel:"#tips-root", stateGetter:()=>S });
+
+  // Stats
+  Stats?.init?.({ S, todayKey, fmtMoney, dbg });
+
+  // Logger UI -> case "Afficher la console"
+  $("#cb-debug-overlay")?.addEventListener("change", ()=> dbg.syncVisibilityFromCheckbox());
+  dbg.syncVisibilityFromCheckbox();
+
+  // Header & counters
+  if(!S.today?.date) S.today.date = todayKey();
+  reflectCounters();
+  updateHeader();
   initCounters();
 
-  // Modules
-  if (Tips?.mountTips)       Tips.mountTips({ rootSel:"#tips-root", stateGetter:()=>S });
-  if (CalendarMod?.mountCalendar) Cal = CalendarMod.mountCalendar({ S, getState:()=>S, showTab });
-  if (typeof mountSettings === "function"){
-    mountSettings({
-      S,
-      DefaultState,
-      saveState,
-      onModulesChanged(mods){
-        S.modules = { ...S.modules, ...mods };
-        // Exclusivité "alcool global" déjà gérée côté settings.js ; on reflète juste
-        reflectCounters(); updateHeader(); saveState(S);
-        Tips?.updateTips?.(S); Cal?.update?.(S); Stats?.renderAllCharts?.(S);
-      },
-      onPricesChanged(p){
-        S.prices = { ...S.prices, ...p };
-        updateHeader(); saveState(S);
-        Tips?.updateTips?.(S); Cal?.update?.(S); Stats?.renderAllCharts?.(S);
-      },
-      onProfileChanged(pr){
-        S.profile = { ...S.profile, ...pr };
-        saveState(S); Tips?.updateTips?.(S);
-      },
-      onLangChanged(lang){
-        S.i18n = { ...S.i18n, lang };
-        saveState(S);
-      }
-    });
-  }
-  if (typeof mountResources === "function") mountResources();
-
-  // Stats (si présent)
-  if (Stats?.initStats) Stats.initStats(S);
-
-  // Premier rendu
-  hydrateUI();
-  persistTodayIntoHistory();
-  Stats?.renderAllCharts?.(S);
-
-  dbg.push("App ready", "ok");
+  dbg.push("App ready","ok");
+  // Expose pour debug
+  window.S = S;
 })();
