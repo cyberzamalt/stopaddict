@@ -1,206 +1,222 @@
-/* web/js/calendar.js — Grille mensuelle type monolithe (mini-récaps + détail jour) */
+/* web/js/calendar.js — Calendrier mensuel façon monolithe */
+import { todayKey } from "./state.js";
 
-import { loadState, todayKey, fmtMoney } from "./state.js";
-
-/* ---------- Config ---------- */
 const KINDS = ["cigs","joints","beer","hard","liqueur"];
-const LABELS = {
-  cigs:"Cigarettes", joints:"Joints", beer:"Bière", hard:"Alcool fort", liqueur:"Liqueur"
-};
-const EMOJI = { cigs:"🚬", joints:"🌿", beer:"🍺", hard:"🥃", liqueur:"🍸" };
+const KIND_EMOJI = { cigs:"🚬", joints:"🌿", beer:"🍺", hard:"🥃", liqueur:"🍸" };
 
-/* ---------- Helpers ---------- */
-const ISO = d => d.toISOString().slice(0,10);
+let _S = null;
+let _getState = null;
+let _showTab = null;
+
+let $grid, $details, $title, $prev, $next, $openStats, $openHabits;
+let _current = firstOfMonth(new Date());
+let _selected = keyToDate(todayKey());
+
+function $(s){ return document.querySelector(s); }
+function $all(s){ return Array.from(document.querySelectorAll(s)); }
+
 function firstOfMonth(d){ const x=new Date(d); x.setDate(1); x.setHours(0,0,0,0); return x; }
-function startOfGrid(d){
-  const f = firstOfMonth(d);
-  // grille Lundi→Dimanche (6 semaines)
-  const wd = (f.getDay()+6)%7; // 0=Lundi
-  f.setDate(f.getDate()-wd);
-  return f;
+function keyToDate(k){ const [y,m,d]=k.split("-").map(Number); return new Date(y,(m||1)-1,d||1); }
+function dateToKey(d){ const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), da=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${da}`; }
+function addDays(d, n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function sameMonth(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth(); }
+function mondayIndex(d){ return (d.getDay()+6)%7; } // 0 = Lundi
+
+function getS(){ return _getState ? _getState() : (_S||{}); }
+function dayData(S, key){
+  // Données affichées : counters + cost/saved
+  const today = todayKey();
+  if(key === today){
+    const t=S.today||{};
+    const c=t.counters||{};
+    return {
+      cigs: c.cigs||0, joints:c.joints||0, beer:c.beer||0, hard:c.hard||0, liqueur:c.liqueur||0,
+      cost: (S.history?.[key]?.cost ?? 0), saved: (S.history?.[key]?.saved ?? 0)
+    };
+  }
+  const d=S.history?.[key]||{};
+  return {
+    cigs: d.cigs||0, joints:d.joints||0, beer:d.beer||0, hard:d.hard||0, liqueur:d.liqueur||0,
+    cost: d.cost||0, saved: d.saved||0
+  };
 }
-function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
-function isSameMonth(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth(); }
-function isToday(d){ return ISO(d)===ISO(new Date()); }
 
-/* ---------- State (module) ---------- */
-let curDate = new Date(); // mois courant
-let filters = { cigs:true, joints:true, beer:true, hard:true, liqueur:true };
-let refs = {}; // DOM refs
-let external = { getState: null, showTab: null };
-
-/* ---------- Rendering ---------- */
-function setTitleMonth(d){
-  const el = refs.title;
-  if (!el) return;
-  el.textContent = d.toLocaleDateString("fr-FR", { month:"long", year:"numeric" });
+function activeKinds(){
+  // Filtre via checkbox data-cal-filter (toutes cochées par défaut)
+  const boxes = $all('[data-cal-filter]');
+  if(!boxes.length) return [...KINDS];
+  return boxes.filter(b=>b.checked).map(b=>b.getAttribute('data-cal-filter')).filter(k=>KINDS.includes(k));
 }
 
-function renderGrid(S){
-  const root = refs.grid; if (!root) return;
-  root.innerHTML = "";
+function renderHeader(){
+  const opts = { month:"long", year:"numeric" };
+  $title.textContent = _current.toLocaleDateString("fr-FR", opts);
+}
 
-  const start = startOfGrid(curDate);
-  const cells = [];
-  for (let i=0;i<42;i++){
-    const d = addDays(start,i);
-    const iso = ISO(d);
-    const data = S.history?.[iso] || {};
-    const other = !isSameMonth(d, curDate);
+function renderGrid(){
+  if(!$grid) return;
+  const kinds = new Set(activeKinds());
+  const head = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
+  const body = document.createElement("div");
+  body.className = "cal-body";
 
-    // mini récap par type filtré
-    const minis = [];
-    for (const k of KINDS){
+  // Point de départ : lundi de la semaine contenant le 1er du mois
+  const start = addDays(firstOfMonth(_current), -mondayIndex(firstOfMonth(_current)));
+  // 6 semaines = 42 cases
+  for(let i=0;i<42;i++){
+    const d = addDays(start, i);
+    const key = dateToKey(d);
+    const data = dayData(getS(), key);
+
+    const cell = document.createElement("div");
+    cell.className = "cal-cell";
+    if(!sameMonth(d, _current)) cell.classList.add("cal-other");
+    if(dateToKey(d) === dateToKey(new Date())) cell.classList.add("cal-today");
+    cell.dataset.date = key;
+
+    // numéro du jour
+    const day = document.createElement("div");
+    day.className = "cal-day";
+    day.textContent = String(d.getDate());
+    cell.appendChild(day);
+
+    // mini récap (icônes sélectionnées + coût € si > 0)
+    const mini = document.createElement("div");
+    mini.className = "cal-mini";
+
+    KINDS.forEach(k=>{
       const v = Number(data[k]||0);
-      if (!v) continue;
-      if (!filters[k]) continue;
-      const chip = `<span class="mini-dot" title="${LABELS[k]}">${EMOJI[k]} ${v}</span>`;
-      minis.push(chip);
-    }
-    // coût mini
-    if ((data.cost||0) > 0){
-      minis.push(`<span class="mini-euro" title="Coût">${(data.cost||0).toFixed(0)}€</span>`);
+      if(!kinds.has(k) || v<=0) return;
+      const dot = document.createElement("span");
+      dot.className = "mini-dot";
+      dot.textContent = KIND_EMOJI[k];
+      dot.title = `${v} ${k}`;
+      mini.appendChild(dot);
+    });
+
+    if((data.cost||0) > 0){
+      const euro = document.createElement("span");
+      euro.className = "mini-euro";
+      euro.textContent = "€";
+      euro.title = `Coût: ${data.cost.toFixed(2)}`;
+      mini.appendChild(euro);
     }
 
-    const classes = ["cal-cell"];
-    if (other) classes.push("cal-other");
-    if (isToday(d)) classes.push("cal-today");
+    cell.appendChild(mini);
 
-    cells.push(`
-      <div class="${classes.join(" ")}" data-date="${iso}">
-        <div class="cal-day">${d.getDate()}</div>
-        <div class="cal-mini">${minis.join("")}</div>
-      </div>
-    `);
+    // sélection
+    cell.addEventListener("click", ()=>{
+      _selected = d;
+      highlightSelection();
+      renderDetails();
+    });
+
+    body.appendChild(cell);
   }
 
-  root.innerHTML = `
-    <div class="cal-head">
-      <div>Lu</div><div>Ma</div><div>Me</div><div>Je</div><div>Ve</div><div>Sa</div><div>Di</div>
-    </div>
-    <div class="cal-body">
-      ${cells.join("")}
-    </div>
-  `;
+  // Compose head + body
+  const headRow = document.createElement("div");
+  headRow.className = "cal-head";
+  head.forEach(lbl=>{
+    const h = document.createElement("div");
+    h.textContent = lbl;
+    headRow.appendChild(h);
+  });
 
-  // Click handlers -> détail jour
-  root.querySelectorAll(".cal-cell").forEach(cell=>{
-    cell.addEventListener("click", ()=>{
-      const iso = cell.getAttribute("data-date");
-      showDayDetails(S, iso);
-    });
+  $grid.innerHTML = "";
+  $grid.appendChild(headRow);
+  $grid.appendChild(body);
+
+  highlightSelection();
+}
+
+function highlightSelection(){
+  const selKey = dateToKey(_selected);
+  $all(".cal-cell").forEach(c=>{
+    c.classList.toggle("cal-selected", c.dataset.date === selKey);
   });
 }
 
-function showDayDetails(S, iso){
-  const box = refs.details; if (!box) return;
-  const d = S.history?.[iso] || {};
-  const dateLabel = new Date(iso+"T12:00:00").toLocaleDateString("fr-FR",{weekday:"long", day:"2-digit", month:"long", year:"numeric"});
+function renderDetails(){
+  if(!$details) return;
+  const S = getS();
+  const key = dateToKey(_selected);
+  const data = dayData(S, key);
 
-  const lines = KINDS.map(k=>{
-    return `
-      <div class="tip-line">
-        <strong>${EMOJI[k]} ${LABELS[k]}</strong>
-        <span style="float:right">${Number(d[k]||0)}</span>
-      </div>
-    `;
-  }).join("");
+  const sumAlcohol = (data.beer||0)+(data.hard||0)+(data.liqueur||0);
 
-  const cur = loadState(); // pour la devise
-  const money = `
-    <div class="cal-summary">
-      <div><div><strong>Coût</strong></div><div>${fmtMoney(+d.cost||0, cur.currency)}</div></div>
-      <div><div><strong>Économies</strong></div><div>${fmtMoney(+d.saved||0, cur.currency)}</div></div>
-    </div>
-  `;
-
-  box.innerHTML = `
+  $details.innerHTML = `
     <div class="cal-box">
-      <h4>${dateLabel}</h4>
-      ${money}
-      <div class="cal-breakdown">
-        ${lines}
+      <h4>Détail du ${new Date(key).toLocaleDateString("fr-FR")}</h4>
+      <div class="cal-summary">
+        <div>🚬 Clopes<br><strong>${data.cigs||0}</strong></div>
+        <div>🌿 Joints<br><strong>${data.joints||0}</strong></div>
+        <div>🍺+🥃+🍸 Alcool<br><strong>${sumAlcohol}</strong></div>
+        <div>€ Coût<br><strong>${(data.cost||0).toFixed(2)}</strong></div>
+        <div>💶 Économies<br><strong>${(data.saved||0).toFixed(2)}</strong></div>
       </div>
       <div class="cal-links">
-        <button id="cal-open-stats" class="btn small">Ouvrir Stats</button>
-        <button id="cal-open-habits" class="btn small">Ouvrir Habitudes</button>
+        <button id="goto-stats" class="btn small">Ouvrir Stats</button>
+        <button id="goto-habits" class="btn small">Ouvrir Habitudes</button>
       </div>
     </div>
   `;
 
-  // Liens -> onglets
-  box.querySelector("#cal-open-stats")?.addEventListener("click", ()=>{
-    external.showTab?.("stats");
-  });
-  box.querySelector("#cal-open-habits")?.addEventListener("click", ()=>{
-    external.showTab?.("habits");
-  });
+  $details.querySelector("#goto-stats")?.addEventListener("click", ()=> _showTab && _showTab("stats"));
+  $details.querySelector("#goto-habits")?.addEventListener("click", ()=> _showTab && _showTab("habits"));
 }
 
-/* ---------- Events ---------- */
-function bindToolbar(){
-  refs.prev?.addEventListener("click", ()=>{
-    const d=new Date(curDate); d.setMonth(d.getMonth()-1); curDate=d;
-    setTitleMonth(curDate);
-    renderGrid(external.getState ? external.getState() : loadState());
+function bindNav(){
+  $prev?.addEventListener("click", ()=>{
+    _current = firstOfMonth(addDays(_current, -1)); // recule d’un jour puis re-1er → mois précédent
+    renderHeader(); renderGrid(); renderDetails();
   });
-  refs.next?.addEventListener("click", ()=>{
-    const d=new Date(curDate); d.setMonth(d.getMonth()+1); curDate=d;
-    setTitleMonth(curDate);
-    renderGrid(external.getState ? external.getState() : loadState());
+  $next?.addEventListener("click", ()=>{
+    const nextMonth = new Date(_current); nextMonth.setMonth(_current.getMonth()+1, 1);
+    _current = firstOfMonth(nextMonth);
+    renderHeader(); renderGrid(); renderDetails();
   });
-
-  // Filtres (si présents)
-  (refs.filterWrap?.querySelectorAll("[data-cal-filter]")||[]).forEach(cb=>{
-    const k = cb.getAttribute("data-cal-filter");
-    if (k && k in filters){
-      cb.checked = filters[k];
-      cb.addEventListener("change", ()=>{
-        filters[k] = cb.checked;
-        renderGrid(external.getState ? external.getState() : loadState());
-      });
-    }
+  // Filtres
+  $all('[data-cal-filter]').forEach(cb=>{
+    cb.addEventListener("change", ()=>{ renderGrid(); renderDetails(); });
   });
+  // Liens persistants
+  $openStats?.addEventListener("click", ()=> _showTab && _showTab("stats"));
+  $openHabits?.addEventListener("click", ()=> _showTab && _showTab("habits"));
 }
 
-/* ---------- Public API ---------- */
-export function mountCalendar({ S, getState, showTab }={}){
-  external.getState = typeof getState==="function" ? getState : null;
-  external.showTab = typeof showTab==="function" ? showTab : null;
+function initialSelect(){
+  // Si le mois affiché ne contient pas la date sélectionnée, on sélectionne le 1er du mois.
+  if(!sameMonth(_selected, _current)) _selected = firstOfMonth(_current);
+}
 
-  refs = {
-    title:   document.getElementById("cal-title"),
-    prev:    document.getElementById("cal-prev"),
-    next:    document.getElementById("cal-next"),
-    grid:    document.getElementById("calendar-grid"),
-    details: document.getElementById("calendar-details"),
-    filterWrap: document.querySelector(".cal-filters")
-  };
+/* --------- API --------- */
+export function mountCalendar({ S, getState, showTab } = {}){
+  _S = S || null;
+  _getState = typeof getState==="function" ? getState : null;
+  _showTab = typeof showTab==="function" ? showTab : null;
 
-  // Init mois et rendu
-  curDate = new Date();
-  setTitleMonth(curDate);
-  bindToolbar();
-  renderGrid(S || loadState());
+  $grid = $("#calendar-grid");
+  $details = $("#calendar-details");
+  $title = $("#cal-title");
+  $prev = $("#cal-prev");
+  $next = $("#cal-next");
+  $openStats = $("#cal-open-stats");
+  $openHabits = $("#cal-open-habits");
 
-  // Pré-sélection : afficher le détail d’aujourd’hui si visible
-  const isoToday = todayKey(new Date());
-  showDayDetails(S || loadState(), isoToday);
+  initialSelect();
+  bindNav();
+  renderHeader();
+  renderGrid();
+  renderDetails();
 
   return {
-    update(newState){
-      // Appelé depuis d’autres modules (counters/habits/settings)
-      renderGrid(newState || (external.getState ? external.getState() : loadState()));
-      // Si le jour affiché est aujourd’hui, rafraîchir panel
-      showDayDetails(newState || loadState(), isoToday);
+    update(S2){
+      if(S2) _S = S2;
+      // Rerender (utile après changement de counters / filtres / mois)
+      renderHeader();
+      renderGrid();
+      renderDetails();
     }
   };
 }
-
-/* Auto-mount si utilisé seul (optionnel) */
-try {
-  if (!window.__calMounted){
-    window.__calMounted = true;
-    mountCalendar({ S: loadState() });
-  }
-} catch {}
