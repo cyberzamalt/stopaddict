@@ -1,377 +1,294 @@
-/* web/js/stats.js — 2 graphes (Quantités · Coûts/Économies) avec abscisses complètes */
-
-import { loadState, saveState, todayKey, fmtMoney } from "./state.js";
-
-/* ---------- Config ---------- */
-const KINDS = ["cigs","joints","beer","hard","liqueur"];
-const LABELS_KINDS = {
-  cigs: "Cigarettes", joints: "Joints", beer: "Bière", hard: "Alcool fort", liqueur: "Liqueur"
-};
-
-let chartQty = null;
-let chartMoney = null;
+/* web/js/stats.js — 2 graphes + abscisses complètes, Jour via S.events */
+let S, todayKey, fmtMoney, dbg;
+let chartQty = null, chartMoney = null;
 let _period = "day";
 
-/* ---------- Utils ---------- */
-function daysInMonth(y,m){ return new Date(y, m+1, 0).getDate(); }
-function toISO(d){ return d.toISOString().slice(0,10); }
-function mondayOf(date){
-  const d = new Date(date);
-  const wd = (d.getDay()+6)%7; // 0=Mon
-  d.setHours(0,0,0,0);
-  d.setDate(d.getDate()-wd);
-  return d;
+let saveStateFn = null;
+try { const m = await import('./state.js'); saveStateFn = m?.saveState; } catch {}
+
+const KINDS = ["cigs","joints","beer","hard","liqueur"];
+const SLICE_LABELS_DAY = ["0–5h","6–11h","12–17h","18–23h"];
+const WEEK_LABELS = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
+const MONTH_LABELS = (n)=>Array.from({length:n},(_,i)=>String(i+1));
+const YEAR_LABELS = ["Jan","Fév","Mar","Avr","Mai","Juin","Juil","Août","Sep","Oct","Nov","Déc"];
+
+function isEnabled(kind){
+  // Compte ce qui est activé et autorisé
+  return !!(S?.modules?.[kind]) && !!(S?.today?.active?.[kind]);
 }
-function monthNamesFR(){ return ["Jan","Fév","Mar","Avr","Mai","Juin","Juil","Aoû","Sep","Oct","Nov","Déc"]; }
+function priceOf(kind){
+  const p = Number(S?.prices?.[kind]||0);
+  return isFinite(p)?p:0;
+}
+function dayKeyFromTs(ts){
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function bucketIndexFromHour(h){
+  if (h<=5) return 0;
+  if (h<=11) return 1;
+  if (h<=17) return 2;
+  return 3;
+}
+function startOfWeek(d){ // Lundi
+  const dd = new Date(d);
+  const wd = (dd.getDay()+6)%7;
+  dd.setHours(0,0,0,0);
+  dd.setDate(dd.getDate()-wd);
+  return dd;
+}
+function endOfWeek(d){
+  const s = startOfWeek(d);
+  const e = new Date(s);
+  e.setDate(s.getDate()+6);
+  return e;
+}
+function daysInMonth(y,m){ return new Date(y,m+1,0).getDate(); }
+function keyOfDate(d){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 
-function labelsAndBuckets(period, refDate=new Date()){
-  const labels = [];
-  let bucketCount = 0;
-  let bucketIndexFromDate = ()=>0;
-  let dateKeysInBucket = ()=>({}); // for week/month/year
+/* ---------- Buckets par période ---------- */
+function buildBucketsForDay(){
+  // Quantités par tranche, coûts/économies par tranche — alimentés par S.events
+  const qty = [0,0,0,0];
+  const cost = [0,0,0,0];
+  const saved = [0,0,0,0];
 
-  const y = refDate.getFullYear();
-  const m = refDate.getMonth();
-  const d = refDate.getDate();
+  // Comptes par tranche ET par kind pour calculer économies vs objectifs
+  const perKindPerSlice = Object.fromEntries(KINDS.map(k=>[k,[0,0,0,0]]));
 
-  if (period === "day"){
-    // 4 tranches horaires : Nuit(0–5), Matin(6–11), Après-midi(12–17), Soir(18–23)
-    const L = ["Nuit 0–5","Matin 6–11","Après-midi 12–17","Soir 18–23"];
-    labels.push(...L);
-    bucketCount = 4;
-    bucketIndexFromDate = (dateObj)=>{
-      const h = dateObj.getHours();
-      if (h<=5) return 0;
-      if (h<=11) return 1;
-      if (h<=17) return 2;
-      return 3;
-    };
+  const key = todayKey(new Date());
+  const evts = Array.isArray(S?.events)?S.events:[];
+
+  for (const ev of evts){
+    const { ts, kind, delta } = ev||{};
+    if (!KINDS.includes(kind)) continue;
+    if (!isEnabled(kind)) continue;
+    if (dayKeyFromTs(ts)!==key) continue;
+
+    const h = new Date(ts).getHours();
+    const b = bucketIndexFromHour(h);
+    const inc = Number(delta||0);
+    if (!isFinite(inc) || inc===0) continue;
+
+    // On cumule les + et autorise les - (décoche) en bornant à >=0 sur le graphe final
+    perKindPerSlice[kind][b] += inc;
   }
-  else if (period === "week"){
-    const start = mondayOf(refDate);
-    for (let i=0;i<7;i++){
-      const d2 = new Date(start); d2.setDate(start.getDate()+i);
-      labels.push(["Lu","Ma","Me","Je","Ve","Sa","Di"][i]);
+
+  // Finalisation: clamp >=0, calcule coût + économies par tranche
+  for (let b=0;b<4;b++){
+    let totalUnits = 0;
+    let totalCost = 0;
+    let totalSaved = 0;
+    for (const k of KINDS){
+      if (!isEnabled(k)) continue;
+      const units = Math.max(0, perKindPerSlice[k][b]);
+      totalUnits += units;
+      totalCost  += units * priceOf(k);
+
+      // Économies ~ “objectif réparti /4” - consommation tranche
+      const goal = Number(S?.goals?.[k]||0)/4;
+      if (goal > 0 && units < goal){
+        totalSaved += (goal - units) * priceOf(k);
+      }
     }
-    bucketCount = 7;
-    dateKeysInBucket = ()=>{
-      const map = {};
-      const start2 = mondayOf(refDate);
-      for (let i=0;i<7;i++){
-        const d2 = new Date(start2); d2.setDate(start2.getDate()+i);
-        (map[i] ||= []).push(toISO(d2));
-      }
-      return map;
-    };
+    qty[b]  = totalUnits;
+    cost[b] = +totalCost.toFixed(2);
+    saved[b]= +totalSaved.toFixed(2);
   }
-  else if (period === "month"){
-    const n = daysInMonth(y, m);
-    for (let i=1;i<=n;i++) labels.push(String(i));
-    bucketCount = n;
-    dateKeysInBucket = ()=>{
-      const map = {};
-      for (let i=1;i<=bucketCount;i++){
-        const key = `${y}-${String(m+1).padStart(2,"0")}-${String(i).padStart(2,"0")}`;
-        (map[i-1] ||= []).push(key);
-      }
-      return map;
-    };
-  }
-  else { // year
-    const L = monthNamesFR();
-    labels.push(...L);
-    bucketCount = 12;
-    dateKeysInBucket = ()=>{
-      const map = {};
-      for (let i=0;i<12;i++){
-        // collect all ISO dates of month i (1..31)
-        const n = daysInMonth(y, i);
-        for (let d2=1; d2<=n; d2++){
-          const key = `${y}-${String(i+1).padStart(2,"0")}-${String(d2).padStart(2,"0")}`;
-          (map[i] ||= []).push(key);
-        }
-      }
-      return map;
-    };
-  }
-
-  return { labels, bucketCount, bucketIndexFromDate, dateKeysInBucket };
+  return { labels: SLICE_LABELS_DAY, qty, cost, saved };
 }
 
-function unitPrice(S, kind){
-  const p=S.prices, v=S.variants || {};
-  switch(kind){
-    case "cigs":
-      if(p.cigarette>0) return p.cigarette;
-      if(v.classic?.use && v.classic.packPrice>0 && v.classic.cigsPerPack>0) return v.classic.packPrice/v.classic.cigsPerPack;
-      if(v.rolled?.use && v.rolled.tobacco30gPrice>0 && v.rolled.cigsPer30g>0) return v.rolled.tobacco30gPrice/v.rolled.cigsPer30g;
-      return 0;
-    case "joints":
-      if(p.joint>0) return p.joint;
-      if(v.cannabis?.use && v.cannabis.gramPrice>0 && v.cannabis.gramsPerJoint>0) return v.cannabis.gramPrice * v.cannabis.gramsPerJoint;
-      return 0;
-    case "beer":    return p.beer>0 ? p.beer : (v.alcohol?.beer?.enabled && v.alcohol.beer.unitPrice>0 ? v.alcohol.beer.unitPrice : 0);
-    case "hard":    return p.hard>0 ? p.hard : (v.alcohol?.hard?.enabled && v.alcohol.hard.dosePrice>0 ? v.alcohol.hard.dosePrice : 0);
-    case "liqueur": return p.liqueur>0 ? p.liqueur : (v.alcohol?.liqueur?.enabled && v.alcohol.liqueur.dosePrice>0 ? v.alcohol.liqueur.dosePrice : 0);
-    default: return 0;
+function buildBucketsForWeek(){
+  const now = new Date();
+  const start = startOfWeek(now);
+  const end   = endOfWeek(now);
+  const qty = Array(7).fill(0);
+  const cost = Array(7).fill(0);
+  const saved = Array(7).fill(0);
+
+  for (let d=new Date(start); d<=end; d.setDate(d.getDate()+1)){
+    const key = keyOfDate(d);
+    const idx = (d.getDay()+6)%7; // Lundi=0
+    const h = S?.history?.[key] || {};
+    const units = KINDS.reduce((acc,k)=> acc + (isEnabled(k)?Number(h[k]||0):0), 0);
+    qty[idx]   += units;
+    cost[idx]  += Number(h.cost||0);
+    saved[idx] += Number(h.saved||0);
   }
+  return { labels: WEEK_LABELS, qty, cost: cost.map(v=>+v.toFixed(2)), saved: saved.map(v=>+v.toFixed(2)) };
 }
 
-/* Agrégation à partir du journal d’événements (si présent) pour la vue Jour */
-function aggregateFromEventsDay(S, bucketCount, bucketIndexFromDate){
-  const buckets = Array.from({length:bucketCount}, ()=>({ cigs:0,joints:0,beer:0,hard:0,liqueur:0 }));
-  const todayIso = todayKey(new Date());
-  const evts = Array.isArray(S.events) ? S.events : [];
-  for (const e of evts){
-    // attendu: { ts:number, kind:"cigs"|..., delta:number }
-    if (!e || !KINDS.includes(e.kind)) continue;
-    const dt = new Date(typeof e.ts==="number" ? e.ts : Date.parse(e.ts||""));
-    if (toISO(dt)!==todayIso) continue;
-    const b = bucketIndexFromDate(dt);
-    buckets[b][e.kind] = (buckets[b][e.kind]||0) + Number(e.delta||0);
-  }
+function buildBucketsForMonth(){
+  const d = new Date();
+  const y = d.getFullYear(), m = d.getMonth();
+  const n = daysInMonth(y,m);
+  const labels = MONTH_LABELS(n);
+  const qty = Array(n).fill(0);
+  const cost = Array(n).fill(0);
+  const saved = Array(n).fill(0);
 
-  // fallback si pas d’événements : mettre le total du jour dans la tranche "Soir"
-  const empty = buckets.every(b=> KINDS.every(k=> (b[k]||0)===0 ));
-  if (empty){
-    const today = S.history?.[todayIso] || {};
-    const idxSoir = 3;
-    for (const k of KINDS) buckets[idxSoir][k] = Number(today[k]||0);
+  for (let day=1; day<=n; day++){
+    const key = `${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const h = S?.history?.[key] || {};
+    const idx = day-1;
+    const units = KINDS.reduce((acc,k)=> acc + (isEnabled(k)?Number(h[k]||0):0), 0);
+    qty[idx]   += units;
+    cost[idx]  += Number(h.cost||0);
+    saved[idx] += Number(h.saved||0);
   }
-  return buckets;
+  return { labels, qty, cost: cost.map(v=>+v.toFixed(2)), saved: saved.map(v=>+v.toFixed(2)) };
 }
 
-/* Agrégation par dates (Semaine/Mois/Année) via S.history */
-function aggregateFromHistory(S, bucketMap){
-  const result = {};
-  for (const idx of Object.keys(bucketMap)){
-    result[idx] = { cigs:0,joints:0,beer:0,hard:0,liqueur:0, cost:0, saved:0 };
-    const keys = bucketMap[idx];
-    for (const key of keys){
-      const d = S.history?.[key] || {};
-      for (const k of KINDS) result[idx][k] += Number(d[k]||0);
-      result[idx].cost  += Number(d.cost||0);
-      result[idx].saved += Number(d.saved||0);
+function buildBucketsForYear(){
+  const y = new Date().getFullYear();
+  const labels = YEAR_LABELS.slice();
+  const qty  = Array(12).fill(0);
+  const cost = Array(12).fill(0);
+  const saved= Array(12).fill(0);
+
+  const keys = Object.keys(S?.history||{});
+  for (const key of keys){
+    if (!key.startsWith(String(y))) continue;
+    const [,mm,dd] = key.split("-");
+    const idx = Number(mm)-1;
+    const h = S.history[key]||{};
+    const units = KINDS.reduce((acc,k)=> acc + (isEnabled(k)?Number(h[k]||0):0), 0);
+    qty[idx]   += units;
+    cost[idx]  += Number(h.cost||0);
+    saved[idx] += Number(h.saved||0);
+  }
+  return { labels, qty, cost: cost.map(v=>+v.toFixed(2)), saved: saved.map(v=>+v.toFixed(2)) };
+}
+
+/* ---------- Rendu des graphes ---------- */
+function datasetMoney(label, data){
+  return { label, data, yAxisID: 'y', type:'bar' };
+}
+function datasetQty(label, data){
+  return { label, data, yAxisID: 'y', type:'bar' };
+}
+
+function render(){
+  const ctxQ = document.getElementById('chart-qty')?.getContext('2d');
+  const ctxM = document.getElementById('chart-money')?.getContext('2d');
+  if (!ctxQ || !ctxM || typeof Chart==="undefined") return;
+
+  let buckets;
+  if (_period==="day")   buckets = buildBucketsForDay();
+  else if(_period==="week")  buckets = buildBucketsForWeek();
+  else if(_period==="month") buckets = buildBucketsForMonth();
+  else                      buckets = buildBucketsForYear();
+
+  // Quantités (total par bucket)
+  if (chartQty) chartQty.destroy();
+  chartQty = new Chart(ctxQ, {
+    type: 'bar',
+    data: { labels: buckets.labels, datasets: [ datasetQty('Quantités', buckets.qty) ] },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      scales:{ y:{ beginAtZero:true } },
+      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:(c)=> ` ${c.parsed.y}` } } }
     }
-  }
-  return result;
-}
+  });
 
-/* Coûts/Économies pour la vue Jour (répartition par tranche) */
-function computeMoneyBucketsDay(S, qtyBuckets){
-  const prices = KINDS.map(k => unitPrice(S,k));
-  const goals = S.goals || {};
-  // répartir l’objectif quotidien en 4 parts (approx)
-  const goalParts = KINDS.map(k => (Number(goals[k]||0)/4));
+  // Coûts / Économies
+  if (chartMoney) chartMoney.destroy();
+  chartMoney = new Chart(ctxM, {
+    type: 'bar',
+    data: { labels: buckets.labels, datasets: [
+      datasetMoney('Coûts', buckets.cost),
+      datasetMoney('Économies', buckets.saved),
+    ]},
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      scales:{ y:{ beginAtZero:true } },
+      plugins:{ legend:{ position:'top' }, tooltip:{ callbacks:{
+        label:(c)=> (c.datasetIndex===0? 'Coût: ' : 'Économies: ') + fmtMoney(Number(c.parsed.y||0), S.currency)
+      }}}
+    }
+  });
 
-  const cost = [];
-  const saved = [];
-  for (const b of qtyBuckets){
-    // coût
-    let c = 0;
-    KINDS.forEach((k,i)=>{ c += Number(b[k]||0) * (prices[i]||0); });
-    cost.push(c);
-
-    // économies (approx par tranche)
-    let s = 0;
-    KINDS.forEach((k,i)=>{
-      const diff = Math.max(0, goalParts[i] - Number(b[k]||0));
-      s += diff * (prices[i]||0);
-    });
-    saved.push(s);
-  }
-  return { cost, saved };
-}
-
-/* ---------- Rendu ---------- */
-function buildDatasetsQty(qtysPerBucket){
-  // qtysPerBucket : [{cigs:.., joints:.., ...}, ...]
-  const byKind = {};
-  KINDS.forEach(k => byKind[k] = qtysPerBucket.map(b => Number(b[k]||0)));
-  return KINDS.map(k => ({
-    label: LABELS_KINDS[k],
-    data: byKind[k],
-    borderWidth: 1
-  }));
-}
-
-function renderCharts(){
-  const S = loadState();
-  const ref = new Date();
-  const { labels, bucketCount, bucketIndexFromDate, dateKeysInBucket } = labelsAndBuckets(_period, ref);
-
-  /* Quantités & Argent par bucket */
-  let qtyBuckets = [];
-  let money = { cost:[], saved:[] };
-
-  if (_period === "day"){
-    qtyBuckets = aggregateFromEventsDay(S, bucketCount, bucketIndexFromDate);
-    money = computeMoneyBucketsDay(S, qtyBuckets);
-  } else {
-    // Semaine/Mois/Année via history
-    const map = dateKeysInBucket();
-    const agg = aggregateFromHistory(S, map);
-    // transformer en tableau ordonné 0..n-1
-    qtyBuckets = Array.from({length:bucketCount}, (_,i)=>({
-      cigs: agg[i]?.cigs||0,
-      joints: agg[i]?.joints||0,
-      beer: agg[i]?.beer||0,
-      hard: agg[i]?.hard||0,
-      liqueur: agg[i]?.liqueur||0
-    }));
-    money.cost  = Array.from({length:bucketCount}, (_,i)=> agg[i]?.cost || 0);
-    money.saved = Array.from({length:bucketCount}, (_,i)=> agg[i]?.saved|| 0);
-  }
-
-  // Graph 1 — Quantités (multi-datasets)
-  const cvQty = document.getElementById("chart-qty");
-  if (chartQty) { chartQty.destroy(); chartQty = null; }
-  if (cvQty && typeof Chart!=="undefined"){
-    chartQty = new Chart(cvQty.getContext("2d"), {
-      type: "bar",
-      data: { labels, datasets: buildDatasetsQty(qtyBuckets) },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: { y: { beginAtZero: true } },
-        plugins: { legend: { position: "top" } }
-      }
-    });
-  }
-
-  // Graph 2 — Coûts/Économies
-  const cvMoney = document.getElementById("chart-money");
-  if (chartMoney) { chartMoney.destroy(); chartMoney = null; }
-  if (cvMoney && typeof Chart!=="undefined"){
-    chartMoney = new Chart(cvMoney.getContext("2d"), {
-      type: "bar",
-      data: {
-        labels,
-        datasets: [
-          { label: "Coûts", data: money.cost, borderWidth: 1 },
-          { label: "Économies", data: money.saved, borderWidth: 1 }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: { y: { beginAtZero: true } },
-        plugins: {
-          legend: { position: "top" },
-          tooltip: {
-            callbacks: {
-              label: (ctx)=> `${ctx.dataset.label}: ${fmtMoney(ctx.parsed.y, loadState().currency)}`
-            }
-          }
-        }
-      }
-    });
-  }
-
-  // Titre période
-  const el = document.getElementById("stats-date");
-  if (el){
+  // Date affichée (en-tête Stats)
+  const elDate = document.getElementById('stats-date');
+  if (elDate){
+    const now = new Date();
+    const fmt = (d)=> d.toLocaleDateString('fr-FR');
     if (_period==="day"){
-      el.textContent = new Date().toLocaleDateString("fr-FR");
+      elDate.textContent = fmt(now);
     } else if (_period==="week"){
-      const start = mondayOf(ref);
-      const end = new Date(start); end.setDate(start.getDate()+6);
-      el.textContent = `${start.toLocaleDateString("fr-FR")} → ${end.toLocaleDateString("fr-FR")}`;
+      const s = startOfWeek(now), e = endOfWeek(now);
+      elDate.textContent = `${fmt(s)} → ${fmt(e)}`;
     } else if (_period==="month"){
-      const first = new Date(ref.getFullYear(), ref.getMonth(), 1);
-      const last  = new Date(ref.getFullYear(), ref.getMonth()+1, 0);
-      el.textContent = `${first.toLocaleDateString("fr-FR")} → ${last.toLocaleDateString("fr-FR")}`;
+      elDate.textContent = now.toLocaleDateString('fr-FR',{month:'long', year:'numeric'});
     } else {
-      el.textContent = String(ref.getFullYear());
+      elDate.textContent = String(now.getFullYear());
     }
   }
 }
 
-/* ---------- Exports / Imports ---------- */
-function bindExports(){
-  const btnCsv = document.getElementById("btn-export-csv");
-  if (btnCsv && !btnCsv.dataset.bound){
-    btnCsv.dataset.bound = "1";
-    btnCsv.addEventListener("click", ()=>{
-      const S = loadState();
-      const rows=[["date","cigs","joints","beer","hard","liqueur","cost","saved"]];
-      const keys=Object.keys(S.history||{}).sort();
-      for(const k of keys){
-        const d=S.history[k]||{};
-        rows.push([k,d.cigs||0,d.joints||0,d.beer||0,d.hard||0,d.liqueur||0,(+d.cost||0).toFixed(2),(+d.saved||0).toFixed(2)]);
-      }
-      const csv=rows.map(r=>r.join(",")).join("\n");
-      const blob=new Blob([csv],{type:"text/csv"});
-      const a=document.createElement("a");
-      a.href=URL.createObjectURL(blob);
-      a.download="stopaddict_stats.csv";
-      document.body.appendChild(a); a.click(); a.remove();
-    });
-  }
+/* ---------- Export / Import ---------- */
+function initExportImport(){
+  document.getElementById('btn-export-csv')?.addEventListener('click', ()=>{
+    const rows = [["date","cigs","joints","beer","hard","liqueur","cost","saved"]];
+    const keys = Object.keys(S?.history||{}).sort();
+    for (const k of keys){
+      const d = S.history[k]||{};
+      rows.push([k,d.cigs||0,d.joints||0,d.beer||0,d.hard||0,d.liqueur||0,(+d.cost||0).toFixed(2),(+d.saved||0).toFixed(2)]);
+    }
+    const csv = rows.map(r=>r.join(",")).join("\n");
+    const blob = new Blob([csv],{type:"text/csv"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "stopaddict_stats.csv";
+    document.body.appendChild(a); a.click(); a.remove();
+    dbg?.push?.("Export CSV ok","ok");
+  });
 
-  const btnJson = document.getElementById("btn-export-json");
-  if (btnJson && !btnJson.dataset.bound){
-    btnJson.dataset.bound="1";
-    btnJson.addEventListener("click", ()=>{
-      const S = loadState();
-      const blob=new Blob([JSON.stringify(S,null,2)],{type:"application/json"});
-      const a=document.createElement("a");
-      a.href=URL.createObjectURL(blob);
-      a.download="stopaddict_export.json";
-      document.body.appendChild(a); a.click(); a.remove();
-    });
-  }
+  document.getElementById('btn-export-json')?.addEventListener('click', ()=>{
+    const data = { history: S?.history||{}, events: S?.events||[] };
+    const blob = new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "stopaddict_export.json";
+    document.body.appendChild(a); a.click(); a.remove();
+    dbg?.push?.("Export JSON ok","ok");
+  });
 
-  const fileImp = document.getElementById("file-import-json");
-  if (fileImp && !fileImp.dataset.bound){
-    fileImp.dataset.bound="1";
-    fileImp.addEventListener("change", async (ev)=>{
-      const f = ev.target.files?.[0];
-      if(!f) return;
-      try{
-        const text = await f.text();
-        const obj = JSON.parse(text);
-        // merge minimal sécurisé
-        const cur = loadState();
-        const merged = { ...cur, ...obj };
-        saveState(merged);
-        renderCharts();
-      }catch(e){
-        alert("Import JSON invalide.");
-      }finally{
-        ev.target.value = "";
-      }
-    });
-  }
-}
-
-function bindPeriodButtons(){
-  const map = {
-    day:   document.getElementById("btnPeriod-day"),
-    week:  document.getElementById("btnPeriod-week"),
-    month: document.getElementById("btnPeriod-month"),
-    year:  document.getElementById("btnPeriod-year"),
-  };
-  Object.entries(map).forEach(([p,btn])=>{
-    if (btn && !btn.dataset.bound){
-      btn.dataset.bound="1";
-      btn.addEventListener("click", ()=>{
-        _period = p;
-        // toggle visuel simple
-        Object.values(map).forEach(b=> b?.classList?.remove("active"));
-        btn.classList?.add("active");
-        renderCharts();
-      });
+  document.getElementById('file-import-json')?.addEventListener('change', async (ev)=>{
+    const f = ev.target.files?.[0]; if(!f) return;
+    try{
+      const text = await f.text();
+      const obj = JSON.parse(text);
+      if (obj?.history) S.history = obj.history;
+      if (obj?.events)  S.events  = obj.events;
+      saveStateFn?.(S);
+      render();
+      dbg?.push?.("Import JSON ok","ok");
+    }catch(e){
+      dbg?.push?.("Import JSON erreur: "+(e?.message||e),"err");
+      alert("Import JSON invalide.");
+    }finally{
+      ev.target.value = "";
     }
   });
 }
 
-/* ---------- Mount ---------- */
-export function mountStats(){
-  bindExports();
-  bindPeriodButtons();
-  renderCharts();
-}
+/* ---------- API publique ---------- */
+export function init(opts){
+  S = opts.S; todayKey = opts.todayKey; fmtMoney = opts.fmtMoney; dbg = opts.dbg;
 
-/* Auto-mount si chargé isolément (optionnel) */
-try { mountStats(); } catch {}
+  // Boutons période
+  document.getElementById('btnPeriod-day')?.addEventListener('click', ()=>{ _period="day"; render(); });
+  document.getElementById('btnPeriod-week')?.addEventListener('click', ()=>{ _period="week"; render(); });
+  document.getElementById('btnPeriod-month')?.addEventListener('click', ()=>{ _period="month"; render(); });
+  document.getElementById('btnPeriod-year')?.addEventListener('click', ()=>{ _period="year"; render(); });
+
+  initExportImport();
+  render();
+}
+export function refresh(nextS){
+  S = nextS || S;
+  render();
+}
