@@ -1,100 +1,58 @@
-/* web/js/settings.js — Réglages StopAddict (ES module) */
+/* web/js/settings.js — Panneau Réglages (modules, devise, prix, import/export, langue) */
+import { saveState, DefaultState } from "./state.js";
 
-export function mountSettings(opts){
+/** Montage du panneau Réglages.
+ * ctx: { S, DefaultState, saveState, persistTodayIntoHistory, updateHeader, renderChart, reflectCounters, dbg }
+ */
+export function mountSettings(ctx){
   const {
     S,
-    DefaultState,
-    saveState,
-    onModulesChanged,
-    onPricesChanged,
-    onProfileChanged,
-    onLangChanged,
-  } = opts || {};
+    persistTodayIntoHistory,
+    updateHeader,
+    renderChart,
+    reflectCounters,
+    dbg
+  } = ctx;
 
+  // ---------- Helpers ----------
   const $  = (s) => document.querySelector(s);
   const $$ = (s) => document.querySelectorAll(s);
+  const on = (el, ev, fn) => el && el.addEventListener(ev, fn);
 
-  /* ---------- Helpers callbacks ---------- */
-  const emitModulesChanged = () => { onModulesChanged?.({ ...S.modules }); };
-  const emitPricesChanged  = () => { onPricesChanged?.({ ...S.prices }); };
-  const emitProfileChanged = () => { onProfileChanged?.({ ...S.profile }); };
-  const emitLangChanged    = () => { onLangChanged?.(S.i18n?.lang || "fr"); };
-
-  /* ---------- MODULES (cases à cocher) ---------- */
-  const modIds = {
-    cigs:     "#mod-cigs",
-    joints:   "#mod-joints",
-    beer:     "#mod-beer",
-    hard:     "#mod-hard",
-    liqueur:  "#mod-liqueur",
-    alcoholG: "#mod-alcohol"
-  };
-
-  function setChecked(sel, v){
-    const el = $(sel);
-    if (el) el.checked = !!v;
-  }
-  function setDisabled(sel, v){
-    const el = $(sel);
-    if (el) el.disabled = !!v;
-  }
-
-  function syncModuleUIFromState(){
-    setChecked(modIds.cigs,     S.modules.cigs);
-    setChecked(modIds.joints,   S.modules.joints);
-    setChecked(modIds.beer,     S.modules.beer);
-    setChecked(modIds.hard,     S.modules.hard);
-    setChecked(modIds.liqueur,  S.modules.liqueur);
-    setChecked(modIds.alcoholG, S.modules.alcoholGlobal);
-
-    // Si "alcool global" actif -> désactiver visuellement les 3 autres
-    const lock = !!S.modules.alcoholGlobal;
-    setDisabled(modIds.beer,    lock);
-    setDisabled(modIds.hard,    lock);
-    setDisabled(modIds.liqueur, lock);
-  }
-
-  function enforceAlcoholExclusivity(source){
-    // Si alcool global ON -> forcer OFF beer/hard/liqueur et inactifs côté today
-    if (S.modules.alcoholGlobal){
-      S.modules.beer = false;
-      S.modules.hard = false;
-      S.modules.liqueur = false;
-      S.today.active.beer = false;
-      S.today.active.hard = false;
-      S.today.active.liqueur = false;
-    } else {
-      // Si l’un des 3 est ON -> alcool global OFF
-      if (S.modules.beer || S.modules.hard || S.modules.liqueur){
-        S.modules.alcoholGlobal = false;
-      }
-    }
+  function writeAndRefresh(note="settings:update"){
+    persistTodayIntoHistory();
     saveState(S);
-    syncModuleUIFromState();
-    emitModulesChanged();
+    reflectCounters?.();
+    updateHeader?.();
+    renderChart?.();
+    // rafraîchir conseils si dispo
+    try{ window.Tips?.updateTips?.(S); }catch{}
+    dbg?.push?.(note, "ok");
   }
 
-  // Listeners modules
-  Object.entries(modIds).forEach(([key, sel])=>{
-    const el = $(sel);
-    if (!el) return;
-    el.addEventListener("change", ()=>{
-      if (key === "alcoholG"){
-        S.modules.alcoholGlobal = !!el.checked;
-        enforceAlcoholExclusivity("alcoholG");
-      } else {
-        S.modules[key] = !!el.checked;
-        // Si on active un alcool unit, on s’assure de couper alcoolGlobal
-        if (["beer","hard","liqueur"].includes(key) && S.modules[key]){
-          S.modules.alcoholGlobal = false;
-        }
-        enforceAlcoholExclusivity(key);
-      }
-    });
+  // ---------- Dévise ----------
+  const inpCurSym = $("#currency-symbol");
+  const rbBefore  = $("#currency-before");
+  const rbAfter   = $("#currency-after");
+  const btnCur    = $("#btn-apply-currency");
+
+  if (inpCurSym) inpCurSym.value = S.currency?.symbol ?? "€";
+  if (rbBefore && rbAfter){
+    const before = !!S.currency?.before;
+    rbBefore.checked = before;
+    rbAfter.checked  = !before;
+  }
+  on(btnCur, "click", () => {
+    const before = !!$("#currency-before")?.checked;
+    S.currency = {
+      symbol: $("#currency-symbol")?.value?.trim() || "€",
+      before
+    };
+    writeAndRefresh("currency:apply");
   });
 
-  /* ---------- PRIX ---------- */
-  const priceIds = {
+  // ---------- Prix unitaires ----------
+  const mapPrice = {
     cigarette: "#price-cigarette",
     joint:     "#price-joint",
     beer:      "#price-beer",
@@ -102,175 +60,217 @@ export function mountSettings(opts){
     liqueur:   "#price-liqueur",
   };
 
-  function fillPrices(){
-    Object.entries(priceIds).forEach(([k, sel])=>{
-      const el = $(sel);
-      if (el) el.value = (Number(S.prices?.[k]) || 0).toString();
-    });
+  // init
+  for (const k in mapPrice){
+    const el = $(mapPrice[k]);
+    if (el) el.value = Number(S.prices?.[k] ?? 0);
   }
 
-  $("#btn-save-prices")?.addEventListener("click", ()=>{
-    Object.entries(priceIds).forEach(([k, sel])=>{
-      const el = $(sel);
-      S.prices[k] = Number(el?.value || 0) || 0;
-    });
-    saveState(S);
-    emitPricesChanged();
+  on($("#btn-save-prices"), "click", () => {
+    for (const k in mapPrice){
+      const el = $(mapPrice[k]);
+      if (!el) continue;
+      const v = Number(el.value || 0);
+      S.prices[k] = isFinite(v) ? v : 0;
+    }
+    writeAndRefresh("prices:save");
   });
 
-  $("#btn-reset-prices")?.addEventListener("click", ()=>{
-    const def = DefaultState();
-    S.prices = { ...def.prices };
-    saveState(S);
-    fillPrices();
-    emitPricesChanged();
+  on($("#btn-reset-prices"), "click", () => {
+    const def = DefaultState().prices;
+    for (const k in mapPrice){
+      const el = $(mapPrice[k]);
+      if (el) el.value = Number(def?.[k] ?? 0);
+      S.prices[k] = def?.[k] ?? 0;
+    }
+    writeAndRefresh("prices:reset");
   });
 
-  /* ---------- PROFIL / DEVISE ---------- */
-  // Prénom
-  const nameEl = $("#profile-name");
-  if (nameEl){
-    nameEl.value = S.profile?.name || "";
-    nameEl.addEventListener("input", ()=>{
-      S.profile.name = nameEl.value.trim();
-      saveState(S);
-      emitProfileChanged();
+  // ---------- Modules & Exclusivité “Alcool global” ----------
+  const modIds = {
+    cigs:    "#mod-cigs",
+    joints:  "#mod-joints",
+    beer:    "#mod-beer",
+    hard:    "#mod-hard",
+    liqueur: "#mod-liqueur",
+    alcohol: "#mod-alcohol", // global
+  };
+
+  // init cases Réglages depuis S.modules
+  for (const k in modIds){
+    const el = $(modIds[k]);
+    if (el) el.checked = !!S.modules[k];
+  }
+
+  function applyExclusivityFromAlcohol(){
+    const isGlobal = !!S.modules.alcohol;
+
+    // Modules exclusifs
+    S.modules.beer    = !isGlobal && S.modules.beer;
+    S.modules.hard    = !isGlobal && S.modules.hard;
+    S.modules.liqueur = !isGlobal && S.modules.liqueur;
+
+    // Actifs du jour en cohérence
+    S.today.active.alcohol = isGlobal;
+    if (isGlobal){
+      S.today.active.beer = false;
+      S.today.active.hard = false;
+      S.today.active.liqueur = false;
+    }
+
+    // UI Réglages
+    if (modIds.beer)    $(modIds.beer).checked    = !!S.modules.beer;
+    if (modIds.hard)    $(modIds.hard).checked    = !!S.modules.hard;
+    if (modIds.liqueur) $(modIds.liqueur).checked = !!S.modules.liqueur;
+
+    // UI Accueil
+    const chk = {
+      beer:    "#chk-beer-active",
+      hard:    "#chk-hard-active",
+      liqueur: "#chk-liqueur-active",
+    };
+    if (isGlobal){
+      for (const k of ["beer","hard","liqueur"]){
+        const el = $(chk[k]); if (el) el.checked = false;
+      }
+    }
+
+    writeAndRefresh("modules:alcohol:exclusive");
+  }
+
+  function mirrorModuleToTodayActive(kind){
+    // Si on active un module → on autorise aussi côté Accueil (actif du jour)
+    if (S.modules[kind]) S.today.active[kind] = true;
+    else                 S.today.active[kind] = false;
+  }
+
+  // Écouteurs sur toutes les cases Modules
+  for (const k in modIds){
+    const el = $(modIds[k]); if (!el) continue;
+    on(el, "change", () => {
+      S.modules[k] = !!el.checked;
+
+      if (k === "alcohol"){
+        applyExclusivityFromAlcohol();
+      } else {
+        // si on change beer/hard/liqueur alors que "alcohol" est actif, on empêche
+        if (S.modules.alcohol && (k==="beer"||k==="hard"||k==="liqueur")){
+          S.modules[k] = false;
+          el.checked = false;
+          dbg?.push?.(`blocked:${k}-while-alcohol`, "warn");
+        } else {
+          mirrorModuleToTodayActive(k);
+          writeAndRefresh(`modules:${k}:${S.modules[k]?"on":"off"}`);
+        }
+      }
     });
   }
 
-  // Devise
-  const symEl = $("#currency-symbol");
-  const beforeEl = $("#currency-before");
-  const afterEl  = $("#currency-after");
-
-  function fillCurrency(){
-    if (symEl) symEl.value = S.currency?.symbol ?? "€";
-    const pos = S.currency?.position || "after";
-    if (beforeEl) beforeEl.checked = (pos === "before");
-    if (afterEl)  afterEl.checked  = (pos === "after");
-  }
-
-  $("#btn-apply-currency")?.addEventListener("click", ()=>{
-    const symbol = symEl?.value || "€";
-    const pos    = beforeEl?.checked ? "before" : "after";
-    S.currency = { symbol, position: pos };
-    saveState(S);
-    emitPricesChanged(); // pour forcer re-render des montants
-  });
-
-  /* ---------- LANGUE (i18n hook léger) ---------- */
-  const langSel = $("#select-language");
-  if (langSel){
-    // Simple: FR/EN par défaut
-    const current = (S.i18n?.lang) || "fr";
-    const choices = ["fr","en"];
-    langSel.innerHTML = choices.map(c=>`<option value="${c}" ${c===current?'selected':''}>${c.toUpperCase()}</option>`).join("");
-    langSel.addEventListener("change", ()=>{
-      S.i18n = { ...(S.i18n||{}), lang: langSel.value };
-      saveState(S);
-      emitLangChanged();
-    });
-  }
-
-  /* ---------- MAINTENANCE / SAUVEGARDES ---------- */
-  $("#btn-raz-day")?.addEventListener("click", ()=>{
+  // ---------- Maintenance ----------
+  on($("#btn-raz-day"), "click", () => {
     S.today.counters = { cigs:0, joints:0, beer:0, hard:0, liqueur:0 };
-    saveState(S);
-    emitPricesChanged(); // pour rafraîchir l’entête (coûts/éco recalculés)
+    writeAndRefresh("maintenance:raz-day");
   });
 
-  $("#btn-raz-history")?.addEventListener("click", ()=>{
+  on($("#btn-raz-history"), "click", () => {
     S.history = {};
-    saveState(S);
-    emitPricesChanged();
+    writeAndRefresh("maintenance:raz-history");
   });
 
-  $("#btn-raz-factory")?.addEventListener("click", ()=>{
-    const def = DefaultState();
-    // On conserve i18n.lang si présent
-    const keepLang = S.i18n?.lang;
-    Object.keys(S).forEach(k=> delete S[k]);
-    Object.assign(S, def);
-    if (keepLang) S.i18n.lang = keepLang;
-
-    saveState(S);
-    syncModuleUIFromState();
-    fillPrices();
-    fillCurrency();
-    emitModulesChanged();
-    emitPricesChanged();
-    emitProfileChanged();
-    emitLangChanged();
+  on($("#btn-raz-factory"), "click", () => {
+    const fresh = DefaultState();
+    // On conserve éventuellement la langue si déjà choisie
+    const keepLang = S.language || fresh.language;
+    Object.assign(S, fresh);
+    S.language = keepLang;
+    writeAndRefresh("maintenance:factory");
   });
 
-  // Export / Import JSON (réglages complets)
-  $("#btn-save-json-settings")?.addEventListener("click", ()=>{
-    const blob = new Blob([JSON.stringify(S, null, 2)], { type:"application/json" });
+  // ---------- Import / Export JSON ----------
+  on($("#btn-save-json-settings"), "click", () => {
+    const blob = new Blob([JSON.stringify(S, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "stopaddict_settings.json";
-    document.body.appendChild(a); a.click(); a.remove();
+    a.download = "stopaddict_settings_export.json";
+    document.body.appendChild(a);
+    a.click(); a.remove();
+    dbg?.push?.("settings:export-json", "ok");
   });
 
-  $("#file-import-json-settings")?.addEventListener("change", async (ev)=>{
-    const file = ev.target.files?.[0];
-    if (!file) return;
+  on($("#file-import-json-settings"), "change", async (ev) => {
+    const f = ev.target.files?.[0]; if (!f) return;
     try{
-      const text = await file.text();
-      const obj = JSON.parse(text);
+      const txt = await f.text();
+      const obj = JSON.parse(txt);
 
-      // Merge très prudent
-      const def = DefaultState();
-      const merged = { ...def, ...obj };
+      // Fusion basique (priorité à l’import)
+      const base = DefaultState();
+      Object.assign(S, base, obj);
 
-      // Remplacer S (objet muté pour rester partagé)
-      Object.keys(S).forEach(k=> delete S[k]);
-      Object.assign(S, merged);
-
-      saveState(S);
-
-      // Refléter l’UI
-      syncModuleUIFromState();
-      fillPrices();
-      fillCurrency();
-      if (nameEl) nameEl.value = S.profile?.name || "";
-      if (langSel){
-        const cur = S.i18n?.lang || "fr";
-        Array.from(langSel.options).forEach(o => o.selected = (o.value === cur));
+      // Re-synchroniser UI
+      // Devise
+      if (inpCurSym) inpCurSym.value = S.currency?.symbol ?? "€";
+      if (rbBefore && rbAfter){
+        rbBefore.checked = !!S.currency?.before;
+        rbAfter.checked  = !S.currency?.before;
+      }
+      // Prix
+      for (const k in mapPrice){
+        const el = $(mapPrice[k]);
+        if (el) el.value = Number(S.prices?.[k] ?? 0);
+      }
+      // Modules
+      for (const k in modIds){
+        const el = $(modIds[k]);
+        if (el) el.checked = !!S.modules[k];
       }
 
-      emitModulesChanged();
-      emitPricesChanged();
-      emitProfileChanged();
-      emitLangChanged();
-      alert("Import des réglages réussi.");
+      writeAndRefresh("settings:import-json");
     }catch(e){
-      alert("Import invalide.");
+      alert("Import JSON invalide.");
+      dbg?.push?.("settings:import-json:err:"+ (e?.message||e), "err");
     }finally{
       ev.target.value = "";
     }
   });
 
-  /* ---------- DEBUG overlay (léger) ---------- */
-  $("#cb-debug-overlay")?.addEventListener("change", (e)=>{
-    const box = $("#debug-console");
-    if (!box) return;
-    box.classList.toggle("hide", !e.target.checked);
-  });
+  // ---------- Langue (si i18n présent) ----------
+  const selLang = $("#select-language");
+  const I18N = globalThis.I18N; // défini par js/i18n.js si inclus
+  if (selLang && I18N?.getLanguages && I18N?.applyLanguage){
+    // Remplir <select>
+    const langs = I18N.getLanguages(); // [{code, label}]
+    selLang.innerHTML = "";
+    langs.forEach(l => {
+      const opt = document.createElement("option");
+      opt.value = l.code; opt.textContent = l.label;
+      selLang.appendChild(opt);
+    });
+    // Sélection actuelle
+    if (S.language && langs.some(x => x.code === S.language)){
+      selLang.value = S.language;
+      try { I18N.applyLanguage(S.language); } catch {}
+    }
 
-  $("#btn-copy-logs")?.addEventListener("click", ()=>{
-    const txt = (S.debug?.logs || []).join("\n");
-    navigator.clipboard?.writeText(txt).catch(()=>{});
-  });
+    on(selLang, "change", () => {
+      const code = selLang.value;
+      S.language = code;
+      try { I18N.applyLanguage(code); } catch {}
+      writeAndRefresh("i18n:apply");
+    });
+  }
 
-  $("#btn-clear-logs")?.addEventListener("click", ()=>{
-    if (S.debug) S.debug.logs = [];
-    const box = $("#debug-console");
-    if (box) box.innerHTML = "";
-  });
+  // ---------- Console debug (affichage) ----------
+  const cbDbg = $("#cb-debug-overlay");
+  const dbgBox = $("#debug-console");
+  if (cbDbg && dbgBox){
+    // garder l’état
+    dbgBox.classList.toggle("hide", !cbDbg.checked);
+    on(cbDbg, "change", () => {
+      dbgBox.classList.toggle("hide", !cbDbg.checked);
+      saveState(S);
+    });
+  }
 
-  /* ---------- Initial fill ---------- */
-  syncModuleUIFromState();
-  fillPrices();
-  fillCurrency();
+  dbg?.push?.("[Settings] mounted", "ok");
 }
