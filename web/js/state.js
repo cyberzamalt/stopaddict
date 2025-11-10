@@ -1,168 +1,186 @@
-/* web/js/state.js — État global + persistance + utilitaires */
-
+/* web/js/state.js — État global, persistance & utilitaires */
 export const LS_KEY = "stopaddict_state_v3";
 export const LS_AGE = "stopaddict_age_ack";
 
-/* ---------- Utils ---------- */
-export function todayKey(d = new Date()){
+/* Date → 'YYYY-MM-DD' */
+export function todayKey(d = new Date()) {
   const y = d.getFullYear();
-  const m = String(d.getMonth()+1).padStart(2,"0");
-  const day = String(d.getDate()).padStart(2,"0");
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
-export function fmtMoney(n, currency){
-  const c = currency || { symbol:"€", position:"after" };
-  const value = Number(n||0).toLocaleString("fr-FR",{ minimumFractionDigits:2, maximumFractionDigits:2 });
-  return c.position==="before" ? `${c.symbol}${value}` : `${value}${c.symbol}`;
+/* Format monétaire avec position avant/après */
+export function fmtMoney(n = 0, currency = { symbol: "€", before: false }) {
+  const val = Number(n || 0).toFixed(2).replace(".", ",");
+  return currency.before ? `${currency.symbol}${val}` : `${val}${currency.symbol}`;
 }
 
-/* ---------- Modèle d’état ---------- */
-export function DefaultState(){
+/* État par défaut (compat monolithe) */
+export function DefaultState() {
   return {
     version: 3,
+    language: "fr",
     profile: { name: "" },
 
-    i18n: { lang: "fr" },            // mémorise la langue choisie
+    currency: { symbol: "€", before: false },
 
-    currency: { symbol:"€", position:"after" },
-
-    modules: {                        // modules disponibles
+    modules: {
       cigs: true,
-      joints: false,
-      beer: false,
-      hard: false,
-      liqueur: false,
-      alcohol: false                 // "Alcool global" (exclusif avec beer/hard/liqueur)
+      joints: true,
+      beer: true,
+      hard: true,
+      liqueur: true,
+      alcohol: false, // mode "global alcool" exclusif
     },
 
-    prices: {                         // prix unitaires directs
+    prices: {
       cigarette: 0,
       joint: 0,
       beer: 0,
       hard: 0,
-      liqueur: 0
+      liqueur: 0,
     },
 
-    variants: {                       // variantes pour calculs si prix unitaires non saisis
-      classic: { use:false, packPrice:0, cigsPerPack:20 },
-      rolled:  { use:false, tobacco30gPrice:0, cigsPer30g:40 },
-      cannabis:{ use:false, gramPrice:0, gramsPerJoint:0.3 },
+    // Variantes (utilisées dans app.js pour calculs fallback)
+    variants: {
+      classic: { use: false, packPrice: 0, cigsPerPack: 20 },
+      rolled: { use: false, tobacco30gPrice: 0, cigsPer30g: 40 },
+      cannabis: { use: false, gramPrice: 0, gramsPerJoint: 0.25 },
       alcohol: {
-        beer:    { enabled:false, unitPrice:0 },
-        hard:    { enabled:false, dosePrice:0 },
-        liqueur: { enabled:false, dosePrice:0 }
-      }
+        beer: { enabled: false, unitPrice: 0 },
+        hard: { enabled: false, dosePrice: 0 },
+        liqueur: { enabled: false, dosePrice: 0 },
+      },
     },
 
-    goals: {                          // objectifs quotidiens
-      cigs: 0, joints: 0, beer: 0, hard: 0, liqueur: 0
-    },
-
-    dates: {                          // jalons (habitudes)
-      stopGlobal:"", stopAlcohol:"",
-      stopCigs:"", reduceCigs:"", quitCigsObj:"", noMoreCigs:"",
-      stopJoints:"", reduceJoints:"", quitJointsObj:"", noMoreJoints:"",
-      reduceAlcohol:"", quitAlcoholObj:"", noMoreAlcohol:""
-    },
-
-    today: {                          // état du jour
+    today: {
       date: todayKey(),
-      counters: { cigs:0, joints:0, beer:0, hard:0, liqueur:0 },
-      active:   {                    // cases “Activer” (Accueil)
-        cigs:true, joints:true, beer:true, hard:true, liqueur:true
-      }
+      counters: { cigs: 0, joints: 0, beer: 0, hard: 0, liqueur: 0 },
+      active:  { cigs: true, joints: true, beer: true, hard: true, liqueur: true, alcohol: false },
     },
 
-    history: {                        // YYYY-MM-DD -> {cigs,joints,beer,hard,liqueur,cost,saved}
+    history: {}, // 'YYYY-MM-DD' -> {cigs,joints,beer,hard,liqueur,cost,saved}
+
+    goals: { cigs: 0, joints: 0, beer: 0, hard: 0, liqueur: 0 },
+
+    dates: {
+      stopGlobal: "",
+      stopAlcohol: "",
+      reduceCigs: "",
+      quitCigsObj: "",
+      noMoreCigs: "",
+      reduceJoints: "",
+      quitJointsObj: "",
+      noMoreJoints: "",
+      reduceAlcohol: "",
+      quitAlcoholObj: "",
+      noMoreAlcohol: "",
     },
 
-    events: [],                       // journal horodaté pour Stats avancées
-    debug: { logs: [] }
+    debug: { logs: [] },
+
+    // Journal d'événements pour Stats (Jour=4 tranches)
+    // item: { t: epoch_ms, kind: 'cigs'|'joints'|'beer'|'hard'|'liqueur'|'alcohol', delta: +1|-1, date: 'YYYY-MM-DD' }
+    events: [],
   };
 }
 
-/* ---------- Normalisation / migration ---------- */
-function normalizeState(S){
+/* Deep-merge simple (obj only) */
+function mergeDeep(base, patch) {
+  if (typeof base !== "object" || base === null) return patch;
+  const out = Array.isArray(base) ? [...base] : { ...base };
+  for (const k of Object.keys(patch || {})) {
+    const v = patch[k];
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      out[k] = mergeDeep(base[k] ?? {}, v);
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+/* Normalisation & cohérences modules ↔ today.active (incl. exclusivité alcool) */
+function normalizeState(S) {
   const D = DefaultState();
 
-  // Fusion superficielle des premières couches
-  S = Object.assign({}, D, S||{});
-  S.profile   = Object.assign({}, D.profile,   S.profile||{});
-  S.i18n      = Object.assign({}, D.i18n,      S.i18n||{});
-  S.currency  = Object.assign({}, D.currency,  S.currency||{});
-  S.modules   = Object.assign({}, D.modules,   S.modules||{});
-  S.prices    = Object.assign({}, D.prices,    S.prices||{});
-  S.goals     = Object.assign({}, D.goals,     S.goals||{});
-  S.dates     = Object.assign({}, D.dates,     S.dates||{});
-  S.today     = Object.assign({}, D.today,     S.today||{});
-  S.today.counters = Object.assign({}, D.today.counters, S.today.counters||{});
-  S.today.active   = Object.assign({}, D.today.active,   S.today.active||{});
-  S.history   = Object.assign({}, D.history,   S.history||{});
-  S.debug     = Object.assign({}, D.debug,     S.debug||{});
+  // Champs manquants → compléter
+  S.language = S.language ?? D.language;
+  S.profile  = mergeDeep(D.profile, S.profile || {});
+  S.currency = mergeDeep(D.currency, S.currency || {});
+  S.modules  = mergeDeep(D.modules, S.modules || {});
+  S.prices   = mergeDeep(D.prices, S.prices || {});
+  S.variants = mergeDeep(D.variants, S.variants || {});
+  S.today    = mergeDeep(D.today, S.today || {});
+  S.today.date = S.today.date || todayKey();
+  S.today.counters = mergeDeep(D.today.counters, S.today.counters || {});
+  S.today.active   = mergeDeep(D.today.active,   S.today.active   || {});
+  S.history  = typeof S.history === "object" && S.history ? S.history : {};
+  S.goals    = mergeDeep(D.goals, S.goals || {});
+  S.dates    = mergeDeep(D.dates, S.dates || {});
+  S.debug    = mergeDeep(D.debug, S.debug || {});
+  S.events   = Array.isArray(S.events) ? S.events : [];
 
-  // Variants (niveaux imbriqués)
-  S.variants = Object.assign({}, D.variants, S.variants||{});
-  S.variants.classic  = Object.assign({}, D.variants.classic,  (S.variants||{}).classic||{});
-  S.variants.rolled   = Object.assign({}, D.variants.rolled,   (S.variants||{}).rolled||{});
-  S.variants.cannabis = Object.assign({}, D.variants.cannabis, (S.variants||{}).cannabis||{});
-  const dvA = D.variants.alcohol, svA = (S.variants||{}).alcohol||{};
-  S.variants.alcohol = {
-    beer:    Object.assign({}, dvA.beer,    svA.beer||{}),
-    hard:    Object.assign({}, dvA.hard,    svA.hard||{}),
-    liqueur: Object.assign({}, dvA.liqueur, svA.liqueur||{})
-  };
-
-  // Evénements
-  if (!Array.isArray(S.events)) S.events = [];
-
-  // Cohérence “Alcool global” exclusif
-  if (S.modules.alcohol){
-    S.modules.beer = S.modules.hard = S.modules.liqueur = false;
-    S.today.active.beer = S.today.active.hard = S.today.active.liqueur = false;
+  // Cohérence: today.active suit modules quand absent
+  for (const k of Object.keys(D.modules)) {
+    if (typeof S.today.active[k] !== "boolean") {
+      S.today.active[k] = !!S.modules[k];
+    }
   }
 
-  // Date du jour
-  if (!S.today.date) S.today.date = todayKey();
+  // Exclusivité "alcohol" (global) ↔ (beer/hard/liqueur)
+  if (S.modules.alcohol) {
+    S.modules.beer = false;
+    S.modules.hard = false;
+    S.modules.liqueur = false;
+
+    S.today.active.alcohol = true;
+    S.today.active.beer = false;
+    S.today.active.hard = false;
+    S.today.active.liqueur = false;
+  } else {
+    // si pas global, activer actifs selon modules individuels
+    for (const k of ["beer", "hard", "liqueur"]) {
+      S.today.active[k] = !!S.modules[k];
+    }
+    S.today.active.alcohol = false;
+  }
+
+  // Taille raisonnable des logs & events
+  if (Array.isArray(S.debug.logs) && S.debug.logs.length > 1000) {
+    S.debug.logs = S.debug.logs.slice(-1000);
+  }
+  if (S.events.length > 5000) {
+    S.events = S.events.slice(-5000);
+  }
 
   return S;
 }
 
-/* ---------- Persistance ---------- */
-export function loadState(){
-  try{
+/* Chargement localStorage + upgrade */
+export function loadState() {
+  try {
     const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return DefaultState();
+    if (!raw) return normalizeState(DefaultState());
     const parsed = JSON.parse(raw);
-    return normalizeState(parsed);
-  }catch{
-    return DefaultState();
+    return normalizeState(mergeDeep(DefaultState(), parsed));
+  } catch {
+    return normalizeState(DefaultState());
   }
 }
 
-export function saveState(S){
-  try{
-    localStorage.setItem(LS_KEY, JSON.stringify(S));
-  }catch{}
+/* Sauvegarde */
+export function saveState(S) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch {}
 }
 
-/* ---------- Journal des événements (pour Stats) ---------- */
-/**
- * Enregistre un événement atomique (ex: clic +1/-1, (dé)activation, import).
- * @param {object} S état
- * @param {string} type "inc" | "dec" | "toggle" | "import" | "set" | "reset"
- * @param {object} payload { kind?, value?, active?, at? }
- */
-export function recordEvent(S, type, payload={}){
-  const at = payload.at || Date.now();
-  if (!Array.isArray(S.events)) S.events = [];
-  S.events.push({
-    at,
-    type,
-    kind: payload.kind || null,
-    value: typeof payload.value==="number" ? payload.value : null,
-    active: typeof payload.active==="boolean" ? payload.active : null
-  });
-  // bornage (éviter explosion du stockage)
-  if (S.events.length > 5000) S.events.splice(0, S.events.length - 5000);
+/* (Optionnel) utilitaire pour journaliser un événement */
+export function pushEvent(S, kind, delta) {
+  try {
+    const t = Date.now();
+    const date = todayKey(new Date(t));
+    S.events.push({ t, kind, delta: Number(delta) || 0, date });
+    if (S.events.length > 5000) S.events.shift();
+  } catch {}
 }
