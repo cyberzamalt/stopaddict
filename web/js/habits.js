@@ -1,103 +1,130 @@
-/* web/js/habits.js — Habitudes (objectifs + dates) */
+/* web/js/habits.js — Objectifs & Dates (save/reset) + notifications */
 
-export function mountHabits(opts){
-  const {
-    S,
-    DefaultState,
-    saveState,
-    onGoalsChanged,   // () => void
-    onDatesChanged,   // () => void
-  } = opts || {};
+export function mountHabits({
+  S,                        // état courant (objet mutable)
+  getState = null,          // () => S (optionnel)
+  DefaultState,             // fonction qui retourne l'état par défaut
+  saveState,                // (S) => void
+  updateHeader = null,      // () => void
+  refreshStats = null,      // () => void  (rafraîchir les 2 graphes)
+  Tips = null,              // module tips (avec .updateTips)
+  Cal = null,               // instance calendrier (avec .update)
+  dbg = null                // { push(msg, type) }
+} = {}) {
 
   const $  = (s) => document.querySelector(s);
+  const $$ = (s) => document.querySelectorAll(s);
+  const _S = () => (typeof getState === "function" ? getState() : S);
 
-  /* ---------- IDs ---------- */
-  const goalIds = {
-    cigs:    "#goal-cigs",
-    joints:  "#goal-joints",
-    beer:    "#goal-beer",
-    hard:    "#goal-hard",
-    liqueur: "#goal-liqueur",
+  // --- Utilitaires ---
+  const n = (v) => Math.max(0, Number(v || 0));
+  const setVal = (sel, val) => { const el=$(sel); if (el) el.value = val ?? ""; };
+  const on = (sel, evt, fn) => { const el=$(sel); if (el) el.addEventListener(evt, fn); };
+
+  function log(msg, type="info"){ try{ dbg?.push?.(msg, type);}catch{} }
+
+  // --- Champs objectifs ---
+  const GOAL_IDS = {
+    cigs:     "#goal-cigs",
+    joints:   "#goal-joints",
+    beer:     "#goal-beer",
+    hard:     "#goal-hard",
+    liqueur:  "#goal-liqueur",
   };
 
-  // mapping aligné sur le monolithe
-  const dateMap = [
-    ["#date-stop-global",     "stopGlobal"],
-    ["#date-stop-alcohol",    "stopAlcohol"],
+  // --- Champs dates (mapping logique -> id input) ---
+  const DATE_IDS = {
+    stopGlobal:        "#date-stop-global",
+    stopAlcohol:       "#date-stop-alcohol",
 
-    ["#date-reduce-cigs",     "reduceCigs"],
-    ["#date-quit-cigs-obj",   "quitCigsObj"],
-    ["#date-nomore-cigs",     "noMoreCigs"],
+    reduceCigs:        "#date-reduce-cigs",
+    quitCigsObj:       "#date-quit-cigs-obj",
+    noMoreCigs:        "#date-nomore-cigs",
 
-    ["#date-reduce-joints",   "reduceJoints"],
-    ["#date-quit-joints-obj", "quitJointsObj"],
-    ["#date-nomore-joints",   "noMoreJoints"],
+    reduceJoints:      "#date-reduce-joints",
+    quitJointsObj:     "#date-quit-joints-obj",
+    noMoreJoints:      "#date-nomore-joints",
 
-    ["#date-reduce-alcohol",  "reduceAlcohol"],
-    ["#date-quit-alcohol-obj","quitAlcoholObj"],
-    ["#date-nomore-alcohol",  "noMoreAlcohol"],
-  ];
+    reduceAlcohol:     "#date-reduce-alcohol",
+    quitAlcoholObj:    "#date-quit-alcohol-obj",
+    noMoreAlcohol:     "#date-nomore-alcohol",
+  };
 
-  /* ---------- Fill UI ---------- */
-  function fillGoals(){
-    Object.entries(goalIds).forEach(([k, sel])=>{
-      const el = $(sel);
-      if (!el) return;
-      el.value = Number(S.goals?.[k] ?? 0);
-    });
+  // --- Hydratation initiale ---
+  function hydrateGoals(){
+    const s=_S();
+    setVal(GOAL_IDS.cigs,    s.goals.cigs);
+    setVal(GOAL_IDS.joints,  s.goals.joints);
+    setVal(GOAL_IDS.beer,    s.goals.beer);
+    setVal(GOAL_IDS.hard,    s.goals.hard);
+    setVal(GOAL_IDS.liqueur, s.goals.liqueur);
   }
 
-  function fillDates(){
-    dateMap.forEach(([sel, key])=>{
-      const el = $(sel);
-      if (!el) return;
-      el.value = S.dates?.[key] || "";
-    });
+  function hydrateDates(){
+    const d=_S().dates || {};
+    for (const [k, sel] of Object.entries(DATE_IDS)){
+      setVal(sel, d[k] || "");
+    }
   }
 
-  /* ---------- Save / Reset ---------- */
-  function readGoalsFromUI(){
-    Object.entries(goalIds).forEach(([k, sel])=>{
-      const el = $(sel);
-      const v  = Number(el?.value ?? 0);
-      S.goals[k] = Number.isFinite(v) && v >= 0 ? v : 0;
-    });
+  // --- Sauvegardes ---
+  function saveGoals(){
+    const s=_S();
+    s.goals.cigs    = n($(GOAL_IDS.cigs)?.value);
+    s.goals.joints  = n($(GOAL_IDS.joints)?.value);
+    s.goals.beer    = n($(GOAL_IDS.beer)?.value);
+    s.goals.hard    = n($(GOAL_IDS.hard)?.value);
+    s.goals.liqueur = n($(GOAL_IDS.liqueur)?.value);
+
+    saveState(s);
+    updateAll("Objectifs enregistrés","ok");
   }
 
-  $("#btn-habits-save")?.addEventListener("click", ()=>{
-    readGoalsFromUI();
-    saveState(S);
-    onGoalsChanged?.();
-  });
+  function resetGoals(){
+    const s=_S();
+    s.goals = { ...DefaultState().goals };
+    saveState(s);
+    hydrateGoals();
+    updateAll("Objectifs réinitialisés","ok");
+  }
 
-  $("#btn-habits-reset")?.addEventListener("click", ()=>{
-    const def = DefaultState ? DefaultState() : {};
-    S.goals = { ...(def.goals || { cigs:0, joints:0, beer:0, hard:0, liqueur:0 }) };
-    saveState(S);
-    fillGoals();
-    onGoalsChanged?.();
-  });
+  function wireDateChanges(){
+    for (const [key, sel] of Object.entries(DATE_IDS)){
+      on(sel, "change", (e)=>{
+        const s=_S();
+        s.dates = s.dates || {};
+        s.dates[key] = e.target.value || "";
+        saveState(s);
+        updateAll(`Date mise à jour: ${key}`, "event");
+      });
+    }
+  }
 
-  // Dates : save on change
-  dateMap.forEach(([sel, key])=>{
-    const el = $(sel);
-    if (!el) return;
-    el.addEventListener("change", (ev)=>{
-      S.dates[key] = ev.target.value || "";
-      saveState(S);
-      onDatesChanged?.();
-    });
-  });
+  // --- Notifications globales ---
+  function updateAll(msg, type){
+    try { updateHeader?.(); } catch {}
+    try { refreshStats?.(); } catch {}
+    try { Tips?.updateTips?.(_S()); } catch {}
+    try { Cal?.update?.(_S()); } catch {}
+    log(msg, type);
+  }
 
-  /* ---------- Initial ---------- */
-  fillGoals();
-  fillDates();
+  // --- Câblage boutons ---
+  on("#btn-habits-save",  "click", saveGoals);
+  on("#btn-habits-reset", "click", resetGoals);
 
-  /* ---------- API légère ---------- */
+  // --- Init ---
+  hydrateGoals();
+  hydrateDates();
+  wireDateChanges();
+
+  log("Habits prêt", "ok");
+
+  // API minimale si besoin
   return {
     refresh(){
-      fillGoals();
-      fillDates();
+      hydrateGoals();
+      hydrateDates();
     }
   };
 }
