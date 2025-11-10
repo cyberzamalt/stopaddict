@@ -189,3 +189,48 @@ a:hover{ color:#d6e6ff }
 /* ===== Misc ===== */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button{ -webkit-appearance: none; margin:0 }
+
+/* ==== Dialogs (AgeGate + Resources) : au-dessus & scroll interne ==== */
+
+/* Style commun aux <dialog> (top layer) */
+dialog{
+  border:0;
+  border-radius:12px;
+  background:#0b1020;
+  color:#eaf0ff;
+  padding:0;
+  box-shadow:0 10px 40px rgba(0,0,0,.45);
+}
+
+/* Backdrop sombre lisible */
+dialog::backdrop{
+  background:rgba(2,6,23,.55);
+  backdrop-filter:blur(1px);
+}
+
+/* Ordre d’empilement : Resources au-dessus de l’AgeGate */
+#agegate{ z-index:100001; }
+#resources-dialog{ z-index:100002; }
+
+/* Mise en page du contenu du dialog Ressources */
+#resources-dialog .agegate{
+  display:grid;
+  gap:.6rem;
+  min-width:280px;
+  max-width:640px;
+  padding:1rem;
+}
+
+/* Scroll interne de la liste (pas la page) */
+#resources-dialog #resources-body{
+  max-height:55vh;
+  overflow:auto;
+}
+
+/* Alignement des boutons dans les footers */
+#resources-dialog .actions,
+#agegate .actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:.5rem;
+}
