@@ -1,7 +1,7 @@
-/* web/js/resources.js — Dialog Ressources & numéros utiles (unique, non gélant) */
+/* web/js/resources.js — Ressources & numéros utiles (FR) */
+/* Objectif: vrai modal (showModal), 1 seule instance, bouton Fermer, un seul lien injecté dans l’AgeGate, pas de “gel”. */
 
-/* --------- Données FR par défaut --------- */
-const RESOURCES = [
+export const RESOURCES = [
   {
     group: "Urgences",
     items: [
@@ -42,122 +42,160 @@ const RESOURCES = [
   }
 ];
 
-/* --------- UI --------- */
-function buildDialogContent(dlg) {
-  dlg.innerHTML = `
-    <form method="dialog" class="agegate" style="min-width:280px">
-      <h3>Ressources & numéros utiles</h3>
+let _dlg = null;
+
+/* ---------- Construction dialog (1 seule instance) ---------- */
+function buildDialog() {
+  // Si déjà présent dans le DOM, réutiliser
+  const existing = document.getElementById("resources-dialog");
+  if (existing) {
+    _dlg = existing;
+    if (!_dlg.dataset.wired) wireDialogOnce(_dlg);
+    return _dlg;
+  }
+
+  // Créer le <dialog>
+  _dlg = document.createElement("dialog");
+  _dlg.id = "resources-dialog";
+  _dlg.setAttribute("aria-label", "Ressources et numéros utiles");
+  // Laisse le style aux CSS (z-index/backdrop), ici structure simple
+  _dlg.innerHTML = `
+    <form method="dialog" class="agegate" style="min-width:280px;max-width:640px">
+      <h3 style="margin:0 0 .25rem 0">Ressources & numéros utiles</h3>
       <div id="resources-body" style="max-height:55vh;overflow:auto;margin:.5rem 0;"></div>
-      <div class="actions" style="justify-content:flex-end"><button id="res-close" class="btn">Fermer</button></div>
+      <div class="actions" style="justify-content:flex-end">
+        <button id="res-close" class="btn">Fermer</button>
+      </div>
     </form>
   `;
+  document.body.appendChild(_dlg);
 
-  const body = dlg.querySelector("#resources-body");
+  // Remplir la liste
+  const body = _dlg.querySelector("#resources-body");
+  body.textContent = ""; // reset
   RESOURCES.forEach(group => {
-    const block = document.createElement("div");
-    block.style.marginBottom = ".6rem";
+    const wrap = document.createElement("div");
+    wrap.style.marginBottom = ".6rem";
 
     const h = document.createElement("h4");
     h.textContent = group.group;
     h.style.margin = "0 0 .35rem 0";
-    block.appendChild(h);
+    wrap.appendChild(h);
 
     group.items.forEach(it => {
       const line = document.createElement("div");
       line.className = "tip-line";
-      const tel = it.number ? `<a href="tel:${it.number.replace(/\s+/g,'')}" rel="nofollow">${it.number}</a>` : "";
-      const site = it.site ? ` — <a href="${it.site}" target="_blank" rel="noopener">site</a>` : "";
+      const tel = it.number
+        ? `<a href="tel:${String(it.number).replace(/\s+/g,'')}" style="text-decoration:underline">${it.number}</a>`
+        : "";
+      const site = it.site
+        ? ` — <a href="${it.site}" target="_blank" rel="noopener">site</a>`
+        : "";
       line.innerHTML = `<strong>${it.label}</strong> — ${tel}${site}`;
-      block.appendChild(line);
+      wrap.appendChild(line);
     });
 
-    body.appendChild(block);
+    body.appendChild(wrap);
   });
 
-  dlg.querySelector("#res-close")?.addEventListener("click", () => {
-    try { dlg.close(); } catch {}
-  });
+  wireDialogOnce(_dlg);
+  return _dlg;
+}
 
-  // ESC pour fermer, utile si ouvert en non-modal (show())
-  dlg.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
+/* ---------- Wiring dialog (une seule fois) ---------- */
+function wireDialogOnce(dlg) {
+  if (dlg.dataset.wired === "1") return;
+  dlg.dataset.wired = "1";
+
+  const btnClose = dlg.querySelector("#res-close");
+  if (btnClose) {
+    btnClose.addEventListener("click", (e) => {
       e.preventDefault();
-      try { dlg.close(); } catch {}
-    }
-  });
-}
-
-function ensureDialog() {
-  let dlg = document.getElementById("resources-dialog");
-  if (!dlg) {
-    dlg = document.createElement("dialog");
-    dlg.id = "resources-dialog";
-    dlg.setAttribute("aria-label", "Ressources et numéros utiles");
-    document.body.appendChild(dlg);
-    buildDialogContent(dlg);
+      closeResources();
+    }, { once: false });
   }
-  return dlg;
+
+  // ESC ferme (événement cancel sur <dialog>)
+  dlg.addEventListener("cancel", (e) => {
+    // laisser le comportement par défaut, puis garantir l’état propre
+    setTimeout(closeResources, 0);
+  });
+
+  // Double sécurité: si l’API dialog n’est pas dispo, on simule l’ouverture/fermeture par classe.
+  if (typeof dlg.showModal !== "function") {
+    dlg.classList.add("hide");
+  }
 }
 
+/* ---------- API ---------- */
 export function openResources() {
-  const dlg = ensureDialog();
-  const age = document.getElementById("agegate");
-  const ageOpen = !!(age && age.open);
-
-  // Évite le gel / la superposition bloquante : si AgeGate est ouvert, on ouvre en non-modal
+  const dlg = buildDialog();
   try {
-    if (ageOpen) {
-      dlg.show(); // non-modal au-dessus via CSS (z-index)
-      dlg.style.zIndex = 1002;
+    if (typeof dlg.showModal === "function") {
+      if (!dlg.open) dlg.showModal();
     } else {
-      dlg.showModal();
-      dlg.style.removeProperty("z-index");
+      dlg.classList.remove("hide");
+      dlg.setAttribute("open", "");
     }
   } catch {
-    dlg.show(); // fallback
-    dlg.style.zIndex = 1002;
+    // Fallback dur
+    dlg.classList.remove("hide");
+    dlg.setAttribute("open", "");
+  }
+  // Mettre le focus dans le dialog (évite “gel” perçu)
+  const firstBtn = dlg.querySelector("#res-close");
+  firstBtn?.focus({ preventScroll: true });
+}
+
+export function closeResources() {
+  if (!_dlg) return;
+  try {
+    if (_dlg.open && typeof _dlg.close === "function") _dlg.close();
+    _dlg.classList.add("hide");
+    _dlg.removeAttribute("open");
+  } catch {
+    _dlg.classList.add("hide");
+    _dlg.removeAttribute("open");
   }
 }
 
-function injectAgeGateLink() {
-  const ageForm = document.querySelector("#agegate .agegate");
-  if (!ageForm) return;
+/* ---------- Mount: bouton Réglages + lien injecté dans l’AgeGate (anti-doublon) ---------- */
+export function mountResources() {
+  // Bouton dans Réglages
+  const btn = document.getElementById("btn-resources");
+  if (btn && btn.dataset.wiredRes !== "1") {
+    btn.addEventListener("click", (e) => { e.preventDefault(); openResources(); });
+    btn.dataset.wiredRes = "1";
+  }
 
-  // Empêche les doublons : on vérifie l'existence par un sélecteur unique
-  if (!ageForm.querySelector("[data-resources-link='1']")) {
+  // Lien unique dans l’AgeGate
+  const ageForm = document.querySelector("#agegate .agegate");
+  if (ageForm && !ageForm.querySelector("[data-resources-link]")) {
     const p = document.createElement("p");
     p.style.margin = "0 0 .4rem 0";
-    p.innerHTML = `Besoin d'aide ? <a href="#" data-resources-link="1">Ressources et numéros utiles</a>`;
-    // Après le titre si présent, sinon au début
-    ageForm.insertBefore(p, ageForm.children[1] || ageForm.firstChild);
+    const a = document.createElement("a");
+    a.href = "#";
+    a.textContent = "Ressources et numéros utiles";
+    a.setAttribute("data-resources-link", "1");
+    p.append("Besoin d'aide ? ", a);
+    // Injection après le titre si possible
+    const after = ageForm.firstElementChild?.nextSibling || ageForm.firstChild;
+    ageForm.insertBefore(p, after);
   }
-
-  const link = ageForm.querySelector("[data-resources-link='1']");
-  if (link && !link.dataset.bound) {
-    link.dataset.bound = "1";
-    link.addEventListener("click", (e) => {
-      e.preventDefault();
-      openResources();
-    });
-  }
-}
-
-function bindSettingsButton() {
-  const btn = document.getElementById("btn-resources");
-  if (btn && !btn.dataset.bound) {
-    btn.dataset.bound = "1";
-    btn.addEventListener("click", openResources);
+  const link = document.querySelector("#agegate .agegate [data-resources-link]");
+  if (link && link.dataset.wiredRes !== "1") {
+    link.addEventListener("click", (e) => { e.preventDefault(); openResources(); });
+    link.dataset.wiredRes = "1";
   }
 }
 
-export function mountResources() {
-  // Monte le bouton (Réglages) + lien unique dans l’AgeGate
-  bindSettingsButton();
-  injectAgeGateLink();
-
-  // Si le dialog existe déjà (hot reload), s’assurer qu’il est correctement construit
-  ensureDialog();
+/* ---------- Auto-mount robuste (multi-passes sans doublons) ---------- */
+function tryMountLater() { try { mountResources(); } catch {} }
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", tryMountLater, { once: true });
+} else {
+  tryMountLater();
 }
-
-/* Auto-mount à l’import du module */
-try { mountResources(); } catch {}
+// En cas de rendu tardif de l’AgeGate, observer le DOM et monter une seule fois.
+const _mo = new MutationObserver(() => tryMountLater());
+_mo.observe(document.documentElement, { childList: true, subtree: true });
