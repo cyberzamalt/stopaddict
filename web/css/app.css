@@ -1,23 +1,266 @@
-/* web/css/app.css — utils + empilement des modales */
+/* =========================================================
+   StopAddict — web/css/app.css
+   Objectif : look "appli", modales centrées, grilles propres
+   ========================================================= */
 
-/* Toujours utile partout */
-.hide{display:none!important}
-
-/* Dialogs (AgeGate & Ressources) */
-dialog{
-  border:0;
-  border-radius:1rem;
-  background:#0b1020;
-  color:#eaf0ff;
-  padding:1rem;
+/* ---------- Base / Reset léger ---------- */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  color: #111827;
+  background: #f3f4f6; /* fond doux "app" */
 }
 
+/* Utilitaires */
+.hide { display: none !important; }
+
+/* Boutons & inputs */
+button, input, select {
+  font: inherit;
+}
+.btn {
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 10px;
+  padding: .45rem .7rem;
+  cursor: pointer;
+  transition: transform .04s ease, background .2s ease, box-shadow .2s ease;
+  box-shadow: 0 1px 0 rgba(0,0,0,.03);
+}
+.btn:hover { background: #f9fafb; }
+.btn:active { transform: translateY(1px); }
+.btn.small { padding: .3rem .55rem; border-radius: 8px; }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+input[type="number"], input[type="text"], input[type="date"], select {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #fff;
+  padding: .45rem .6rem;
+}
+
+/* ---------- Wrapper "app" ---------- */
+.app {
+  max-width: 520px;           /* largeur type téléphone large */
+  margin: 18px auto;
+  background: #fff;
+  border-radius: 18px;
+  box-shadow:
+    0 10px 24px rgba(0,0,0,.08),
+    0 2px 6px rgba(0,0,0,.05);
+  padding: 14px;
+}
+
+/* ---------- En-tête ---------- */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.app-header h1 {
+  font-size: 22px;
+  margin: 0 0 2px 0;
+}
+.date-line { font-size: 12px; color: #6b7280; display: flex; gap: 8px; align-items: center; }
+.status-dot {
+  display: inline-block;
+  width: 14px; height: 14px;
+  border-radius: 4px;
+  background: #1f2b48; color:#fff;
+  text-align:center; line-height:14px; font-size:11px;
+}
+.kpis { display:flex; gap:10px; flex-wrap:wrap; }
+.kpi { background:#f3f4f6; border-radius:10px; padding:.25rem .45rem; font-size:12px; }
+.kpi strong { font-weight:700; margin-left:.2rem; }
+
+/* ---------- Onglets ---------- */
+.tabs {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  margin: 8px 0 10px 0;
+}
+.tabs .tab {
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 999px;
+  padding: .35rem .75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tabs .tab.active {
+  background: #111827;
+  color: #fff;
+  border-color: #111827;
+}
+
+/* ---------- Pages ---------- */
+.pages section { margin-top: 6px; }
+
+/* ---------- Accueil : compteurs ---------- */
+.counters-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+@media (min-width: 410px) {
+  .counters-grid { grid-template-columns: 1fr 1fr; }
+}
+.counter-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: .7rem;
+  background: #fff;
+}
+.counter-card h2 {
+  margin: 0 0 .4rem 0;
+  font-size: 16px;
+}
+.ctr-row {
+  display: grid;
+  grid-template-columns: 40px 1fr 40px;
+  align-items: center;
+  gap: 8px;
+  margin: .4rem 0;
+}
+.ctr-row .btn { font-size: 18px; }
+.ctr-val {
+  text-align: center;
+  font: 700 20px/1 "Segoe UI", Roboto, Arial, sans-serif;
+  padding: .35rem .5rem;
+  background: #f9fafb;
+  border-radius: 10px;
+}
+.toggle { display:flex; align-items:center; gap:6px; font-size: 13px; color:#374151; }
+
+/* ---------- Conseils ---------- */
+.tips-panel {
+  margin-top: 12px;
+  padding: .7rem .8rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #f9fafb;
+}
+
+/* ---------- Stats (graphiques) ---------- */
+.kpi-block { margin: .2rem 0 .5rem 0; }
+.chart-actions { display:flex; gap:6px; flex-wrap:wrap; margin-bottom: 8px; }
+.chart-block {
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: .5rem;
+  background: #fff;
+}
+.chart-block canvas { width: 100% !important; height: 240px !important; display:block; }
+
+/* ---------- Calendrier ---------- */
+.calendar-toolbar {
+  display:flex; align-items:center; justify-content:space-between;
+  gap:10px; margin-bottom:8px;
+}
+.cal-title { font-weight:700; }
+.cal-filters label { margin-right: 6px; font-size: 13px; }
+
+.cal-grid {
+  display:grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.cal-grid .day {
+  min-height: 62px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: .35rem;
+  background: #fff;
+  display:flex; flex-direction:column; gap:6px;
+}
+.cal-grid .day .d {
+  font-size: 12px; color: #6b7280; font-weight: 600;
+}
+.cal-details {
+  margin-top: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: .6rem;
+  background: #f9fafb;
+}
+.cal-links { margin-top: 8px; display:flex; gap:8px; }
+
+/* ---------- Habitudes / Réglages ---------- */
+.section-title { margin: .8rem 0 .4rem 0; font-size: 16px; }
+.grid-2 {
+  display:grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+@media (min-width: 420px) {
+  .grid-2 { grid-template-columns: 1fr 1fr; }
+}
+.actions { display:flex; gap:8px; flex-wrap:wrap; margin: 8px 0; }
+
+/* ---------- Debug console ---------- */
+#debug-console {
+  border: 1px dashed #d1d5db;
+  background: #fafafa;
+  color: #111827;
+  padding: .5rem;
+  border-radius: 10px;
+  max-height: 200px;
+  overflow: auto;
+  font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+.debug-line { white-space: pre-wrap; }
+
+/* =========================================================
+   Modales (AgeGate & Ressources) — vraies modales centrées
+   Ressources au-dessus de l’AgeGate (ordre z-index)
+   ========================================================= */
+
+/* Style commun */
+dialog {
+  border: 0;
+  border-radius: 14px;
+  background: #0b1020;     /* thème sombre pour contraste */
+  color: #eaf0ff;
+  padding: 16px;
+  width: min(560px, 92vw);
+  max-height: 80vh;
+  overflow: auto;
+  box-shadow: 0 24px 50px rgba(0,0,0,.35);
+}
+
+/* Centrage + empilement */
+#agegate,
+#resources-dialog {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+}
+#agegate { z-index: 1000; }
+#resources-dialog { z-index: 1100; } /* Ressources au-dessus */
+
 /* Backdrops (assombrir le fond) */
-dialog::backdrop{ background:rgba(2,6,23,.5) }
+dialog::backdrop { background: rgba(0,0,0,.55); }
+/* Même si le pseudo n'accepte pas z-index, on garde l’ordre par l’élément au-dessus */
 
-/* Assure l’ordre: Ressources au-dessus de l’AgeGate */
-#agegate{ position:fixed; inset:auto; z-index:1000 }
-#agegate::backdrop{ background:rgba(2,6,23,.5) }
+/* Contenu interne typé */
+.agegate h3 { margin: 0 0 6px 0; font-size: 20px; }
+.agegate p  { margin: 0 0 10px 0; color:#cbd5e1; }
+.agegate label { display:block; margin: 8px 0; color:#e5e7eb; }
+.agegate .actions { display:flex; gap:8px; justify-content:flex-end; }
 
-#resources-dialog{ position:fixed; inset:auto; z-index:1100 }
-#resources-dialog::backdrop{ background:rgba(2,6,23,.6) }
+.resources { display:flex; flex-direction:column; gap: 10px; }
+.resources h4 { margin: 0; font-size: 16px; }
+.resources ul { margin: 6px 0 0 0; padding: 0 0 0 16px; }
+.resources a { color:#93c5fd; text-decoration: underline; }
+
+/* ---------- Accessibilité & micro-interactions ---------- */
+a { color: #111827; }
+a:hover { text-decoration: underline; }
+label { user-select: none; }
+
+/* ---------- Petits raffinements ---------- */
+hr { border: none; border-top: 1px solid #e5e7eb; margin: 10px 0; }
