@@ -1,142 +1,166 @@
 /* ============================================================
-   StopAddict — advices.js  (v3, one-shot)
-   Rôle : messages de conseils personnalisés selon :
-           - prénom (si fourni)
-           - langue choisie (fr / en)
-           - état : en réduction, en maintien, en arrêt
-           - rotation automatique toutes les 20 s
-   API   : StopAddictAdvices.init({ S })
-           StopAddictAdvices.refresh({ S })
+   StopAddict v3 — advices.js
+   Conseils dynamiques contextuels (personnalisés & multi-langues)
    ============================================================ */
-
 (function () {
   "use strict";
 
-  const $ = (id) => document.getElementById(id);
-  const ADVICE_DELAY = 20000; // ms entre chaque rotation
+  const panel = document.getElementById("advice-panel");
+  if (!panel) return;
+
+  let advices = [];
   let timer = null;
-  let index = 0;
 
-  // ====== Bibliothèque multilingue de conseils ======
-  const advicesLib = {
-    fr: {
-      reduction: [
-        "Chaque clope évitée est déjà une victoire, {{name}} !",
-        "Rappelle-toi pourquoi tu as commencé : la santé, la liberté, la fierté.",
-        "Un pas à la fois suffit pour changer ta vie.",
-        "Garde le cap ! Le changement durable se construit jour après jour."
-      ],
-      maintien: [
-        "Ta constance paie, {{name}}. Continue sur cette lancée !",
-        "Tu deviens un exemple pour ceux qui t’entourent.",
-        "Ton corps te remercie déjà !",
-        "Chaque jour sans excès renforce ton équilibre."
-      ],
-      arret: [
-        "Bravo {{name}} ! Ton arrêt marque un vrai tournant.",
-        "Respire profondément : c’est la liberté.",
-        "Tu viens de gagner une journée de plus sans dépendance.",
-        "Souviens-toi du chemin parcouru et célèbre-le !"
-      ]
-    },
-    en: {
-      reduction: [
-        "Every skipped cigarette is a small victory, {{name}}!",
-        "Remember why you started: health, freedom, pride.",
-        "Step by step, change becomes real.",
-        "Keep going – sustainable change builds day by day."
-      ],
-      maintien: [
-        "Consistency pays off, {{name}}!",
-        "You’re becoming an inspiration to others.",
-        "Your body already thanks you.",
-        "Every balanced day strengthens your new habits."
-      ],
-      arret: [
-        "Congrats {{name}} – that’s real freedom!",
-        "Breathe deeply: you’ve reclaimed your control.",
-        "Another day free from addiction!",
-        "Celebrate the journey you’ve completed."
-      ]
+  /* ---------- Chargement JSON multi-langue ---------- */
+  async function loadAdvices(lang = "fr") {
+    const path = `./i18n/advices_${lang}.json`;
+    try {
+      const res = await fetch(path);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      advices = data;
+      console.info(`[advices] Fichier chargé : ${path}`);
+    } catch (e) {
+      console.warn(`[advices] Échec chargement (${path}), fallback en français.`, e);
+      if (lang !== "fr") await loadAdvices("fr");
     }
-  };
-
-  // ====== Déterminer état utilisateur ======
-  function getUserState(S) {
-    const stopDate = S.habits?.stopDate || null;
-    const today = (window.StopAddictState && StopAddictState.todayLocalISO())
-      ? StopAddictState.todayLocalISO()
-      : new Date().toISOString().slice(0, 10);
-
-    const counters = S.today?.counters || {};
-    const total = (counters.cigs || 0) + (counters.weed || 0) + (counters.alcohol || 0) +
-                  (counters.beer || 0) + (counters.hard || 0) + (counters.liqueur || 0);
-
-    if (stopDate && today >= stopDate && total === 0) return "arret";
-    if (total > 0 && total < 5) return "maintien";
-    return "reduction";
   }
 
-  // ====== Sélection d’un conseil ======
+  /* ---------- Sélection de conseil ---------- */
   function pickAdvice(S) {
-    const lang = (S.profile?.lang || "fr") in advicesLib ? S.profile.lang : "fr";
-    const state = getUserState(S);
-    const list = advicesLib[lang][state] || advicesLib.fr.reduction;
-    if (!list.length) return "";
-    const msg = list[index % list.length];
-    index++;
-    const name = (S.profile?.name || "").trim() || (lang === "fr" ? "toi" : "you");
-    return msg.replace("{{name}}", name);
-  }
+    const now = new Date();
+    const dayData = S.today;
+    const total = dayData.counters.cigs + dayData.counters.joints + dayData.counters.alcohol;
 
-  // ====== Affichage ======
-  function showAdvice(S) {
-    let panel = document.getElementById("advice-panel");
-    if (!panel) {
-      // création si absent (footer léger)
-      panel = document.createElement("div");
-      panel.id = "advice-panel";
-      panel.style.cssText = `
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        background: #0b1220;
-        color: #fff;
-        padding: .6rem 1rem;
-        text-align: center;
-        font-size: .95rem;
-        z-index: 9999;
-        box-shadow: 0 -2px 6px rgba(0,0,0,0.25);
-      `;
-      document.body.appendChild(panel);
+    // --- Cas particuliers selon contexte ---
+    // 1. Jour d’arrêt
+    if (S.habits.stopDate && isToday(S.habits.stopDate)) {
+      return pickFromCategory("stop_day", S);
     }
 
-    const msg = pickAdvice(S);
-    panel.textContent = msg || "";
+    // 2. Habitudes + prix -> économies
+    const hasPrices = Object.values(S.prices).some(v => v > 0);
+    const hasHabits = Object.values(S.habits.goal).some(v => v);
+    if (hasPrices && hasHabits) {
+      return pickFromCategory("economy", S);
+    }
+
+    // 3. Streak (nombre de jours depuis arrêt)
+    if (S.habits.stopDate) {
+      const diff = daysSince(S.habits.stopDate);
+      if ([1, 7, 30].includes(diff)) {
+        return pickFromCategory(`milestone_${diff}`, S);
+      }
+    }
+
+    // 4. Si aucune condition spéciale
+    return pickFromCategory("motivation", S);
   }
 
-  // ====== Rotation automatique ======
-  function startRotation(S) {
+  function pickFromCategory(cat, S) {
+    const lang = S.profile.lang || "fr";
+    const pool = (advices.find(a => a.category === cat)?.messages) || [];
+    if (pool.length === 0) return fallbackAdvice(cat, lang, S);
+    const text = pool[Math.floor(Math.random() * pool.length)];
+    return personalize(text, S);
+  }
+
+  function fallbackAdvice(cat, lang, S) {
+    const t = {
+      fr: {
+        stop_day: "C'est ton grand jour d'arrêt, bravo pour ce pas vers la liberté !",
+        economy: "Pense à ce que tu économises à chaque cigarette non fumée 💰",
+        motivation: "Chaque petite victoire compte. Continue !",
+        milestone_1: "1 jour sans consommer ! Le premier pas est fait !",
+        milestone_7: "Une semaine ! Tu tiens bon 💪",
+        milestone_30: "1 mois complet ! C’est déjà un vrai changement 👏"
+      },
+      en: {
+        stop_day: "It's your quit day — congrats on taking back your freedom!",
+        economy: "Think of all the money you're saving 💰",
+        motivation: "Every little victory matters. Keep going!",
+        milestone_1: "1 day clean — first step done!",
+        milestone_7: "A full week! You're doing great 💪",
+        milestone_30: "30 days strong — this is transformation 👏"
+      }
+    };
+    return personalize(t[lang]?.[cat] || t.fr.motivation, S);
+  }
+
+  /* ---------- Personnalisation du texte ---------- */
+  function personalize(txt, S) {
+    const name = S.profile.name || (S.profile.lang === "en" ? "friend" : "ami");
+    const currency = S.profile.currency || "€";
+    const lang = S.profile.lang || "fr";
+    const saving = estimateSaving(S);
+    return txt
+      .replace(/\{name\}/g, name)
+      .replace(/\{saving\}/g, saving.toFixed(2) + " " + currency)
+      .replace(/\{lang\}/g, lang.toUpperCase());
+  }
+
+  /* ---------- Économie estimée ---------- */
+  function estimateSaving(S) {
+    const goals = S.habits.goal;
+    const ref = (goals.cigs || 0) + (goals.joints || 0) + (goals.alcohol || 0);
+    const act = (S.today.counters.cigs || 0) + (S.today.counters.joints || 0) + (S.today.counters.alcohol || 0);
+    const diff = ref > 0 ? ref - act : 0;
+    const avg = mean(Object.values(S.prices));
+    return Math.max(0, diff * avg);
+  }
+
+  function mean(arr) {
+    const vals = arr.filter(v => Number.isFinite(v));
+    return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
+  }
+
+  /* ---------- Rotation automatique ---------- */
+  function rotate(S) {
     clearInterval(timer);
     showAdvice(S);
-    timer = setInterval(() => showAdvice(S), ADVICE_DELAY);
+    timer = setInterval(() => showAdvice(S), 20000);
   }
 
-  // ====== API publique ======
-  const AdvicesAPI = {
-    init(ctx) {
-      const S = ctx?.S || window.S;
+  function showAdvice(S) {
+    if (!panel) return;
+    const msg = pickAdvice(S);
+    panel.textContent = msg;
+  }
+
+  /* ---------- Fonctions utilitaires ---------- */
+  function daysSince(dateStr) {
+    const d1 = new Date(dateStr);
+    const d2 = new Date();
+    return Math.floor((d2 - d1) / (1000 * 60 * 60 * 24));
+  }
+
+  function isToday(dateStr) {
+    return new Date().toISOString().slice(0,10) === dateStr;
+  }
+
+  /* ---------- API publique ---------- */
+  window.Advices = {
+    refresh() {
+      const S = window.S;
       if (!S) return;
-      startRotation(S);
+      if (advices.length === 0) {
+        loadAdvices(S.profile.lang).then(() => rotate(S));
+      } else {
+        rotate(S);
+      }
     },
-    refresh(ctx) {
-      const S = ctx?.S || window.S;
-      if (!S) return;
-      startRotation(S);
+    showMilestone(days) {
+      const lang = window.S?.profile.lang || "fr";
+      const key = `milestone_${days}`;
+      const pool = (advices.find(a => a.category === key)?.messages) || [];
+      const txt = pool.length ? pool[Math.floor(Math.random()*pool.length)] : fallbackAdvice(key, lang, window.S);
+      panel.textContent = personalize(txt, window.S);
     }
   };
 
-  // ====== Expose ======
-  window.StopAddictAdvices = AdvicesAPI;
+  // Premier déclenchement au démarrage
+  document.addEventListener("DOMContentLoaded", () => {
+    setTimeout(() => window.Advices.refresh(), 1000);
+  });
+
 })();
