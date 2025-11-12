@@ -1,105 +1,142 @@
-// web/js/advices.js
-// Carte “Conseil du jour” : chargement JSON (fallback interne),
-// navigation ◀, pause ⏸ (toggle play/stop), personnalisation basique possible si besoin.
-// Aucune dépendance forte : si settings/state indisponibles, on affiche une liste par défaut.
+/* ============================================================
+   StopAddict — advices.js  (v3, one-shot)
+   Rôle : messages de conseils personnalisés selon :
+           - prénom (si fourni)
+           - langue choisie (fr / en)
+           - état : en réduction, en maintien, en arrêt
+           - rotation automatique toutes les 20 s
+   API   : StopAddictAdvices.init({ S })
+           StopAddictAdvices.refresh({ S })
+   ============================================================ */
 
-import { $ } from "./utils.js";
-import { on as _on } from "./state.js";
+(function () {
+  "use strict";
 
-const on = _on || ((evt, cb) => window.addEventListener(evt, e => cb(e.detail)));
+  const $ = (id) => document.getElementById(id);
+  const ADVICE_DELAY = 20000; // ms entre chaque rotation
+  let timer = null;
+  let index = 0;
 
-let advices = [];
-let idx = 0;
-let timer = null;
-let playing = true;
-
-// Fallback local si fetch échoue
-const FALLBACK = [
-  "Buvez un verre d’eau et respirez 10 secondes avant d’allumer la prochaine cigarette.",
-  "Marchez 3 minutes : micro-pause = micro-victoire.",
-  "Notez votre dernière envie (0-10) : observer réduit déjà l’envie.",
-  "Repoussez de 5 minutes : le délai casse l’automatisme.",
-  "Une clope en moins aujourd’hui, c’est déjà une vraie économie demain."
-];
-
-// --- Chargement JSON (advices + resources facultatif) ---
-async function loadAdvices() {
-  try {
-    const res = await fetch("./data/advices.json", { cache: "no-store" });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const list = await res.json();
-    if (Array.isArray(list) && list.length) {
-      advices = list;
-      return;
+  // ====== Bibliothèque multilingue de conseils ======
+  const advicesLib = {
+    fr: {
+      reduction: [
+        "Chaque clope évitée est déjà une victoire, {{name}} !",
+        "Rappelle-toi pourquoi tu as commencé : la santé, la liberté, la fierté.",
+        "Un pas à la fois suffit pour changer ta vie.",
+        "Garde le cap ! Le changement durable se construit jour après jour."
+      ],
+      maintien: [
+        "Ta constance paie, {{name}}. Continue sur cette lancée !",
+        "Tu deviens un exemple pour ceux qui t’entourent.",
+        "Ton corps te remercie déjà !",
+        "Chaque jour sans excès renforce ton équilibre."
+      ],
+      arret: [
+        "Bravo {{name}} ! Ton arrêt marque un vrai tournant.",
+        "Respire profondément : c’est la liberté.",
+        "Tu viens de gagner une journée de plus sans dépendance.",
+        "Souviens-toi du chemin parcouru et célèbre-le !"
+      ]
+    },
+    en: {
+      reduction: [
+        "Every skipped cigarette is a small victory, {{name}}!",
+        "Remember why you started: health, freedom, pride.",
+        "Step by step, change becomes real.",
+        "Keep going – sustainable change builds day by day."
+      ],
+      maintien: [
+        "Consistency pays off, {{name}}!",
+        "You’re becoming an inspiration to others.",
+        "Your body already thanks you.",
+        "Every balanced day strengthens your new habits."
+      ],
+      arret: [
+        "Congrats {{name}} – that’s real freedom!",
+        "Breathe deeply: you’ve reclaimed your control.",
+        "Another day free from addiction!",
+        "Celebrate the journey you’ve completed."
+      ]
     }
-  } catch { /* noop */ }
-  advices = FALLBACK.slice();
-}
+  };
 
-// --- Rendu ---
-function showCurrent() {
-  const el = $("#conseil-texte");
-  if (!el) return;
-  if (!advices.length) { el.textContent = "—"; return; }
-  const a = advices[idx % advices.length];
-  el.textContent = (typeof a === "string") ? a : (a && a.text) ? a.text : String(a);
-}
+  // ====== Déterminer état utilisateur ======
+  function getUserState(S) {
+    const stopDate = S.habits?.stopDate || null;
+    const today = (window.StopAddictState && StopAddictState.todayLocalISO())
+      ? StopAddictState.todayLocalISO()
+      : new Date().toISOString().slice(0, 10);
 
-// --- Lecture automatique ---
-function startAuto() {
-  stopAuto();
-  timer = setInterval(() => {
-    if (!playing) return;
-    idx = (idx + 1) % (advices.length || 1);
-    showCurrent();
-  }, 8000);
-}
-function stopAuto() {
-  if (timer) clearInterval(timer);
-  timer = null;
-}
+    const counters = S.today?.counters || {};
+    const total = (counters.cigs || 0) + (counters.weed || 0) + (counters.alcohol || 0) +
+                  (counters.beer || 0) + (counters.hard || 0) + (counters.liqueur || 0);
 
-// --- Actions UI ---
-function bindControls() {
-  const btnPrev  = $("#adv-prev");
-  const btnPause = $("#adv-pause");
-  if (btnPrev) {
-    btnPrev.addEventListener("click", () => {
-      if (!advices.length) return;
-      idx = (idx - 1 + advices.length) % advices.length;
-      showCurrent();
-    });
+    if (stopDate && today >= stopDate && total === 0) return "arret";
+    if (total > 0 && total < 5) return "maintien";
+    return "reduction";
   }
-  if (btnPause) {
-    btnPause.addEventListener("click", () => {
-      playing = !playing;
-      // changer l’icône ⏸/▶ en fonction de l’état
-      btnPause.textContent = playing ? "⏸" : "▶";
-    });
+
+  // ====== Sélection d’un conseil ======
+  function pickAdvice(S) {
+    const lang = (S.profile?.lang || "fr") in advicesLib ? S.profile.lang : "fr";
+    const state = getUserState(S);
+    const list = advicesLib[lang][state] || advicesLib.fr.reduction;
+    if (!list.length) return "";
+    const msg = list[index % list.length];
+    index++;
+    const name = (S.profile?.name || "").trim() || (lang === "fr" ? "toi" : "you");
+    return msg.replace("{{name}}", name);
   }
-}
 
-// --- Personnalisation simple (facultatif) ---
-// Ici on écoute les changements globaux, et on peut choisir une "catégorie" d’astuces.
-// Par défaut, on garde la liste telle quelle (sans filtrer).
-function bindPersonalizationHooks() {
-  on("sa:counts-updated", () => {
-    // Exemple minimal : rien à faire ici pour l’instant.
-    // Tu pourras filtrer/surclasser 'advices' selon settings/habitudes si besoin.
-  });
-  on("sa:toggle-changed", () => { /* idem */ });
-  on("sa:storage-imported", () => {
-    // Après import, on réaffiche proprement
-    idx = 0; showCurrent();
-  });
-}
+  // ====== Affichage ======
+  function showAdvice(S) {
+    let panel = document.getElementById("advice-panel");
+    if (!panel) {
+      // création si absent (footer léger)
+      panel = document.createElement("div");
+      panel.id = "advice-panel";
+      panel.style.cssText = `
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: #0b1220;
+        color: #fff;
+        padding: .6rem 1rem;
+        text-align: center;
+        font-size: .95rem;
+        z-index: 9999;
+        box-shadow: 0 -2px 6px rgba(0,0,0,0.25);
+      `;
+      document.body.appendChild(panel);
+    }
 
-// --- Entrée publique ---
-export async function initAdvices() {
-  await loadAdvices();
-  bindControls();
-  bindPersonalizationHooks();
-  showCurrent();
-  startAuto();
-  console.log("[advices] ✓ ready");
-}
+    const msg = pickAdvice(S);
+    panel.textContent = msg || "";
+  }
+
+  // ====== Rotation automatique ======
+  function startRotation(S) {
+    clearInterval(timer);
+    showAdvice(S);
+    timer = setInterval(() => showAdvice(S), ADVICE_DELAY);
+  }
+
+  // ====== API publique ======
+  const AdvicesAPI = {
+    init(ctx) {
+      const S = ctx?.S || window.S;
+      if (!S) return;
+      startRotation(S);
+    },
+    refresh(ctx) {
+      const S = ctx?.S || window.S;
+      if (!S) return;
+      startRotation(S);
+    }
+  };
+
+  // ====== Expose ======
+  window.StopAddictAdvices = AdvicesAPI;
+})();
