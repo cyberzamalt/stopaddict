@@ -1,80 +1,121 @@
 {
-  "app.title": "StopAddict",
+  "app": { "name": "StopAddict" },
 
-  "nav.home": "Accueil",
-  "nav.stats": "Stats",
-  "nav.calendar": "Calendrier",
-  "nav.habits": "Habitudes",
-  "nav.settings": "Réglages",
+  "nav": {
+    "home": "Accueil",
+    "stats": "Statistiques",
+    "calendar": "Calendrier",
+    "habits": "Habitudes",
+    "settings": "Réglages",
+    "console": "Console"
+  },
 
-  "debug.show": "Console",
-  "debug.title": "Console",
-  "debug.copy": "Copier",
-  "debug.clear": "Vider",
+  "home": {
+    "greeting": "Salut{sep}{name}",
+    "kpiCost": "Coût du jour",
+    "toggles": {
+      "cigs": "Clopes",
+      "joints": "Joints",
+      "alcohol": "Alcool",
+      "beer": "Bière",
+      "hard": "Fort",
+      "liqueur": "Liqueur"
+    },
+    "confirmReset": "Remettre à zéro les compteurs d’aujourd’hui ?"
+  },
 
-  "home.today": "Aujourd’hui",
-  "home.resetToday": "Remise à zéro (Aujourd’hui)",
-  "home.kpis": "Indicateurs du jour",
+  "counters": {
+    "cigs": "Cigarettes",
+    "joints": "Joints",
+    "alcohol": "Alcool (global)",
+    "beer": "Bière",
+    "hard": "Alcools forts",
+    "liqueur": "Liqueur"
+  },
 
-  "kpi.totalCigs": "Total clopes",
-  "kpi.totalWeed": "Total joints",
-  "kpi.totalAlcohol": "Total alcool",
-  "kpi.costToday": "Coût estimé",
+  "settings": {
+    "titleProfile": "Profil & Région",
+    "titleModules": "Modules disponibles",
+    "titlePrices": "Tarifs (unité)",
+    "titleSince": "Suivi depuis",
+    "titleHabits": "Habitudes / Objectifs & Arrêt",
+    "titleLegal": "Santé • Majorité • Légal • Manuels • Numéros utiles",
+    "titleData": "Données",
+    "name": "Prénom (facultatif)",
+    "age": "Âge",
+    "lang": "Langue",
+    "currency": "Devise",
+    "currencyPos": "Position du symbole",
+    "before": "Avant",
+    "after": "Après",
+    "goalPerDay": "Objectif {key} / jour",
+    "stopDate": "Date d’arrêt (générale)",
+    "sinceKey": "Suivi {key} depuis",
+    "isAdult": "J’atteste avoir plus de 18 ans",
+    "acceptCGU": "J’accepte les CGU",
+    "verifyIdentity": "Vérifier identité / majorité",
+    "exportAll": "Exporter TOUT (.json)",
+    "importAll": "Importer TOUT (.json)",
+    "noteAlcoholRule": "Règle : Alcool (global) est exclusif avec Bière / Fort / Liqueur."
+  },
 
-  "stats.title": "Statistiques",
-  "stats.day": "Jour",
-  "stats.week": "Semaine",
-  "stats.month": "Mois",
-  "stats.year": "Année",
-  "stats.hint": "En “Jour”, l’axe X affiche 4 tranches (0–6, 6–12, 12–18, 18–24). Les ajouts tardifs sont répartis uniformément sur 24 h.",
+  "legal": {
+    "cgu": "CGU",
+    "cgv": "CGV",
+    "mentions": "Mentions légales",
+    "manual": "Manuel utilisateur",
+    "helpTabac": "Tabac Info Service",
+    "helpAlcool": "Alcool Info Service",
+    "helpDrugs": "Drogues Info Service",
+    "emergency": "Urgence 112"
+  },
 
-  "calendar.title": "Calendrier",
-  "calendar.hint": "Les dates d’arrêt et habitudes sont affichées. Les clics sur un jour ouvrent la fiche détaillée.",
+  "health": {
+    "ageWarningTitle": "Vérification d’âge",
+    "ageWarningMsg": "Tu dois être majeur (18+) et accepter les CGU pour utiliser l’application.",
+    "blockUsage": "Accès bloqué tant que la majorité/CGU ne sont pas validées."
+  },
 
-  "habits.title": "Habitudes / Objectifs",
-  "habits.goalCigs": "Objectif clopes / jour",
-  "habits.goalWeed": "Objectif joints / jour",
-  "habits.goalAlcohol": "Objectif alcool / jour",
-  "habits.stopDate": "Date d’arrêt (générale)",
+  "calendar": {
+    "monthHeader": "{month} {year}",
+    "dow": ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"],
+    "badges": {
+      "stop": "Arrêt",
+      "follow": "Suivi",
+      "milestone": "{days}j"
+    },
+    "today": "Aujourd’hui",
+    "noData": "Aucune donnée enregistrée.",
+    "close": "Fermer"
+  },
 
-  "common.save": "Enregistrer",
+  "charts": {
+    "titleConsumption": "Consommation journalière (4 tranches horaires)",
+    "titleEconomy": "Coûts & Économies",
+    "tranches": ["0–6h", "6–12h", "12–18h", "18–24h"],
+    "cost": "Coût (€)",
+    "saving": "Économies estimées (€)"
+  },
 
-  "settings.title": "Réglages",
-  "settings.profile": "Profil & Langue / Devise",
-  "settings.name": "Prénom (facultatif)",
-  "settings.language": "Langue",
-  "settings.currency": "Devise",
-  "settings.currencyPos": "Position symbole",
-  "settings.before": "Avant",
-  "settings.after": "Après",
+  "advices": {
+    "fallback": {
+      "stop_day": "C’est ton grand jour d’arrêt, bravo pour ce pas vers la liberté !",
+      "economy": "Pense à ce que tu économises à chaque cigarette non fumée 💰",
+      "motivation": "Chaque petite victoire compte. Continue !",
+      "milestone_1": "1 jour sans consommer ! Le premier pas est fait !",
+      "milestone_7": "Une semaine ! Tu tiens bon 💪",
+      "milestone_30": "1 mois complet ! C’est déjà un vrai changement 👏"
+    }
+  },
 
-  "settings.prices": "Tarifs (unité)",
-  "settings.pricesHint": "Le graphique “Coûts / Économies” n’affiche des coûts que si des tarifs sont renseignés.",
-  "settings.modules": "Modules disponibles",
+  "console": {
+    "copied": "Console copiée dans le presse-papiers.",
+    "copyFailed": "Copie impossible (permissions navigateur).",
+    "levelSet": "Niveau log défini"
+  },
 
-  "since.cigs": "Suivi clopes depuis",
-  "since.weed": "Suivi joints depuis",
-  "since.alcohol": "Suivi alcool depuis",
-
-  "settings.today": "Activation aujourd’hui",
-  "settings.alcoholExcl": "Règle d’exclusivité : si “Alcool (global)” est activé, Bière/Fort/Liqueur sont inactifs. Si l’un des trois est activé, “Alcool (global)” s’éteint.",
-
-  "settings.backup": "Import / Export",
-  "export.all": "Exporter TOUT (.json)",
-  "import.all": "Importer (.json)",
-  "export.csv": "Exporter CSV",
-
-  "settings.clearAll": "Tout supprimer (réinitialiser)",
-
-  "modal.warn.title": "Avertissement",
-  "modal.warn.txt": "Cette application ne remplace pas un avis médical.",
-  "modal.warn.noshow": "Ne plus afficher",
-  "modal.close": "Fermer",
-
-  "cigs": "Cigarettes",
-  "weed": "Joints",
-  "alcohol": "Alcool (global)",
-  "beer": "Bière",
-  "hard": "Alcools forts",
-  "liqueur": "Liqueur"
+  "messages": {
+    "importInvalid": "Import invalide.",
+    "mustBeAdult": "Tu dois attester être majeur (18+) et accepter les CGU pour continuer."
+  }
 }
