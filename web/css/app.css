@@ -1,266 +1,306 @@
-/* =========================================================
-   StopAddict — web/css/app.css
-   Objectif : look "appli", modales centrées, grilles propres
-   ========================================================= */
+/* =====================================================
+   STOPADDICT — app.css  (v3)
+   ===================================================== */
 
-/* ---------- Base / Reset léger ---------- */
-* { box-sizing: border-box; }
-html, body { height: 100%; }
-body {
+/* Reset / base */
+* {
+  box-sizing: border-box;
   margin: 0;
-  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  color: #111827;
-  background: #f3f4f6; /* fond doux "app" */
+  padding: 0;
 }
 
-/* Utilitaires */
-.hide { display: none !important; }
-
-/* Boutons & inputs */
-button, input, select {
-  font: inherit;
+html, body {
+  font-family: "Inter", "Segoe UI", Arial, sans-serif;
+  background: #f4f7fb;
+  color: #111;
+  height: 100%;
+  overflow-x: hidden;
 }
-.btn {
-  border: 1px solid #d1d5db;
-  background: #fff;
-  border-radius: 10px;
-  padding: .45rem .7rem;
+
+:root {
+  --primary: #1976d2;
+  --danger: #d32f2f;
+  --panel-bg: #fff;
+  --panel-border: #ddd;
+  --gray: #666;
+  --accent: #1565c0;
+  --header-bg: #0b1220;
+  --header-fg: #fff;
+  --hint: #777;
+  --radius: 8px;
+  --shadow: 0 2px 6px rgba(0,0,0,0.08);
+  --z-dialog: 9999;
+}
+
+/* Header & nav */
+.sa-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: .6rem 1rem;
+  background: var(--header-bg);
+  color: var(--header-fg);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.sa-header h1 {
+  font-size: 1.4rem;
+}
+
+.sa-nav {
+  display: flex;
+  gap: .5rem;
+}
+
+.nav-btn {
+  background: transparent;
+  color: var(--header-fg);
+  border: 1px solid transparent;
+  padding: .3rem .7rem;
+  border-radius: var(--radius);
   cursor: pointer;
-  transition: transform .04s ease, background .2s ease, box-shadow .2s ease;
-  box-shadow: 0 1px 0 rgba(0,0,0,.03);
-}
-.btn:hover { background: #f9fafb; }
-.btn:active { transform: translateY(1px); }
-.btn.small { padding: .3rem .55rem; border-radius: 8px; }
-.btn[disabled] { opacity: .5; cursor: not-allowed; }
-
-input[type="number"], input[type="text"], input[type="date"], select {
-  width: 100%;
-  border: 1px solid #d1d5db;
-  border-radius: 10px;
-  background: #fff;
-  padding: .45rem .6rem;
+  transition: all .2s ease;
 }
 
-/* ---------- Wrapper "app" ---------- */
-.app {
-  max-width: 520px;           /* largeur type téléphone large */
-  margin: 18px auto;
-  background: #fff;
-  border-radius: 18px;
-  box-shadow:
-    0 10px 24px rgba(0,0,0,.08),
-    0 2px 6px rgba(0,0,0,.05);
-  padding: 14px;
+.nav-btn:hover,
+.nav-btn:focus {
+  border-color: var(--primary);
+  background: rgba(255,255,255,0.15);
 }
 
-/* ---------- En-tête ---------- */
-.app-header {
+.sa-header-right {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
+  gap: .7rem;
+  font-size: 0.9rem;
 }
-.app-header h1 {
-  font-size: 22px;
-  margin: 0 0 2px 0;
-}
-.date-line { font-size: 12px; color: #6b7280; display: flex; gap: 8px; align-items: center; }
-.status-dot {
-  display: inline-block;
-  width: 14px; height: 14px;
-  border-radius: 4px;
-  background: #1f2b48; color:#fff;
-  text-align:center; line-height:14px; font-size:11px;
-}
-.kpis { display:flex; gap:10px; flex-wrap:wrap; }
-.kpi { background:#f3f4f6; border-radius:10px; padding:.25rem .45rem; font-size:12px; }
-.kpi strong { font-weight:700; margin-left:.2rem; }
 
-/* ---------- Onglets ---------- */
-.tabs {
-  display: flex; gap: 6px; flex-wrap: wrap;
-  margin: 8px 0 10px 0;
+/* Pages & panels */
+.sa-page {
+  display: none;
+  padding: 1rem;
 }
-.tabs .tab {
-  border: 1px solid #d1d5db;
-  background: #fff;
-  border-radius: 999px;
-  padding: .35rem .75rem;
+.sa-page[hidden] { display: none; }
+.sa-page:not([hidden]) { display: block; }
+
+.panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+h2, h3 {
+  margin-bottom: .7rem;
+}
+
+h3 {
+  font-size: 1.1rem;
+}
+
+.hint {
+  color: var(--hint);
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+
+/* Counter grid */
+.counter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.counter {
+  background: #fafafa;
+  border: 1px solid #ddd;
+  border-radius: var(--radius);
+  padding: .5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.counter .label {
   font-weight: 600;
+  margin-bottom: 0.3rem;
+  text-align: center;
+}
+
+.counter .controls {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.counter button {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: .3rem .7rem;
+  cursor: pointer;
+  transition: background .2s;
+}
+.counter button:hover {
+  background: #0d47a1;
+}
+.counter .value {
+  font-weight: bold;
+  font-size: 1.1rem;
+  min-width: 2ch;
+  text-align: center;
+}
+
+/* Quick actions */
+.quick-actions {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.quick-actions button {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: .4rem .8rem;
   cursor: pointer;
 }
-.tabs .tab.active {
-  background: #111827;
-  color: #fff;
-  border-color: #111827;
+.quick-actions .danger {
+  background: var(--danger);
 }
 
-/* ---------- Pages ---------- */
-.pages section { margin-top: 6px; }
-
-/* ---------- Accueil : compteurs ---------- */
-.counters-grid {
+/* Forms & settings */
+.form-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: .7rem;
+  margin-top: .5rem;
 }
-@media (min-width: 410px) {
-  .counters-grid { grid-template-columns: 1fr 1fr; }
+.form-inline {
+  display: flex;
+  gap: .7rem;
+  flex-wrap: wrap;
+  margin-top: .5rem;
 }
-.counter-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
-  padding: .7rem;
+
+label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.95rem;
+}
+
+input, select, button {
+  font-family: inherit;
+  font-size: 1rem;
+}
+
+input[type="number"],
+input[type="text"],
+input[type="date"],
+select {
+  border: 1px solid #ccc;
+  border-radius: var(--radius);
+  padding: 0.3rem 0.4rem;
   background: #fff;
 }
-.counter-card h2 {
-  margin: 0 0 .4rem 0;
-  font-size: 16px;
+
+fieldset.block {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
 }
-.ctr-row {
+fieldset.block legend {
+  font-weight: 600;
+  padding: 0 0.4rem;
+}
+
+/* Charts */
+.charts-grid {
   display: grid;
-  grid-template-columns: 40px 1fr 40px;
-  align-items: center;
-  gap: 8px;
-  margin: .4rem 0;
-}
-.ctr-row .btn { font-size: 18px; }
-.ctr-val {
-  text-align: center;
-  font: 700 20px/1 "Segoe UI", Roboto, Arial, sans-serif;
-  padding: .35rem .5rem;
-  background: #f9fafb;
-  border-radius: 10px;
-}
-.toggle { display:flex; align-items:center; gap:6px; font-size: 13px; color:#374151; }
-
-/* ---------- Conseils ---------- */
-.tips-panel {
-  margin-top: 12px;
-  padding: .7rem .8rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
-  background: #f9fafb;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
 }
 
-/* ---------- Stats (graphiques) ---------- */
-.kpi-block { margin: .2rem 0 .5rem 0; }
-.chart-actions { display:flex; gap:6px; flex-wrap:wrap; margin-bottom: 8px; }
-.chart-block {
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
+/* Calendar root */
+.calendar-root {
+  width: 100%;
+  min-height: 300px;
+  overflow-x: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 0.5rem;
+}
+
+/* Debug console */
+.debug-log {
+  background: #111;
+  color: #0f0;
+  height: 250px;
+  overflow-y: auto;
+  border-radius: var(--radius);
   padding: .5rem;
-  background: #fff;
+  font-family: monospace;
+  font-size: 0.85rem;
 }
-.chart-block canvas { width: 100% !important; height: 240px !important; display:block; }
 
-/* ---------- Calendrier ---------- */
-.calendar-toolbar {
-  display:flex; align-items:center; justify-content:space-between;
-  gap:10px; margin-bottom:8px;
-}
-.cal-title { font-weight:700; }
-.cal-filters label { margin-right: 6px; font-size: 13px; }
-
-.cal-grid {
-  display:grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
-}
-.cal-grid .day {
-  min-height: 62px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  padding: .35rem;
-  background: #fff;
-  display:flex; flex-direction:column; gap:6px;
-}
-.cal-grid .day .d {
-  font-size: 12px; color: #6b7280; font-weight: 600;
-}
-.cal-details {
-  margin-top: 10px;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: .6rem;
-  background: #f9fafb;
-}
-.cal-links { margin-top: 8px; display:flex; gap:8px; }
-
-/* ---------- Habitudes / Réglages ---------- */
-.section-title { margin: .8rem 0 .4rem 0; font-size: 16px; }
-.grid-2 {
-  display:grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-}
-@media (min-width: 420px) {
-  .grid-2 { grid-template-columns: 1fr 1fr; }
-}
-.actions { display:flex; gap:8px; flex-wrap:wrap; margin: 8px 0; }
-
-/* ---------- Debug console ---------- */
-#debug-console {
-  border: 1px dashed #d1d5db;
-  background: #fafafa;
-  color: #111827;
-  padding: .5rem;
-  border-radius: 10px;
-  max-height: 200px;
-  overflow: auto;
-  font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-}
-.debug-line { white-space: pre-wrap; }
-
-/* =========================================================
-   Modales (AgeGate & Ressources) — vraies modales centrées
-   Ressources au-dessus de l’AgeGate (ordre z-index)
-   ========================================================= */
-
-/* Style commun */
+/* Dialog (modale) */
 dialog {
-  border: 0;
-  border-radius: 14px;
-  background: #0b1020;     /* thème sombre pour contraste */
-  color: #eaf0ff;
-  padding: 16px;
-  width: min(560px, 92vw);
-  max-height: 80vh;
-  overflow: auto;
-  box-shadow: 0 24px 50px rgba(0,0,0,.35);
+  border: none;
+  border-radius: var(--radius);
+  padding: 1rem;
+  max-width: 480px;
+  width: 90%;
+  background: #fff;
+  color: #111;
+  box-shadow: var(--shadow);
+  z-index: var(--z-dialog);
+  overflow-y: auto; /* scroll interne si contenu long */
 }
 
-/* Centrage + empilement */
-#agegate,
-#resources-dialog {
-  position: fixed;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
+dialog::backdrop {
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(2px);
+  z-index: calc(var(--z-dialog) - 1);
 }
-#agegate { z-index: 1000; }
-#resources-dialog { z-index: 1100; } /* Ressources au-dessus */
 
-/* Backdrops (assombrir le fond) */
-dialog::backdrop { background: rgba(0,0,0,.55); }
-/* Même si le pseudo n'accepte pas z-index, on garde l’ordre par l’élément au-dessus */
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: .5rem;
+  margin-top: .8rem;
+}
 
-/* Contenu interne typé */
-.agegate h3 { margin: 0 0 6px 0; font-size: 20px; }
-.agegate p  { margin: 0 0 10px 0; color:#cbd5e1; }
-.agegate label { display:block; margin: 8px 0; color:#e5e7eb; }
-.agegate .actions { display:flex; gap:8px; justify-content:flex-end; }
+/* Buttons */
+button.primary {
+  background: var(--primary);
+  color: #fff;
+}
+button.danger {
+  background: var(--danger);
+  color: #fff;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
-.resources { display:flex; flex-direction:column; gap: 10px; }
-.resources h4 { margin: 0; font-size: 16px; }
-.resources ul { margin: 6px 0 0 0; padding: 0 0 0 16px; }
-.resources a { color:#93c5fd; text-decoration: underline; }
-
-/* ---------- Accessibilité & micro-interactions ---------- */
-a { color: #111827; }
-a:hover { text-decoration: underline; }
-label { user-select: none; }
-
-/* ---------- Petits raffinements ---------- */
-hr { border: none; border-top: 1px solid #e5e7eb; margin: 10px 0; }
+/* Responsive */
+@media (max-width: 640px) {
+  .counter-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
