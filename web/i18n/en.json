@@ -1,80 +1,121 @@
 {
-  "app.title": "StopAddict",
+  "app": { "name": "StopAddict" },
 
-  "nav.home": "Home",
-  "nav.stats": "Stats",
-  "nav.calendar": "Calendar",
-  "nav.habits": "Habits",
-  "nav.settings": "Settings",
+  "nav": {
+    "home": "Home",
+    "stats": "Stats",
+    "calendar": "Calendar",
+    "habits": "Habits",
+    "settings": "Settings",
+    "console": "Console"
+  },
 
-  "debug.show": "Console",
-  "debug.title": "Console",
-  "debug.copy": "Copy",
-  "debug.clear": "Clear",
+  "home": {
+    "greeting": "Hi{sep}{name}",
+    "kpiCost": "Today’s cost",
+    "toggles": {
+      "cigs": "Cigs",
+      "joints": "Joints",
+      "alcohol": "Alcohol",
+      "beer": "Beer",
+      "hard": "Spirits",
+      "liqueur": "Liqueur"
+    },
+    "confirmReset": "Reset today’s counters?"
+  },
 
-  "home.today": "Today",
-  "home.resetToday": "Reset (Today)",
-  "home.kpis": "Today’s KPIs",
+  "counters": {
+    "cigs": "Cigarettes",
+    "joints": "Joints",
+    "alcohol": "Alcohol (global)",
+    "beer": "Beer",
+    "hard": "Spirits",
+    "liqueur": "Liqueur"
+  },
 
-  "kpi.totalCigs": "Total cigarettes",
-  "kpi.totalWeed": "Total joints",
-  "kpi.totalAlcohol": "Total alcohol",
-  "kpi.costToday": "Estimated cost",
+  "settings": {
+    "titleProfile": "Profile & Region",
+    "titleModules": "Available modules",
+    "titlePrices": "Unit prices",
+    "titleSince": "Tracking since",
+    "titleHabits": "Habits / Goals & Quit date",
+    "titleLegal": "Health • Age • Legal • Manuals • Useful numbers",
+    "titleData": "Data",
+    "name": "First name (optional)",
+    "age": "Age",
+    "lang": "Language",
+    "currency": "Currency",
+    "currencyPos": "Symbol position",
+    "before": "Before",
+    "after": "After",
+    "goalPerDay": "{key} goal / day",
+    "stopDate": "Quit date (global)",
+    "sinceKey": "Tracking {key} since",
+    "isAdult": "I confirm I’m 18+",
+    "acceptCGU": "I accept the T&Cs",
+    "verifyIdentity": "Verify identity / age",
+    "exportAll": "Export ALL (.json)",
+    "importAll": "Import ALL (.json)",
+    "noteAlcoholRule": "Rule: Alcohol (global) is exclusive with Beer / Spirits / Liqueur."
+  },
 
-  "stats.title": "Statistics",
-  "stats.day": "Day",
-  "stats.week": "Week",
-  "stats.month": "Month",
-  "stats.year": "Year",
-  "stats.hint": "In “Day” view, X-axis shows 4 slots (0–6, 6–12, 12–18, 18–24). Late additions are evenly distributed over 24h.",
+  "legal": {
+    "cgu": "T&Cs",
+    "cgv": "Sales terms",
+    "mentions": "Legal notice",
+    "manual": "User manual",
+    "helpTabac": "Tobacco Help",
+    "helpAlcool": "Alcohol Help",
+    "helpDrugs": "Drugs Help",
+    "emergency": "Emergency 112"
+  },
 
-  "calendar.title": "Calendar",
-  "calendar.hint": "Stop dates and habits are shown. Clicking a day opens a quick detail card.",
+  "health": {
+    "ageWarningTitle": "Age verification",
+    "ageWarningMsg": "You must be 18+ and accept the T&Cs to use this app.",
+    "blockUsage": "Access blocked until age/T&Cs are validated."
+  },
 
-  "habits.title": "Habits / Goals",
-  "habits.goalCigs": "Cigarette goal / day",
-  "habits.goalWeed": "Joint goal / day",
-  "habits.goalAlcohol": "Alcohol goal / day",
-  "habits.stopDate": "Stop date (global)",
+  "calendar": {
+    "monthHeader": "{month} {year}",
+    "dow": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "badges": {
+      "stop": "Quit",
+      "follow": "Since",
+      "milestone": "{days}d"
+    },
+    "today": "Today",
+    "noData": "No data recorded.",
+    "close": "Close"
+  },
 
-  "common.save": "Save",
+  "charts": {
+    "titleConsumption": "Daily consumption (4 time slices)",
+    "titleEconomy": "Costs & Savings",
+    "tranches": ["0–6h", "6–12h", "12–18h", "18–24h"],
+    "cost": "Cost",
+    "saving": "Estimated savings"
+  },
 
-  "settings.title": "Settings",
-  "settings.profile": "Profile & Language / Currency",
-  "settings.name": "First name (optional)",
-  "settings.language": "Language",
-  "settings.currency": "Currency",
-  "settings.currencyPos": "Symbol position",
-  "settings.before": "Before",
-  "settings.after": "After",
+  "advices": {
+    "fallback": {
+      "stop_day": "It’s your quit day — congrats on taking back your freedom!",
+      "economy": "Think of the money you save with every skipped cigarette 💰",
+      "motivation": "Every small victory counts. Keep going!",
+      "milestone_1": "1 day clean — first step done!",
+      "milestone_7": "One full week! You’re doing great 💪",
+      "milestone_30": "30 days strong — real change happening 👏"
+    }
+  },
 
-  "settings.prices": "Unit prices",
-  "settings.pricesHint": "The “Costs / Savings” chart shows costs only if prices are provided.",
-  "settings.modules": "Available modules",
+  "console": {
+    "copied": "Console copied to clipboard.",
+    "copyFailed": "Copy failed (browser permissions).",
+    "levelSet": "Log level set"
+  },
 
-  "since.cigs": "Tracking cigarettes since",
-  "since.weed": "Tracking joints since",
-  "since.alcohol": "Tracking alcohol since",
-
-  "settings.today": "Activate today",
-  "settings.alcoholExcl": "Exclusivity rule: if “Alcohol (global)” is ON, Beer/Hard/Liqueur are disabled. If any sub-type is ON, “Alcohol (global)” turns OFF.",
-
-  "settings.backup": "Import / Export",
-  "export.all": "Export ALL (.json)",
-  "import.all": "Import (.json)",
-  "export.csv": "Export CSV",
-
-  "settings.clearAll": "Delete everything (reset)",
-
-  "modal.warn.title": "Warning",
-  "modal.warn.txt": "This app does not replace medical advice.",
-  "modal.warn.noshow": "Don’t show again",
-  "modal.close": "Close",
-
-  "cigs": "Cigarettes",
-  "weed": "Joints",
-  "alcohol": "Alcohol (global)",
-  "beer": "Beer",
-  "hard": "Strong alcohol",
-  "liqueur": "Liqueur"
+  "messages": {
+    "importInvalid": "Invalid import.",
+    "mustBeAdult": "You must confirm you’re 18+ and accept the T&Cs to continue."
+  }
 }
