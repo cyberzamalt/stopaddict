@@ -1,0 +1,5 @@
+{
+  "app": { "name": "StopAddict" },
+  "nav": { "home": "Home", "stats": "Stats", "calendar": "Calendar", "habits": "Habits", "settings": "Settings", "console": "Console" },
+  "messages": { "importInvalid": "Invalid import." }
+}
