@@ -1,264 +1,335 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>StopAddict</title>
-  <link rel="stylesheet" href="css/app.css" />
-  <meta http-equiv="Cache-Control" content="no-store" />
+
+  <!-- Styles principaux -->
+  <link rel="stylesheet" href="./css/app.css" />
+
+  <!-- Icons / Meta (facultatif si déjà gérés ailleurs)
+  <link rel="icon" href="./ressources/favicon.png" />
+  -->
+  <meta name="color-scheme" content="light dark" />
 </head>
 <body>
-  <!-- Wrapper type "app" -->
-  <div class="app">
-    <!-- Header -->
-    <header class="app-header">
-      <div class="header-left">
-        <h1 id="app-title">StopAddict</h1>
-        <div class="date-line">
-          <span id="today-date"></span>
-          <span id="hdr-status" class="status-dot" title="Statut"></span>
-        </div>
-      </div>
-      <div class="header-right kpis">
-        <div class="kpi"><span>🚬</span> <strong id="hdr-cigs">0</strong></div>
-        <div class="kpi"><span>🌿</span> <strong id="hdr-joints">0</strong></div>
-        <div class="kpi"><span>🍺+🍷</span> <strong id="hdr-alcohol">0</strong></div>
-        <div class="kpi"><span>€</span> <strong id="hdr-cost">0,00€</strong></div>
-        <div class="kpi"><span>💶</span> <strong id="hdr-saved">0,00€</strong></div>
-      </div>
-    </header>
-
-    <!-- Tabs -->
-    <nav id="tabs" class="tabs" role="tablist">
-      <button type="button" class="tab active" data-tab="home">Accueil</button>
-      <button type="button" class="tab" data-tab="stats">Stats</button>
-      <button type="button" class="tab" data-tab="calendar">Calendrier</button>
-      <button type="button" class="tab" data-tab="habits">Habitudes</button>
-      <button type="button" class="tab" data-tab="settings">Réglages</button>
+  <!-- ========= HEADER / NAV ========= -->
+  <header class="sa-header">
+    <h1 id="app-title" data-i18n="app.title">StopAddict</h1>
+    <nav class="sa-nav">
+      <button id="nav-home"      class="nav-btn" data-i18n="nav.home">Accueil</button>
+      <button id="nav-stats"     class="nav-btn" data-i18n="nav.stats">Stats</button>
+      <button id="nav-calendar"  class="nav-btn" data-i18n="nav.calendar">Calendrier</button>
+      <button id="nav-habits"    class="nav-btn" data-i18n="nav.habits">Habitudes</button>
+      <button id="nav-settings"  class="nav-btn" data-i18n="nav.settings">Réglages</button>
     </nav>
+    <div class="sa-header-right">
+      <span id="greeting" title="Nom profil si saisi"></span>
+      <label class="dbg-inline">
+        <input id="toggle-debug" type="checkbox" />
+        <span data-i18n="debug.show">Console</span>
+      </label>
+    </div>
+  </header>
 
-    <!-- Pages -->
-    <main class="pages">
-      <!-- Accueil -->
-      <section id="page-home">
-        <div class="counters-grid">
-          <article id="ctr-cigs" class="counter-card">
-            <h2>Cigarettes</h2>
-            <div class="ctr-row">
-              <button type="button" class="btn" data-action="dec" data-kind="cigs">−</button>
-              <div class="ctr-val" id="val-cigs">0</div>
-              <button type="button" class="btn" data-action="inc" data-kind="cigs">+</button>
-            </div>
-            <label class="toggle"><input type="checkbox" id="chk-cigs-active" /> Activer</label>
-          </article>
+  <!-- ========= PAGES ========= -->
 
-          <article id="ctr-joints" class="counter-card">
-            <h2>Joints</h2>
-            <div class="ctr-row">
-              <button type="button" class="btn" data-action="dec" data-kind="joints">−</button>
-              <div class="ctr-val" id="val-joints">0</div>
-              <button type="button" class="btn" data-action="inc" data-kind="joints">+</button>
-            </div>
-            <label class="toggle"><input type="checkbox" id="chk-joints-active" /> Activer</label>
-          </article>
-
-          <article id="ctr-beer" class="counter-card">
-            <h2>Bière</h2>
-            <div class="ctr-row">
-              <button type="button" class="btn" data-action="dec" data-kind="beer">−</button>
-              <div class="ctr-val" id="val-beer">0</div>
-              <button type="button" class="btn" data-action="inc" data-kind="beer">+</button>
-            </div>
-            <label class="toggle"><input type="checkbox" id="chk-beer-active" /> Activer</label>
-          </article>
-
-          <article id="ctr-hard" class="counter-card">
-            <h2>Alcool fort</h2>
-            <div class="ctr-row">
-              <button type="button" class="btn" data-action="dec" data-kind="hard">−</button>
-              <div class="ctr-val" id="val-hard">0</div>
-              <button type="button" class="btn" data-action="inc" data-kind="hard">+</button>
-            </div>
-            <label class="toggle"><input type="checkbox" id="chk-hard-active" /> Activer</label>
-          </article>
-
-          <article id="ctr-liqueur" class="counter-card">
-            <h2>Liqueur</h2>
-            <div class="ctr-row">
-              <button type="button" class="btn" data-action="dec" data-kind="liqueur">−</button>
-              <div class="ctr-val" id="val-liqueur">0</div>
-              <button type="button" class="btn" data-action="inc" data-kind="liqueur">+</button>
-            </div>
-            <label class="toggle"><input type="checkbox" id="chk-liqueur-active" /> Activer</label>
-          </article>
-        </div>
-
-        <!-- Conseils -->
-        <section id="tips-root" class="tips-panel"></section>
-      </section>
-
-      <!-- Stats -->
-      <section id="page-stats" class="hide">
-        <div class="kpi-block">
-          <h3>Période</h3>
-          <div id="stats-date">—</div>
-        </div>
-        <div class="chart-actions">
-          <button type="button" id="btnPeriod-day" class="btn">Jour</button>
-          <button type="button" id="btnPeriod-week" class="btn">Semaine</button>
-          <button type="button" id="btnPeriod-month" class="btn">Mois</button>
-          <button type="button" id="btnPeriod-year" class="btn">Année</button>
-          <button type="button" id="btn-export-csv" class="btn small">Exporter CSV</button>
-          <button type="button" id="btn-export-json" class="btn small">Exporter JSON</button>
-          <label class="btn small">Importer JSON
-            <input id="file-import-json" type="file" accept="application/json" hidden />
-          </label>
-        </div>
-        <div class="chart-block"><canvas id="chart-qty"></canvas></div>
-        <div class="chart-block" style="margin-top:.6rem;"><canvas id="chart-money"></canvas></div>
-      </section>
-
-      <!-- Calendrier -->
-      <section id="page-calendar" class="hide">
-        <div class="calendar-toolbar">
-          <div class="toolbar-left">
-            <button type="button" id="cal-prev" class="btn small">◀</button>
-            <div id="cal-title" class="cal-title">—</div>
-            <button type="button" id="cal-next" class="btn small">▶</button>
+  <!-- PAGE: ACCUEIL / JOURNÉE -->
+  <main id="page-home" class="sa-page">
+    <section class="panel">
+      <h2 data-i18n="home.today">Aujourd’hui</h2>
+      <!-- Compteurs rapides (aujourd’hui) -->
+      <div class="counter-grid">
+        <!-- Cigarettes -->
+        <div class="counter">
+          <div class="label">
+            <span data-i18n="cigs">Cigarettes</span>
+            <small id="since-cigs-label" class="since"></small>
           </div>
-          <div class="toolbar-right cal-filters">
-            <label><input type="checkbox" data-cal-filter="cigs" checked /> 🚬</label>
-            <label><input type="checkbox" data-cal-filter="joints" checked /> 🌿</label>
-            <label><input type="checkbox" data-cal-filter="beer" checked /> 🍺</label>
-            <label><input type="checkbox" data-cal-filter="hard" checked /> 🥃</label>
-            <label><input type="checkbox" data-cal-filter="liqueur" checked /> 🍸</label>
+          <div class="controls">
+            <button id="ctr-cigs-dec" class="dec">−</button>
+            <span id="val-cigs" class="value">0</span>
+            <button id="ctr-cigs-inc" class="inc">+</button>
           </div>
         </div>
-        <div id="calendar-grid" class="cal-grid"></div>
-        <div id="calendar-details" class="cal-details"></div>
-        <div class="cal-links">
-          <button type="button" id="cal-open-stats" class="btn small">Ouvrir Stats</button>
-          <button type="button" id="cal-open-habits" class="btn small">Ouvrir Habitudes</button>
-        </div>
-      </section>
 
-      <!-- Habitudes -->
-      <section id="page-habits" class="hide">
-        <h2 class="section-title">Objectifs par jour</h2>
-        <div class="grid-2">
-          <label>Cigarettes <input id="goal-cigs" type="number" min="0" /></label>
-          <label>Joints <input id="goal-joints" type="number" min="0" /></label>
-          <label>Bière <input id="goal-beer" type="number" min="0" /></label>
-          <label>Alcool fort <input id="goal-hard" type="number" min="0" /></label>
-          <label>Liqueur <input id="goal-liqueur" type="number" min="0" /></label>
-        </div>
-        <div class="actions">
-          <button type="button" id="btn-habits-save" class="btn">Enregistrer</button>
-          <button type="button" id="btn-habits-reset" class="btn">Réinitialiser</button>
-        </div>
-
-        <h2 class="section-title">Dates clés</h2>
-        <div class="grid-2">
-          <label>Arrêt global <input id="date-stop-global" type="date" /></label>
-          <label>Arrêt alcool <input id="date-stop-alcohol" type="date" /></label>
-
-          <label>Arrêt clopes (début réduction) <input id="date-reduce-cigs" type="date" /></label>
-          <label>Arrêt clopes (objectif) <input id="date-quit-cigs-obj" type="date" /></label>
-          <label>Clopes : plus jamais après <input id="date-nomore-cigs" type="date" /></label>
-
-          <label>Arrêt joints (début réduction) <input id="date-reduce-joints" type="date" /></label>
-          <label>Arrêt joints (objectif) <input id="date-quit-joints-obj" type="date" /></label>
-          <label>Joints : plus jamais après <input id="date-nomore-joints" type="date" /></label>
-
-          <label>Alcool (début réduction) <input id="date-reduce-alcohol" type="date" /></label>
-          <label>Alcool (objectif arrêt) <input id="date-quit-alcohol-obj" type="date" /></label>
-          <label>Alcool : plus jamais après <input id="date-nomore-alcohol" type="date" /></label>
-        </div>
-      </section>
-
-      <!-- Réglages -->
-      <section id="page-settings" class="hide">
-        <h2 class="section-title">Profil</h2>
-        <div class="grid-2">
-          <label>Prénom <input id="profile-name" type="text" placeholder="Votre prénom" /></label>
-          <label>Langue <select id="select-language"></select></label>
-        </div>
-
-        <h2 class="section-title">Devise</h2>
-        <div class="grid-2">
-          <label>Symbole <input id="currency-symbol" type="text" value="€" /></label>
-          <div>Position :
-            <label><input type="radio" name="cur-pos" id="currency-before" /> Avant</label>
-            <label><input type="radio" name="cur-pos" id="currency-after" /> Après</label>
+        <!-- Joints -->
+        <div class="counter">
+          <div class="label">
+            <span data-i18n="weed">Joints</span>
+            <small id="since-weed-label" class="since"></small>
+          </div>
+          <div class="controls">
+            <button id="ctr-weed-dec" class="dec">−</button>
+            <span id="val-weed" class="value">0</span>
+            <button id="ctr-weed-inc" class="inc">+</button>
           </div>
         </div>
-        <div class="actions"><button type="button" id="btn-apply-currency" class="btn">Appliquer</button></div>
 
-        <h2 class="section-title">Modules</h2>
-        <div class="grid-2">
-          <label><input type="checkbox" id="mod-cigs" /> Cigarettes</label>
-          <label><input type="checkbox" id="mod-joints" /> Joints</label>
-          <label><input type="checkbox" id="mod-beer" /> Bière</label>
-          <label><input type="checkbox" id="mod-hard" /> Alcool fort</label>
-          <label><input type="checkbox" id="mod-liqueur" /> Liqueur</label>
-          <label><input type="checkbox" id="mod-alcohol" /> Alcool (global)</label>
+        <!-- Alcool global -->
+        <div class="counter">
+          <div class="label">
+            <span data-i18n="alcohol">Alcool (global)</span>
+            <small id="since-alcohol-label" class="since"></small>
+          </div>
+          <div class="controls">
+            <button id="ctr-alcohol-dec" class="dec">−</button>
+            <span id="val-alcohol" class="value">0</span>
+            <button id="ctr-alcohol-inc" class="inc">+</button>
+          </div>
         </div>
 
-        <h2 class="section-title">Prix unitaires</h2>
-        <div class="grid-2">
-          <label>Cigarette (€) <input id="price-cigarette" type="number" min="0" step="0.01" /></label>
-          <label>Joint (€) <input id="price-joint" type="number" min="0" step="0.01" /></label>
-          <label>Bière (€) <input id="price-beer" type="number" min="0" step="0.01" /></label>
-          <label>Alcool fort (€) <input id="price-hard" type="number" min="0" step="0.01" /></label>
-          <label>Liqueur (€) <input id="price-liqueur" type="number" min="0" step="0.01" /></label>
-        </div>
-        <div class="actions">
-          <button type="button" id="btn-save-prices" class="btn">Enregistrer les prix</button>
-          <button type="button" id="btn-reset-prices" class="btn">Réinitialiser les prix</button>
+        <!-- Sous-alcools -->
+        <div class="counter">
+          <div class="label"><span data-i18n="beer">Bière</span></div>
+          <div class="controls">
+            <button id="ctr-beer-dec" class="dec">−</button>
+            <span id="val-beer" class="value">0</span>
+            <button id="ctr-beer-inc" class="inc">+</button>
+          </div>
         </div>
 
-        <h2 class="section-title">Maintenance & sauvegardes</h2>
-        <div class="actions">
-          <button type="button" id="btn-raz-day" class="btn">RAZ du jour</button>
-          <button type="button" id="btn-raz-history" class="btn">RAZ historique</button>
-          <button type="button" id="btn-raz-factory" class="btn">RAZ réglages (usine)</button>
-        </div>
-        <div class="actions">
-          <button type="button" id="btn-save-json-settings" class="btn">Sauvegarder JSON</button>
-          <label class="btn">Importer JSON
-            <input id="file-import-json-settings" type="file" accept="application/json" hidden />
-          </label>
+        <div class="counter">
+          <div class="label"><span data-i18n="hard">Alcools forts</span></div>
+          <div class="controls">
+            <button id="ctr-hard-dec" class="dec">−</button>
+            <span id="val-hard" class="value">0</span>
+            <button id="ctr-hard-inc" class="inc">+</button>
+          </div>
         </div>
 
-        <h2 class="section-title">Journal & Debug</h2>
-        <label><input type="checkbox" id="cb-debug-overlay" /> Afficher la console</label>
-        <div class="actions">
-          <button type="button" id="btn-copy-logs" class="btn">Copier les logs</button>
-          <button type="button" id="btn-clear-logs" class="btn">Vider les logs</button>
-          <button type="button" id="btn-resources" class="btn">Ressources & numéros utiles</button>
+        <div class="counter">
+          <div class="label"><span data-i18n="liqueur">Liqueur</span></div>
+          <div class="controls">
+            <button id="ctr-liqueur-dec" class="dec">−</button>
+            <span id="val-liqueur" class="value">0</span>
+            <button id="ctr-liqueur-inc" class="inc">+</button>
+          </div>
         </div>
-
-        <div id="debug-console" class="hide"></div>
-      </section>
-    </main>
-  </div><!-- /.app -->
-
-  <!-- Age gate (pas de lien Ressources statique ici) -->
-  <dialog id="agegate">
-    <form method="dialog" class="agegate">
-      <h3>Avertissement — Public majeur (18+)</h3>
-      <p>StopAddict est une application d’auto-suivi et d’aide à la réduction/arrêt des consommations.</p>
-      <label><input type="checkbox" id="age-18plus" /> J’ai 18 ans ou plus</label>
-      <label><input type="checkbox" id="age-hide" /> Ne plus afficher ce message</label>
-      <div class="actions">
-        <button type="button" id="btn-age-accept" class="btn" disabled>J’accepte et continue</button>
       </div>
-    </form>
+
+      <!-- Actions rapides -->
+      <div class="quick-actions">
+        <button id="btn-reset-today" class="danger" data-i18n="home.resetToday">Remise à zéro (Aujourd’hui)</button>
+        <button id="btn-export-csv"  data-i18n="export.csv">Exporter CSV</button>
+      </div>
+    </section>
+
+    <!-- KPIs du jour -->
+    <section class="panel">
+      <h3 data-i18n="home.kpis">Indicateurs du jour</h3>
+      <ul class="kpi-list">
+        <li><span data-i18n="kpi.totalCigs">Total clopes</span> : <b id="kpi-cigs">0</b></li>
+        <li><span data-i18n="kpi.totalWeed">Total joints</span> : <b id="kpi-weed">0</b></li>
+        <li><span data-i18n="kpi.totalAlcohol">Total alcool</span> : <b id="kpi-alcohol">0</b> (<span id="kpi-beer">0</span>/<span id="kpi-hard">0</span>/<span id="kpi-liqueur">0</span>)</li>
+        <li><span data-i18n="kpi.costToday">Coût estimé</span> : <b id="kpi-cost">0</b></li>
+      </ul>
+    </section>
+  </main>
+
+  <!-- PAGE: STATS -->
+  <section id="page-stats" class="sa-page" hidden>
+    <div class="panel">
+      <h2 data-i18n="stats.title">Statistiques</h2>
+      <div class="view-switch">
+        <button class="view-btn" id="view-day"    data-i18n="stats.day">Jour</button>
+        <button class="view-btn" id="view-week"   data-i18n="stats.week">Semaine</button>
+        <button class="view-btn" id="view-month"  data-i18n="stats.month">Mois</button>
+        <button class="view-btn" id="view-year"   data-i18n="stats.year">Année</button>
+      </div>
+      <div class="charts-grid">
+        <canvas id="chart1" width="600" height="280" aria-label="Graphique 1"></canvas>
+        <canvas id="chart2" width="600" height="280" aria-label="Graphique 2 (coûts/économies)"></canvas>
+      </div>
+      <p class="hint" data-i18n="stats.hint">En “Jour”, l’axe X affiche 4 tranches (0–6, 6–12, 12–18, 18–24). Les ajouts tardifs sont répartis uniformément sur 24 h.</p>
+    </div>
+  </section>
+
+  <!-- PAGE: CALENDRIER -->
+  <section id="page-calendar" class="sa-page" hidden>
+    <div class="panel">
+      <h2 data-i18n="calendar.title">Calendrier</h2>
+      <div id="calendar-root" class="calendar-root" aria-label="Calendrier"></div>
+      <p class="hint" data-i18n="calendar.hint">Les dates d’arrêt et habitudes sont affichées. Les clics sur un jour ouvrent la fiche détaillée.</p>
+    </div>
+  </section>
+
+  <!-- PAGE: HABITUDES -->
+  <section id="page-habits" class="sa-page" hidden>
+    <div class="panel">
+      <h2 data-i18n="habits.title">Habitudes / Objectifs</h2>
+      <div class="form-grid">
+        <label>
+          <span data-i18n="habits.goalCigs">Objectif clopes / jour</span>
+          <input id="goal-cigs" type="number" min="0" step="1" />
+        </label>
+        <label>
+          <span data-i18n="habits.goalWeed">Objectif joints / jour</span>
+          <input id="goal-weed" type="number" min="0" step="1" />
+        </label>
+        <label>
+          <span data-i18n="habits.goalAlcohol">Objectif alcool / jour</span>
+          <input id="goal-alcohol" type="number" min="0" step="1" />
+        </label>
+        <label>
+          <span data-i18n="habits.stopDate">Date d’arrêt (générale)</span>
+          <input id="stop-date" type="date" />
+        </label>
+      </div>
+      <div class="quick-actions">
+        <button id="btn-save-habits" data-i18n="common.save">Enregistrer</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- PAGE: RÉGLAGES (COMPLETS) -->
+  <section id="page-settings" class="sa-page" hidden>
+    <div class="panel">
+      <h2 data-i18n="settings.title">Réglages</h2>
+
+      <!-- Profil & Internationalisation -->
+      <fieldset class="block">
+        <legend data-i18n="settings.profile">Profil & Langue / Devise</legend>
+        <div class="form-grid">
+          <label>
+            <span data-i18n="settings.name">Prénom (facultatif)</span>
+            <input id="cfg-name" type="text" placeholder="Ex: Nico" />
+          </label>
+
+          <label>
+            <span data-i18n="settings.language">Langue</span>
+            <select id="cfg-lang">
+              <option value="fr">Français</option>
+              <option value="en">English</option>
+            </select>
+          </label>
+
+          <label>
+            <span data-i18n="settings.currency">Devise</span>
+            <select id="cfg-currency">
+              <option value="EUR">EUR €</option>
+              <option value="USD">USD $</option>
+              <option value="GBP">GBP £</option>
+            </select>
+          </label>
+
+          <label>
+            <span data-i18n="settings.currencyPos">Position symbole</span>
+            <select id="cfg-currency-pos">
+              <option value="before" data-i18n="settings.before">Avant</option>
+              <option value="after"  data-i18n="settings.after">Après</option>
+            </select>
+          </label>
+        </div>
+      </fieldset>
+
+      <!-- Tarifs -->
+      <fieldset class="block">
+        <legend data-i18n="settings.prices">Tarifs (unité)</legend>
+        <div class="form-grid">
+          <label><span data-i18n="cigs">Cigarette</span> <input id="price-cigs" type="number" min="0" step="0.01" /></label>
+          <label><span data-i18n="weed">Joint</span>     <input id="price-weed" type="number" min="0" step="0.01" /></label>
+          <label><span data-i18n="beer">Bière</span>     <input id="price-beer" type="number" min="0" step="0.01" /></label>
+          <label><span data-i18n="hard">Fort</span>      <input id="price-hard" type="number" min="0" step="0.01" /></label>
+          <label><span data-i18n="liqueur">Liqueur</span><input id="price-liqueur" type="number" min="0" step="0.01" /></label>
+          <label><span data-i18n="alcohol">Alcool (glob.)</span><input id="price-alcohol" type="number" min="0" step="0.01" /></label>
+        </div>
+        <p class="hint" data-i18n="settings.pricesHint">Le graphique “Coûts / Économies” n’affiche des coûts que si des tarifs sont renseignés.</p>
+      </fieldset>
+
+      <!-- Disponibilité des modules (modules.*) -->
+      <fieldset class="block">
+        <legend data-i18n="settings.modules">Modules disponibles</legend>
+        <div class="form-grid">
+          <label><input id="mod-cigs"    type="checkbox" /> <span data-i18n="cigs">Cigarettes</span></label>
+          <label><input id="mod-weed"    type="checkbox" /> <span data-i18n="weed">Joints</span></label>
+          <label><input id="mod-alcohol" type="checkbox" /> <span data-i18n="alcohol">Alcool</span></label>
+        </div>
+        <div class="form-grid">
+          <label><span data-i18n="since.cigs">Suivi clopes depuis</span>  <input id="since-cigs"    type="date" /></label>
+          <label><span data-i18n="since.weed">Suivi joints depuis</span>  <input id="since-weed"    type="date" /></label>
+          <label><span data-i18n="since.alcohol">Suivi alcool depuis</span><input id="since-alcohol" type="date" /></label>
+        </div>
+      </fieldset>
+
+      <!-- Activation du jour (today.active.*) + Exclusivité alcool -->
+      <fieldset class="block">
+        <legend data-i18n="settings.today">Activation aujourd’hui</legend>
+        <div class="form-grid">
+          <label><input id="act-cigs"    type="checkbox" /> <span data-i18n="cigs">Cigarettes</span></label>
+          <label><input id="act-weed"    type="checkbox" /> <span data-i18n="weed">Joints</span></label>
+          <label><input id="act-alcohol" type="checkbox" /> <span data-i18n="alcohol">Alcool (global)</span></label>
+        </div>
+        <div class="form-grid">
+          <label><input id="act-beer"    type="checkbox" /> <span data-i18n="beer">Bière</span></label>
+          <label><input id="act-hard"    type="checkbox" /> <span data-i18n="hard">Alcools forts</span></label>
+          <label><input id="act-liqueur" type="checkbox" /> <span data-i18n="liqueur">Liqueur</span></label>
+        </div>
+        <p class="hint" data-i18n="settings.alcoholExcl">
+          Règle d’exclusivité : si “Alcool (global)” est activé, Bière/Fort/Liqueur sont grisés/inactifs.
+          Si l’un des trois est activé, “Alcool (global)” s’éteint.
+        </p>
+      </fieldset>
+
+      <!-- Import / Export -->
+      <fieldset class="block">
+        <legend data-i18n="settings.backup">Import / Export</legend>
+        <div class="form-inline">
+          <button id="btn-export-json" data-i18n="export.all">Exporter TOUT (.json)</button>
+          <button id="btn-import-json" data-i18n="import.all">Importer (.json)</button>
+          <input  id="file-import-json" type="file" accept="application/json" hidden />
+        </div>
+        <div class="form-inline">
+          <button id="btn-export-csv-2" data-i18n="export.csv">Exporter CSV (historique)</button>
+        </div>
+      </fieldset>
+
+      <!-- Actions globales -->
+      <div class="quick-actions">
+        <button id="btn-save-settings" class="primary" data-i18n="common.save">Enregistrer</button>
+        <button id="btn-clear-all" class="danger" data-i18n="settings.clearAll">Tout supprimer (réinitialiser)</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========= MODALES ========= -->
+  <dialog id="modal-warn">
+    <h3 data-i18n="modal.warn.title">Avertissement</h3>
+    <p data-i18n="modal.warn.txt">Cette application ne remplace pas un avis médical.</p>
+    <div class="dialog-actions">
+      <label><input id="warn-dontshow" type="checkbox" /> <span data-i18n="modal.warn.noshow">Ne plus afficher</span></label>
+      <button id="warn-close" class="primary" data-i18n="modal.close">Fermer</button>
+    </div>
   </dialog>
 
-  <!-- Vendor -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <!-- App (unique point d’entrée) -->
-  <script type="module" src="js/app.js"></script>
+  <!-- ========= CONSOLE DEBUG ========= -->
+  <section id="debug-section" class="sa-page" hidden>
+    <div class="panel">
+      <h2 data-i18n="debug.title">Console</h2>
+      <pre id="debug-log" class="debug-log" aria-live="polite"></pre>
+      <div class="form-inline">
+        <button id="btn-log-copy" data-i18n="debug.copy">Copier</button>
+        <button id="btn-log-clear" data-i18n="debug.clear">Vider</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========= SCRIPTS (aucun Service Worker ici) ========= -->
+  <!-- IMPORTANT: ordre conseillé (state → helpers → features → settings → app) -->
+  <script src="./js/state.js"></script>
+  <script src="./js/currency.js"></script>
+  <script src="./js/advices.js"></script>
+  <script src="./js/charts.js"></script>
+  <script src="./js/calendar.js"></script>
+  <script src="./js/settings.js"></script>
+  <script src="./js/app.js"></script>
+
+  <!-- NE PAS ENREGISTRER DE SERVICE WORKER ICI
+  <script>
+  // (Supprimé volontairement)
+  // navigator.serviceWorker.register('./sw.js');
+  </script>
+  -->
 </body>
 </html>
