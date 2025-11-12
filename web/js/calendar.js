@@ -1,204 +1,189 @@
 /* ============================================================
-   StopAddict — calendar.js  (v3, one-shot)
-   Rôle : calendrier mensuel en LOCAL TIME
-          - affichage du mois courant (Lundi→Dimanche)
-          - marquage date d’arrêt (habits.stopDate)
-          - marquage enabled_since.{cigs,weed,alcohol}
-          - écouteurs uniques (event delegation)
+   StopAddict v3 — calendar.js
+   Calendrier enrichi : arrêts, suivis, jalons, fiche jour
    ============================================================ */
-
 (function () {
   "use strict";
 
-  const $ = (id) => document.getElementById(id);
-  const root = $("calendar-root");
+  const root = document.getElementById("calendar-root");
+  if (!root) return;
 
-  if (!root) {
-    console.warn("[calendar] #calendar-root manquant");
-    return;
+  let currentMonth = new Date().getMonth();
+  let currentYear = new Date().getFullYear();
+
+  /* ---------- UTILITAIRES ---------- */
+  function daysInMonth(year, month) {
+    return new Date(year, month + 1, 0).getDate();
   }
 
-  // ====== Helpers date (LOCAL TIME) ======
-  function todayLocalISO() {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${dd}`;
-  }
-  function isoFromDate(d) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${dd}`;
-  }
-  function firstDayOfMonth(date) {
-    return new Date(date.getFullYear(), date.getMonth(), 1);
-  }
-  function daysInMonth(date) {
-    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-  }
-  function weekdayIndexMon0Sun6(date) {
-    // Lundi = 0 ... Dimanche = 6 (FR)
-    const js = date.getDay(); // 0=Dimanche … 6=Samedi
-    return (js + 6) % 7;
-  }
-  function monthLabelFR(date) {
-    return date.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  function pad2(n) {
+    return n.toString().padStart(2, "0");
   }
 
-  // ====== Rendu HTML du calendrier ======
-  function renderCalendar(S) {
-    const now = new Date();
-    const first = firstDayOfMonth(now);
-    const totalDays = daysInMonth(now);
-    const leading = weekdayIndexMon0Sun6(first); // nombre de cases vides avant le 1er du mois
+  function isoDate(y, m, d) {
+    return `${y}-${pad2(m + 1)}-${pad2(d)}`;
+  }
 
-    const stopISO = (S.habits && S.habits.stopDate) || null;
-    const since = (S.enabled_since) || {};
-    const sinceMap = {
-      cigs: since.cigs || null,
-      weed: since.weed || null,
-      alcohol: since.alcohol || null
-    };
+  function isSameDate(a, b) {
+    return a && b && a.slice(0, 10) === b.slice(0, 10);
+  }
 
-    // En-tête
-    const header =
-      `<div class="cal-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
-         <strong>${monthLabelFR(now)}</strong>
-         <span style="color:#777;font-size:.9rem;">Semaine L→D · Heure locale</span>
-       </div>`;
+  /* ---------- CONSTRUCTION DU CALENDRIER ---------- */
+  function renderCalendar() {
+    const S = window.S;
+    if (!S) return;
 
-    // Jours de la semaine
-    const weekNames = ["L", "M", "M", "J", "V", "S", "D"];
-    const headRow =
-      `<div class="cal-row cal-head" style="display:grid;grid-template-columns:repeat(7,1fr);gap:.25rem;margin-bottom:.25rem;">
-        ${weekNames.map(n => `<div class="cal-cell cal-head-cell" style="text-align:center;color:#666;font-weight:600;">${n}</div>`).join("")}
-       </div>`;
+    const monthName = new Date(currentYear, currentMonth).toLocaleString(S.profile.lang || "fr", { month: "long" });
+    const nbDays = daysInMonth(currentYear, currentMonth);
+    const firstDay = new Date(currentYear, currentMonth, 1).getDay(); // 0=dimanche
 
-    // Cases jours
+    const startIndex = (firstDay + 6) % 7; // décaler pour que lundi soit le premier
     const cells = [];
-    // vides avant le 1
-    for (let i = 0; i < leading; i++) {
-      cells.push(`<div class="cal-cell cal-empty" style="min-height:54px;border:1px dashed #eee;border-radius:6px;"></div>`);
-    }
+    const stopDate = S.habits.stopDate;
+    const follow = S.enabled_since;
+    const hist = S.history;
 
-    // jours 1..totalDays
-    for (let d = 1; d <= totalDays; d++) {
-      const cur = new Date(now.getFullYear(), now.getMonth(), d);
-      const iso = isoFromDate(cur);
-      const isToday = iso === todayLocalISO();
+    for (let i = 0; i < startIndex; i++) cells.push(`<div class="day empty"></div>`);
 
-      // marquages
-      const marks = [];
-      if (stopISO && iso === stopISO) marks.push("stop");
-      if (sinceMap.cigs && iso === sinceMap.cigs) marks.push("since-cigs");
-      if (sinceMap.weed && iso === sinceMap.weed) marks.push("since-weed");
-      if (sinceMap.alcohol && iso === sinceMap.alcohol) marks.push("since-alcohol");
+    for (let d = 1; d <= nbDays; d++) {
+      const date = isoDate(currentYear, currentMonth, d);
+      const dayData = hist[date] || null;
 
-      const classes = ["cal-cell", "cal-day"];
-      if (isToday) classes.push("is-today");
-      marks.forEach(m => classes.push(`mark-${m}`));
+      // Badges
+      const badges = [];
 
-      // badge des marquages
-      const badges = marks.map(m => {
-        const label = m === "stop" ? "Arrêt"
-          : (m === "since-cigs" ? "Déb. clopes"
-          : (m === "since-weed" ? "Déb. joints"
-          : (m === "since-alcohol" ? "Déb. alcool" : m)));
-        return `<span class="cal-badge cal-badge-${m}" style="display:inline-block;background:#1976d2;color:#fff;border-radius:10px;padding:0 .35rem;font-size:.7rem;margin-left:.35rem;">${label}</span>`;
-      }).join("");
+      // Arrêt
+      if (isSameDate(stopDate, date)) badges.push(`<span class="badge stop">Arrêt</span>`);
 
-      cells.push(
-        `<div class="${classes.join(" ")}"
-              data-action="open-day"
-              data-iso="${iso}"
-              style="min-height:72px;border:1px solid #ddd;border-radius:6px;background:#fff;padding:.4rem;cursor:pointer;">
-            <div style="display:flex;align-items:center;justify-content:space-between;">
-              <strong>${d}</strong>
-              <div>${badges}</div>
-            </div>
-         </div>`
-      );
-    }
-
-    // grille (7 colonnes)
-    const grid =
-      `<div class="cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:.25rem;">
-        ${cells.join("")}
-       </div>`;
-
-    root.innerHTML = header + headRow + grid;
-  }
-
-  // ====== Fiche jour (simple) ======
-  function openDayCard(S, iso) {
-    // Agrège S.today ou S.history pour ce jour
-    let data = { cigs:0, weed:0, alcohol:0, beer:0, hard:0, liqueur:0 };
-    const todayISO = todayLocalISO();
-    if (iso === todayISO) {
-      data = Object.assign(data, S.today?.counters || {});
-    } else if (S.history && S.history[iso]) {
-      const h = S.history[iso];
-      data = {
-        cigs: +h.cigs || 0,
-        weed: +h.weed || 0,
-        alcohol: +h.alcohol || 0,
-        beer: +h.beer || 0,
-        hard: +h.hard || 0,
-        liqueur: +h.liqueur || 0
-      };
-    }
-
-    const info = [
-      `Date : ${iso}`,
-      `Clopes : ${data.cigs}`,
-      `Joints : ${data.weed}`,
-      `Alcool (global) : ${data.alcohol}`,
-      `— Bière : ${data.beer}, Fort : ${data.hard}, Liqueur : ${data.liqueur}`,
-      (S.habits?.stopDate === iso ? "🟢 Jour d’arrêt" : "")
-    ].filter(Boolean).join("\n");
-
-    alert(info);
-  }
-
-  // ====== Event delegation (écouteur unique) ======
-  function bindOnce(S) {
-    // On retire tout listener précédent en réassignant root.onclick
-    root.onclick = (ev) => {
-      const target = ev.target.closest("[data-action]");
-      if (!target) return;
-      const action = target.getAttribute("data-action");
-      if (action === "open-day") {
-        const iso = target.getAttribute("data-iso");
-        openDayCard(S, iso);
+      // Suivi depuis
+      for (const [k, since] of Object.entries(follow)) {
+        if (isSameDate(since, date)) badges.push(`<span class="badge follow">${k}</span>`);
       }
-    };
+
+      // Jalons (1,7,30 jours depuis l'arrêt)
+      if (stopDate) {
+        const diff = Math.floor((new Date(date) - new Date(stopDate)) / (1000 * 60 * 60 * 24));
+        if ([1, 7, 30].includes(diff)) {
+          badges.push(`<span class="badge milestone">${diff}j</span>`);
+        }
+      }
+
+      const classes = ["day"];
+      if (isSameDate(date, S.today.date)) classes.push("today");
+
+      cells.push(`
+        <div class="${classes.join(" ")}" data-date="${date}">
+          <div class="num">${d}</div>
+          ${badges.join("")}
+        </div>
+      `);
+    }
+
+    root.innerHTML = `
+      <div class="calendar-header">
+        <button id="cal-prev">◀</button>
+        <h3>${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${currentYear}</h3>
+        <button id="cal-next">▶</button>
+      </div>
+      <div class="calendar-grid">
+        <div class="dow">Lun</div><div class="dow">Mar</div><div class="dow">Mer</div><div class="dow">Jeu</div>
+        <div class="dow">Ven</div><div class="dow">Sam</div><div class="dow">Dim</div>
+        ${cells.join("")}
+      </div>
+    `;
+
+    bindCalendarEvents();
   }
 
-  // ====== API publique ======
-  const CalendarAPI = {
-    init(ctx) {
-      const S = ctx?.S || window.S;
-      if (!S) return;
-      renderCalendar(S);
-      bindOnce(S);
-    },
-    refresh(ctx) {
-      const S = ctx?.S || window.S;
-      if (!S) return;
-      renderCalendar(S); // réaffiche si stopDate / since changent
-      // bindOnce pas nécessaire à chaque refresh : event delegation déjà posée
+  /* ---------- FICHE JOUR ---------- */
+  function showDayPopup(date) {
+    const S = window.S;
+    const day = S.history[date] || null;
+    const dlg = document.createElement("dialog");
+    dlg.className = "day-dialog";
+
+    let html = `<h3>${date}</h3>`;
+    if (!day) {
+      html += `<p>Aucune donnée enregistrée.</p>`;
+    } else {
+      const c = day.counters || {};
+      const cost = day.cost ?? window.StopAddictState.calculateDayCost({ ...S, today: day });
+      html += `
+        <ul>
+          <li><b>Clopes :</b> ${c.cigs ?? 0}</li>
+          <li><b>Joints :</b> ${c.joints ?? 0}</li>
+          <li><b>Alcool :</b> ${c.alcohol ?? 0}</li>
+          <li><b>Bière :</b> ${c.beer ?? 0}</li>
+          <li><b>Fort :</b> ${c.hard ?? 0}</li>
+          <li><b>Liqueur :</b> ${c.liqueur ?? 0}</li>
+          <li><b>Coût :</b> ${cost.toFixed(2)} ${S.profile.currency}</li>
+        </ul>
+      `;
+
+      // Économie estimée
+      const goals = S.habits.goal;
+      const ref = (goals.cigs || 0) + (goals.joints || 0) + (goals.alcohol || 0);
+      const act = (c.cigs || 0) + (c.joints || 0) + (c.alcohol || 0);
+      const diff = ref > 0 ? ref - act : 0;
+      const priceAvg = mean(Object.values(S.prices));
+      const saving = Math.max(0, diff * priceAvg);
+      html += `<p><b>Économie estimée :</b> ${saving.toFixed(2)} ${S.profile.currency}</p>`;
     }
+
+    html += `<div style="text-align:right;margin-top:.5rem;"><button id="close-day">Fermer</button></div>`;
+    dlg.innerHTML = html;
+    document.body.appendChild(dlg);
+    dlg.showModal();
+
+    dlg.querySelector("#close-day").addEventListener("click", () => dlg.close());
+    dlg.addEventListener("close", () => dlg.remove());
+  }
+
+  function mean(arr) {
+    const vals = arr.filter(v => Number.isFinite(v));
+    return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
+  }
+
+  /* ---------- ÉVÉNEMENTS ---------- */
+  function bindCalendarEvents() {
+    $("#cal-prev")?.addEventListener("click", () => changeMonth(-1));
+    $("#cal-next")?.addEventListener("click", () => changeMonth(1));
+
+    root.querySelectorAll(".day").forEach(d => {
+      d.addEventListener("click", () => {
+        const date = d.dataset.date;
+        if (!date) return;
+        showDayPopup(date);
+        // Déclencher conseils spéciaux (jalons)
+        checkMilestoneAdvice(date);
+      });
+    });
+  }
+
+  function changeMonth(offset) {
+    currentMonth += offset;
+    if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+    if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+    renderCalendar();
+  }
+
+  /* ---------- CONSEILS SPÉCIAUX ---------- */
+  function checkMilestoneAdvice(date) {
+    const S = window.S;
+    if (!S.habits.stopDate) return;
+    const diff = Math.floor((new Date(date) - new Date(S.habits.stopDate)) / (1000 * 60 * 60 * 24));
+    if ([1, 7, 30].includes(diff)) {
+      if (window.Advices?.showMilestone)
+        window.Advices.showMilestone(diff);
+    }
+  }
+
+  /* ---------- API PUBLIQUE ---------- */
+  window.Calendar = {
+    refresh: renderCalendar
   };
 
-  // Expose
-  window.StopAddictCalendar = CalendarAPI;
+  // Premier rendu
+  document.addEventListener("DOMContentLoaded", renderCalendar);
 
-  // Auto-init si la page Calendrier est affichée en premier (rare)
-  document.addEventListener("DOMContentLoaded", () => {
-    if (root && window.S) {
-      CalendarAPI.init({ S: window.S });
-    }
-  });
 })();
