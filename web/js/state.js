@@ -1,236 +1,368 @@
-/* ============================================================
-   StopAddict v3 — state.js
-   Structure centrale (le “cerveau”)
-   Gère : profil, identité, modules, prix, habitudes, historique,
-          cohérence globale, sauvegarde automatique, import/export.
-   ============================================================ */
-
+// ============================================================
+// StopAddict v3 - state.js
+// Cœur de l'état applicatif (profil, modules, prix, habitudes,
+// dates, historique, identité / majorité, import / export)
+// ============================================================
 (function () {
   "use strict";
 
-  const STORAGE_KEY = "StopAddictState";
+  // ----------------------------------------------------------
+  // Petit helper global DOM : remplace jQuery $()
+  // ----------------------------------------------------------
+  if (!window.$) {
+    window.$ = function (sel) {
+      if (typeof sel !== "string") return null;
+      if (sel[0] === "#") return document.getElementById(sel.slice(1));
+      return document.querySelector(sel);
+    };
+  }
 
-  /* ============================================================
-     🧩 Données par défaut
-     ============================================================ */
+  // ----------------------------------------------------------
+  // Helpers
+  // ----------------------------------------------------------
+  const STORAGE_KEYS = [
+    "stopaddict_state_v3",   // clé actuelle
+    "stopaddict_state",      // anciennes clés possibles
+    "stopaddict"
+  ];
+  const CURRENT_KEY = STORAGE_KEYS[0];
+
+  function todayISO() {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function clone(obj) {
+    return obj ? JSON.parse(JSON.stringify(obj)) : obj;
+  }
+
+  function log(level, msg, data) {
+    if (window.Logger && typeof window.Logger.log === "function") {
+      window.Logger.log(level, "[state] " + msg, data);
+    } else {
+      if (data !== undefined) {
+        console.log("[state][" + level + "] " + msg, data);
+      } else {
+        console.log("[state][" + level + "] " + msg);
+      }
+    }
+  }
+
+  // ----------------------------------------------------------
+  // État par défaut
+  // ----------------------------------------------------------
   const DEFAULT_STATE = {
     profile: {
       name: "",
-      lang: detectLang(),
-      country: detectCountry(),
-      currency: detectCurrency(),
-      currencyPos: "before"
+      lang: "fr",
+      currency: "€",
+      currencyPos: "after"
     },
-    identity: { age: null, isAdult: false },
-    legal: { acceptedCGU: false },
-    modules: { cigs: true, joints: true, alcohol: true, beer: true, hard: true, liqueur: true },
-    enabled_since: { cigs: null, joints: null, alcohol: null },
+    identity: {
+      age: null,
+      isAdult: false
+    },
+    legal: {
+      acceptedCGU: false
+    },
+    modules: {
+      cigs: true,
+      joints: true,
+      alcohol: true,  // global alcool
+      beer: false,    // sous-types
+      hard: false,
+      liqueur: false
+    },
+    enabled_since: {
+      cigs: null,
+      joints: null,
+      alcohol: null
+    },
     habits: {
-      goal: { cigs: null, joints: null, alcohol: null },
+      goal: {
+        cigs: null,
+        joints: null,
+        alcohol: null
+      },
       stopDate: null
     },
     prices: {
-      cigs: 0, joints: 0,
-      beer: 0, hard: 0, liqueur: 0, alcohol: 0
+      cigs: null,
+      joints: null,
+      beer: null,
+      hard: null,
+      liqueur: null,
+      alcohol: null
     },
     today: {
-      date: todayLocalISO(),
-      counters: { cigs: 0, joints: 0, alcohol: 0, beer: 0, hard: 0, liqueur: 0 },
-      active: { cigs: true, joints: true, alcohol: true, beer: true, hard: true, liqueur: true },
-      goals: { cigs: null, joints: null, alcohol: null }
+      date: todayISO(),
+      counters: {
+        cigs: 0,
+        joints: 0,
+        alcohol: 0,
+        beer: 0,
+        hard: 0,
+        liqueur: 0
+      }
     },
-    history: {},
-    meta: { lastExportAt: null, warnDismissed: false }
+    history: {
+      // "YYYY-MM-DD": { counters:{...}, meta:{...} }
+    },
+    meta: {
+      version: 3,
+      lastSeenDate: todayISO()
+    }
   };
 
-  /* ============================================================
-     🧠 Utilitaires généraux
-     ============================================================ */
-  function todayLocalISO() {
-    const d = new Date();
-    return d.toISOString().slice(0, 10);
-  }
-
-  function detectLang() {
-    const lang = (navigator.language || "fr").slice(0, 2);
-    return ["fr", "en"].includes(lang) ? lang : "fr";
-  }
-
-  function detectCountry() {
-    try {
-      return Intl.DateTimeFormat().resolvedOptions().locale.split("-")[1] || "FR";
-    } catch {
-      return "FR";
-    }
-  }
-
-  function detectCurrency() {
-    try {
-      const region = detectCountry();
-      const map = { FR: "EUR", BE: "EUR", CH: "CHF", GB: "GBP", US: "USD", CA: "CAD" };
-      return map[region] || "EUR";
-    } catch {
-      return "EUR";
-    }
-  }
-
-  /* ============================================================
-     💾 Chargement & compatibilité
-     ============================================================ */
-  function loadState() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return structuredClone(DEFAULT_STATE);
-      const parsed = JSON.parse(raw);
-      return compatLoad(parsed);
-    } catch (e) {
-      console.warn("[state] Échec chargement, reset:", e);
-      return structuredClone(DEFAULT_STATE);
-    }
-  }
-
-  function compatLoad(S) {
-    // Complète les champs manquants (ajoutés après version monolith)
-    const def = structuredClone(DEFAULT_STATE);
-    for (const key in def) {
-      if (!(key in S)) S[key] = def[key];
-      else if (typeof def[key] === "object") {
-        S[key] = { ...def[key], ...S[key] };
+  // ----------------------------------------------------------
+  // Merge récursif : on complète les anciens états avec le défaut
+  // ----------------------------------------------------------
+  function mergeDefaults(target, defaults) {
+    if (!target || typeof target !== "object") return clone(defaults);
+    const out = Array.isArray(defaults) ? [] : {};
+    const keys = new Set([
+      ...Object.keys(defaults || {}),
+      ...Object.keys(target || {})
+    ]);
+    keys.forEach((k) => {
+      const defVal = defaults ? defaults[k] : undefined;
+      const curVal = target ? target[k] : undefined;
+      if (defVal && typeof defVal === "object" && !Array.isArray(defVal)) {
+        out[k] = mergeDefaults(curVal || {}, defVal);
+      } else if (curVal === undefined) {
+        out[k] = defVal;
+      } else {
+        out[k] = curVal;
       }
-    }
-    // Correction de date du jour si ancienne version
-    if (!S.today?.date) S.today.date = todayLocalISO();
-
-    // S’assure que tous les modules existent
-    for (const k in def.modules) {
-      if (!(k in S.modules)) S.modules[k] = def.modules[k];
-    }
-
-    return S;
+    });
+    return out;
   }
 
-  function saveState(S) {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(S));
-    } catch (e) {
-      console.error("[state] Erreur saveState:", e);
-    }
-  }
+  // ----------------------------------------------------------
+  // Chargement brut depuis localStorage
+  // ----------------------------------------------------------
+  function loadRaw() {
+    let raw = null;
+    let keyUsed = null;
 
-  /* ============================================================
-     🔁 Cohérence des modules et activations
-     ============================================================ */
-  function ensureCoherence(S) {
-    const T = S.today;
-
-    // Exclusivité alcool
-    if (T.active.alcohol) {
-      T.active.beer = false;
-      T.active.hard = false;
-      T.active.liqueur = false;
-    } else if (T.active.beer || T.active.hard || T.active.liqueur) {
-      T.active.alcohol = false;
-    }
-
-    // Cohérence modules ↔ active
-    for (const key in T.active) {
-      if (S.modules[key] === false) T.active[key] = false;
-    }
-
-    // Réactivation impossible si module désactivé
-    for (const key in S.modules) {
-      if (!S.modules[key]) T.active[key] = false;
-    }
-
-    return S;
-  }
-
-  /* ============================================================
-     💰 Calcul des coûts (jour)
-     ============================================================ */
-  function calculateDayCost(S) {
-    const T = S.today.counters;
-    const P = S.prices;
-    let cost = 0;
-
-    // Alcool global ou sous-types exclusifs
-    if (S.today.active.alcohol) {
-      cost += T.alcohol * (P.alcohol || 0);
-    } else {
-      cost += (T.beer * (P.beer || 0)) +
-              (T.hard * (P.hard || 0)) +
-              (T.liqueur * (P.liqueur || 0));
-    }
-
-    cost += (T.cigs * (P.cigs || 0)) + (T.joints * (P.joints || 0));
-    return cost;
-  }
-
-  /* ============================================================
-     🔄 Mise à jour automatique (sauvegarde + refresh)
-     ============================================================ */
-  function updateState(mutator) {
-    const S = window.S;
-    if (!S) return;
-    mutator(S);
-    ensureCoherence(S);
-    saveState(S);
-    if (typeof window.onRefresh === "function") window.onRefresh();
-  }
-
-  /* ============================================================
-     📦 Export / Import
-     ============================================================ */
-  function exportAll() {
-    const S = window.S;
-    const data = JSON.stringify(S, null, 2);
-    const blob = new Blob([data], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "stopaddict_backup.json";
-    a.click();
-    URL.revokeObjectURL(url);
-    S.meta.lastExportAt = new Date().toISOString();
-    saveState(S);
-  }
-
-  function importAll(file, callback) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
+    for (const key of STORAGE_KEYS) {
       try {
-        const imported = JSON.parse(e.target.result);
-        window.S = compatLoad(imported);
-        ensureCoherence(window.S);
-        saveState(window.S);
-        if (typeof callback === "function") callback(true);
-        if (typeof window.onRefresh === "function") window.onRefresh();
-      } catch (err) {
-        console.error("[state] Import échoué:", err);
-        if (typeof callback === "function") callback(false);
+        const v = localStorage.getItem(key);
+        if (v) {
+          raw = JSON.parse(v);
+          keyUsed = key;
+          break;
+        }
+      } catch (e) {
+        log("WARN", "Impossible de lire " + key + " depuis localStorage", e);
       }
-    };
-    reader.readAsText(file);
+    }
+
+    if (!raw) {
+      const fresh = clone(DEFAULT_STATE);
+      log("INFO", "Aucun état trouvé, utilisation de l'état par défaut.", fresh);
+      return fresh;
+    }
+
+    const merged = mergeDefaults(raw, DEFAULT_STATE);
+    merged.meta = merged.meta || {};
+    merged.meta.version = 3;
+    if (!merged.meta.lastSeenDate) {
+      merged.meta.lastSeenDate = todayISO();
+    }
+    log("INFO", "État brut chargé depuis " + (keyUsed || "inconnu"), merged);
+    return merged;
   }
 
-  /* ============================================================
-     🚀 Initialisation globale
-     ============================================================ */
-  window.S = loadState();
-  ensureCoherence(window.S);
+  // ----------------------------------------------------------
+  // Coherence métier
+  // ----------------------------------------------------------
+  function ensureCoherence(state) {
+    // Sécurité structure
+    state.profile = mergeDefaults(state.profile, DEFAULT_STATE.profile);
+    state.identity = mergeDefaults(state.identity, DEFAULT_STATE.identity);
+    state.legal = mergeDefaults(state.legal, DEFAULT_STATE.legal);
+    state.modules = mergeDefaults(state.modules, DEFAULT_STATE.modules);
+    state.enabled_since = mergeDefaults(state.enabled_since, DEFAULT_STATE.enabled_since);
+    state.habits = mergeDefaults(state.habits, DEFAULT_STATE.habits);
+    state.prices = mergeDefaults(state.prices, DEFAULT_STATE.prices);
+    state.today = mergeDefaults(state.today, DEFAULT_STATE.today);
+    state.history = state.history || {};
+    state.meta = mergeDefaults(state.meta, DEFAULT_STATE.meta);
 
-  // Expose API publique
+    // Date du jour cohérente
+    if (!state.today.date) {
+      state.today.date = todayISO();
+    }
+
+    // Règle alcool global vs sous-types :
+    // - Si alcool global ON => on force OFF beer/hard/liqueur
+    // - Si un sous-type ON => on force OFF alcool global
+    const m = state.modules;
+    if (m.alcohol) {
+      m.beer = false;
+      m.hard = false;
+      m.liqueur = false;
+    } else if (m.beer || m.hard || m.liqueur) {
+      m.alcohol = false;
+    }
+
+    // Enabled_since : si module désactivé et jamais utilisé → on peut laisser null
+    // (pas de logique supplémentaire ici pour l'instant)
+
+    // Habitudes : valeurs négatives interdites
+    ["cigs", "joints", "alcohol"].forEach((k) => {
+      let v = state.habits.goal[k];
+      if (v != null && v < 0) state.habits.goal[k] = 0;
+    });
+
+    // Prices : négatifs -> 0
+    Object.keys(state.prices).forEach((k) => {
+      const v = state.prices[k];
+      if (v != null && v < 0) state.prices[k] = 0;
+    });
+
+    // Meta lastSeenDate
+    if (!state.meta.lastSeenDate) {
+      state.meta.lastSeenDate = todayISO();
+    }
+
+    return state;
+  }
+
+  // ----------------------------------------------------------
+  // Chargement public
+  // ----------------------------------------------------------
+  function load() {
+    const s = ensureCoherence(loadRaw());
+    log("INFO", "État initial chargé", s);
+    return s;
+  }
+
+  // ----------------------------------------------------------
+  // Sauvegarde
+  // ----------------------------------------------------------
+  function save(state) {
+    try {
+      const toSave = ensureCoherence(clone(state));
+      localStorage.setItem(CURRENT_KEY, JSON.stringify(toSave));
+      log("INFO", "État sauvegardé", toSave);
+    } catch (e) {
+      log("WARN", "Échec de la sauvegarde de l'état", e);
+    }
+  }
+
+  // ----------------------------------------------------------
+  // updateState : met à jour l'état SANS appeler App.onRefresh()
+  // (pour éviter les boucles infinies)
+  // ----------------------------------------------------------
+  function updateState(mutator) {
+    const current = load();
+    let next;
+
+    if (typeof mutator === "function") {
+      const draft = clone(current);
+      const res = mutator(draft) || draft;
+      next = res;
+    } else if (mutator && typeof mutator === "object") {
+      next = Object.assign(clone(current), mutator);
+    } else {
+      next = current;
+    }
+
+    ensureCoherence(next);
+    save(next);
+    return next;
+  }
+
+  // ----------------------------------------------------------
+  // Coût d'une journée
+  // ----------------------------------------------------------
+  function calculateDayCost(state, day) {
+    const s = state || load();
+    const d = day || s.today || {};
+    const counters =
+      d.counters ||
+      d.today ||
+      s.today?.counters ||
+      s.today ||
+      {};
+
+    const prices = s.prices || {};
+    const keys = ["cigs", "joints", "beer", "hard", "liqueur", "alcohol"];
+    const breakdown = {};
+    let total = 0;
+
+    keys.forEach((k) => {
+      const nb = Number(counters[k] || 0);
+      const price = Number(prices[k] || 0);
+      const cost = nb * price;
+      breakdown[k] = cost;
+      total += cost;
+    });
+
+    return {
+      total,
+      breakdown
+    };
+  }
+
+  // ----------------------------------------------------------
+  // Export complet
+  // ----------------------------------------------------------
+  function exportAll() {
+    const state = load();
+    const payload = {
+      schema: "stopaddict-v3",
+      exportedAt: new Date().toISOString(),
+      state
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json"
+    });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "stopaddict_export_" + todayISO() + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+    log("INFO", "Export complet déclenché", payload);
+  }
+
+  // ----------------------------------------------------------
+  // Import complet
+  // ----------------------------------------------------------
+  function importAll(jsonString) {
+    try {
+      const parsed = JSON.parse(jsonString);
+      const importedState = parsed.state || parsed;
+
+      const ensured = ensureCoherence(importedState);
+      save(ensured);
+      log("INFO", "Import réussi", ensured);
+      return ensured;
+    } catch (e) {
+      log("WARN", "Échec de l'import", e);
+      alert("Import impossible : fichier invalide.");
+      return load();
+    }
+  }
+
+  // ----------------------------------------------------------
+  // Expose API globale
+  // ----------------------------------------------------------
   window.StopAddictState = {
-    STORAGE_KEY,
-    todayLocalISO,
-    loadState,
-    saveState,
+    load,
+    save,
+    updateState,
     ensureCoherence,
     calculateDayCost,
-    updateState,
     exportAll,
     importAll
   };
 
-  console.info("[state] État initial chargé:", window.S);
 })();
