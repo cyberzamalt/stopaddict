@@ -1,83 +1,97 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://stopaddict.app/schema/export_state.json",
-  "title": "StopAddict Export State",
+  "$id": "https://cyberzamalt.github.io/stopaddict/export_schema.json",
+  "title": "StopAddict Export Schema",
+  "description": "Schéma des exports complets (import/export TOUT). Compat ascendance garantie.",
   "type": "object",
-  "required": ["profile", "modules", "enabled_since", "prices", "habits", "today", "history", "meta"],
+  "required": ["profile","identity","legal","modules","prices","today","history","meta"],
   "properties": {
     "profile": {
       "type": "object",
-      "required": ["name", "lang", "currency", "currencyPos"],
+      "required": ["name","lang","country","currency","currencyPos"],
       "properties": {
         "name": { "type": "string" },
-        "lang": { "type": "string", "enum": ["fr", "en"] },
-        "currency": { "type": "string", "enum": ["EUR", "USD", "GBP"] },
-        "currencyPos": { "type": "string", "enum": ["before", "after"] }
-      },
-      "additionalProperties": true
+        "lang": { "type": "string", "enum": ["fr","en"] },
+        "country": { "type": "string", "minLength": 2, "maxLength": 2 },
+        "currency": { "type": "string", "minLength": 3, "maxLength": 3 },
+        "currencyPos": { "type": "string", "enum": ["before","after"] }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "required": ["age","isAdult"],
+      "properties": {
+        "age": { "type": ["integer","null"], "minimum": 0 },
+        "isAdult": { "type": "boolean" }
+      }
+    },
+    "legal": {
+      "type": "object",
+      "required": ["acceptedCGU"],
+      "properties": {
+        "acceptedCGU": { "type": "boolean" }
+      }
     },
     "modules": {
       "type": "object",
-      "required": ["cigs", "weed", "alcohol"],
+      "required": ["cigs","joints","alcohol","beer","hard","liqueur"],
       "properties": {
         "cigs": { "type": "boolean" },
-        "weed": { "type": "boolean" },
-        "alcohol": { "type": "boolean" }
-      },
-      "additionalProperties": false
+        "joints": { "type": "boolean" },
+        "alcohol": { "type": "boolean" },
+        "beer": { "type": "boolean" },
+        "hard": { "type": "boolean" },
+        "liqueur": { "type": "boolean" }
+      }
     },
     "enabled_since": {
       "type": "object",
-      "required": ["cigs", "weed", "alcohol"],
       "properties": {
-        "cigs": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
-        "weed": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
-        "alcohol": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }
-      },
-      "additionalProperties": false
-    },
-    "prices": {
-      "type": "object",
-      "required": ["cigs", "weed", "beer", "hard", "liqueur", "alcohol"],
-      "properties": {
-        "cigs": { "type": "number", "minimum": 0 },
-        "weed": { "type": "number", "minimum": 0 },
-        "beer": { "type": "number", "minimum": 0 },
-        "hard": { "type": "number", "minimum": 0 },
-        "liqueur": { "type": "number", "minimum": 0 },
-        "alcohol": { "type": "number", "minimum": 0 }
+        "cigs": { "type": ["string","null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "joints": { "type": ["string","null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "alcohol": { "type": ["string","null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }
       },
       "additionalProperties": false
     },
     "habits": {
       "type": "object",
-      "required": ["goal", "stopDate"],
+      "required": ["goal","stopDate"],
       "properties": {
         "goal": {
           "type": "object",
-          "required": ["cigs", "weed", "alcohol"],
           "properties": {
-            "cigs": { "type": ["integer", "null"], "minimum": 0 },
-            "weed": { "type": ["integer", "null"], "minimum": 0 },
-            "alcohol": { "type": ["integer", "null"], "minimum": 0 }
+            "cigs": { "type": ["integer","null"], "minimum": 0 },
+            "joints": { "type": ["integer","null"], "minimum": 0 },
+            "alcohol": { "type": ["integer","null"], "minimum": 0 }
           },
           "additionalProperties": false
         },
-        "stopDate": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }
+        "stopDate": { "type": ["string","null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }
       },
       "additionalProperties": false
     },
+    "prices": {
+      "type": "object",
+      "required": ["cigs","joints","beer","hard","liqueur","alcohol"],
+      "properties": {
+        "cigs": { "type": "number", "minimum": 0 },
+        "joints": { "type": "number", "minimum": 0 },
+        "beer": { "type": "number", "minimum": 0 },
+        "hard": { "type": "number", "minimum": 0 },
+        "liqueur": { "type": "number", "minimum": 0 },
+        "alcohol": { "type": "number", "minimum": 0 }
+      }
+    },
     "today": {
       "type": "object",
-      "required": ["date", "counters", "active", "goals"],
+      "required": ["date","counters","active","goals"],
       "properties": {
         "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
         "counters": {
           "type": "object",
-          "required": ["cigs", "weed", "alcohol", "beer", "hard", "liqueur"],
           "properties": {
             "cigs": { "type": "integer", "minimum": 0 },
-            "weed": { "type": "integer", "minimum": 0 },
+            "joints": { "type": "integer", "minimum": 0 },
             "alcohol": { "type": "integer", "minimum": 0 },
             "beer": { "type": "integer", "minimum": 0 },
             "hard": { "type": "integer", "minimum": 0 },
@@ -87,10 +101,9 @@
         },
         "active": {
           "type": "object",
-          "required": ["cigs", "weed", "alcohol", "beer", "hard", "liqueur"],
           "properties": {
             "cigs": { "type": "boolean" },
-            "weed": { "type": "boolean" },
+            "joints": { "type": "boolean" },
             "alcohol": { "type": "boolean" },
             "beer": { "type": "boolean" },
             "hard": { "type": "boolean" },
@@ -100,11 +113,10 @@
         },
         "goals": {
           "type": "object",
-          "required": ["cigs", "weed", "alcohol"],
           "properties": {
-            "cigs": { "type": ["integer", "null"], "minimum": 0 },
-            "weed": { "type": ["integer", "null"], "minimum": 0 },
-            "alcohol": { "type": ["integer", "null"], "minimum": 0 }
+            "cigs": { "type": ["integer","null"], "minimum": 0 },
+            "joints": { "type": ["integer","null"], "minimum": 0 },
+            "alcohol": { "type": ["integer","null"], "minimum": 0 }
           },
           "additionalProperties": false
         }
@@ -112,50 +124,90 @@
       "additionalProperties": false
     },
     "history": {
+      "description": "Historique par date (YYYY-MM-DD).",
       "type": "object",
-      "patternProperties": {
-        "^\\d{4}-\\d{2}-\\d{2}$": {
-          "type": "object",
-          "properties": {
-            "cigs": { "type": "integer", "minimum": 0 },
-            "weed": { "type": "integer", "minimum": 0 },
-            "alcohol": { "type": "integer", "minimum": 0 },
-            "beer": { "type": "integer", "minimum": 0 },
-            "hard": { "type": "integer", "minimum": 0 },
-            "liqueur": { "type": "integer", "minimum": 0 }
+      "additionalProperties": {
+        "type": "object",
+        "required": ["counters","active"],
+        "properties": {
+          "counters": {
+            "type": "object",
+            "properties": {
+              "cigs": { "type": "integer", "minimum": 0 },
+              "joints": { "type": "integer", "minimum": 0 },
+              "alcohol": { "type": "integer", "minimum": 0 },
+              "beer": { "type": "integer", "minimum": 0 },
+              "hard": { "type": "integer", "minimum": 0 },
+              "liqueur": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
           },
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
+          "active": {
+            "type": "object",
+            "properties": {
+              "cigs": { "type": "boolean" },
+              "joints": { "type": "boolean" },
+              "alcohol": { "type": "boolean" },
+              "beer": { "type": "boolean" },
+              "hard": { "type": "boolean" },
+              "liqueur": { "type": "boolean" }
+            },
+            "additionalProperties": false
+          },
+          "cost": { "type": ["number","null"], "minimum": 0 }
+        },
+        "additionalProperties": false
+      }
     },
     "meta": {
       "type": "object",
       "properties": {
-        "lastExportAt": { "type": ["string", "null"], "format": "date-time" },
-        "warnDismissed": { "type": "boolean" }
+        "version": { "type": ["string","null"] },
+        "lastExportAt": { "type": ["string","null"], "format": "date-time" },
+        "warnDismissed": { "type": ["boolean","null"] }
       },
-      "additionalProperties": true
+      "additionalProperties": false
     }
   },
   "additionalProperties": false,
   "examples": [
     {
-      "profile": { "name": "Nico", "lang": "fr", "currency": "EUR", "currencyPos": "before" },
-      "modules": { "cigs": true, "weed": true, "alcohol": true },
-      "enabled_since": { "cigs": "2025-10-01", "weed": null, "alcohol": "2025-11-01" },
-      "prices": { "cigs": 0.6, "weed": 2.0, "beer": 3.5, "hard": 4.0, "liqueur": 3.0, "alcohol": 3.2 },
-      "habits": { "goal": { "cigs": 5, "weed": 0, "alcohol": 1 }, "stopDate": "2025-12-01" },
+      "profile": { "name": "Nico", "lang": "fr", "country": "FR", "currency": "EUR", "currencyPos": "before" },
+      "identity": { "age": 42, "isAdult": true },
+      "legal": { "acceptedCGU": true },
+      "modules": { "cigs": true, "joints": true, "alcohol": false, "beer": true, "hard": true, "liqueur": false },
+      "enabled_since": { "cigs": "2025-10-01", "joints": "2025-10-10", "alcohol": null },
+      "habits": { "goal": { "cigs": 5, "joints": 0, "alcohol": null }, "stopDate": "2025-11-01" },
+      "prices": { "cigs": 0.6, "joints": 3, "beer": 2.5, "hard": 4, "liqueur": 3, "alcohol": 0 },
       "today": {
-        "date": "2025-11-12",
-        "counters": { "cigs": 2, "weed": 0, "alcohol": 0, "beer": 1, "hard": 0, "liqueur": 0 },
-        "active": { "cigs": true, "weed": true, "alcohol": false, "beer": true, "hard": false, "liqueur": false },
-        "goals": { "cigs": 5, "weed": 0, "alcohol": 1 }
+        "date": "2025-11-13",
+        "counters": { "cigs": 2, "joints": 0, "alcohol": 0, "beer": 1, "hard": 0, "liqueur": 0 },
+        "active": { "cigs": true, "joints": true, "alcohol": false, "beer": true, "hard": true, "liqueur": false },
+        "goals": { "cigs": 5, "joints": 0, "alcohol": null }
       },
       "history": {
-        "2025-11-11": { "cigs": 6, "weed": 0, "alcohol": 0, "beer": 2, "hard": 0, "liqueur": 0 }
+        "2025-11-12": {
+          "counters": { "cigs": 4, "joints": 0, "alcohol": 0, "beer": 2, "hard": 0, "liqueur": 0 },
+          "active": { "cigs": true, "joints": true, "alcohol": false, "beer": true, "hard": true, "liqueur": false },
+          "cost": 5.2
+        }
       },
-      "meta": { "lastExportAt": "2025-11-12T09:30:00Z", "warnDismissed": true }
+      "meta": { "version": "3.0.0", "lastExportAt": "2025-11-13T10:00:00Z", "warnDismissed": false }
     }
-  ]
+  ],
+  "x-backward-compat": {
+    "notes": "Compatibilité ascendante : anciennes exports sans identity/legal/lang/country/currency sont complétés par défaut lors de l’import.",
+    "defaults": {
+      "profile.lang": "fr",
+      "profile.country": "FR",
+      "profile.currency": "EUR",
+      "profile.currencyPos": "before",
+      "identity.age": null,
+      "identity.isAdult": false,
+      "legal.acceptedCGU": false
+    },
+    "renames": {
+      "none": "La clé 'joints' reste inchangée (pas de renommage)."
+    }
+  }
 }
