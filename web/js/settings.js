@@ -1,264 +1,303 @@
 /* ============================================================
    StopAddict v3 — settings.js
-   Écran Réglages (profil, modules, tarifs, suivi, légal, import/export)
-   Fidèle au monolith d’exemple
+   Panneau Réglages COMPLET (profil, modules, tarifs, légal, data)
    ============================================================ */
-(function () {
-  "use strict";
 
-  const $root = () => document.getElementById("settings-root");
+window.Settings = (function () {
 
-  /* ---------- RENDU UI ---------- */
-  function render() {
-    const S = window.S;
-    if (!S) return;
+  const root = document.getElementById("settings-root");
+  if (!root) return { init(){}, refresh(){} };
 
-    $root().innerHTML = `
-      <div class="card panel">
-        <h3>Profil & Région</h3>
-        <div class="grid-2">
-          <label>Prénom (facultatif)
-            <input id="set-name" type="text" placeholder="Ex: Nico" value="${esc(S.profile.name)}">
-          </label>
-          <label>Âge
-            <input id="set-age" type="number" min="10" max="99" value="${S.identity.age ?? ''}">
-          </label>
-          <label>Langue
-            <select id="set-lang">
-              <option value="fr" ${S.profile.lang === 'fr' ? 'selected' : ''}>Français</option>
-              <option value="en" ${S.profile.lang === 'en' ? 'selected' : ''}>English</option>
-            </select>
-          </label>
-          <label>Devise
-            <select id="set-currency">
-              ${currencyOptions(S.profile.currency)}
-            </select>
-          </label>
-          <label>Position symbole
-            <select id="set-currencyPos">
-              <option value="before" ${S.profile.currencyPos === 'before' ? 'selected' : ''}>Avant</option>
-              <option value="after" ${S.profile.currencyPos === 'after' ? 'selected' : ''}>Après</option>
-            </select>
-          </label>
-        </div>
-      </div>
-
-      <div class="card panel">
-        <h3>Modules disponibles</h3>
-        <div class="grid-3">
-          ${moduleCheck("cigs","Cigarettes", S.modules.cigs)}
-          ${moduleCheck("joints","Joints", S.modules.joints)}
-          ${moduleCheck("alcohol","Alcool (global)", S.modules.alcohol)}
-          ${moduleCheck("beer","Bière", S.modules.beer)}
-          ${moduleCheck("hard","Alcools forts", S.modules.hard)}
-          ${moduleCheck("liqueur","Liqueur", S.modules.liqueur)}
-        </div>
-        <small>Règle monolith : Alcool (global) est exclusif avec Bière / Fort / Liqueur.</small>
-      </div>
-
-      <div class="card panel">
-        <h3>Tarifs (unité)</h3>
-        <div class="grid-3">
-          ${priceInput("cigs","Cigarette", S.prices.cigs)}
-          ${priceInput("joints","Joint", S.prices.joints)}
-          ${priceInput("beer","Bière", S.prices.beer)}
-          ${priceInput("hard","Fort", S.prices.hard)}
-          ${priceInput("liqueur","Liqueur", S.prices.liqueur)}
-          ${priceInput("alcohol","Alcool (glob.)", S.prices.alcohol)}
-        </div>
-        <small>Le graphe “Coûts & Économies” n’affiche des coûts que si des tarifs sont renseignés.</small>
-      </div>
-
-      <div class="card panel">
-        <h3>Suivi depuis</h3>
-        <div class="grid-3">
-          ${sinceInput("cigs","Suivi clopes depuis", S.enabled_since.cigs)}
-          ${sinceInput("joints","Suivi joints depuis", S.enabled_since.joints)}
-          ${sinceInput("alcohol","Suivi alcool depuis", S.enabled_since.alcohol)}
-        </div>
-      </div>
-
-      <div class="card panel">
-        <h3>Habitudes / Objectifs & Arrêt</h3>
-        <div class="grid-4">
-          ${goalInput("cigs","Objectif clopes / jour", S.habits.goal.cigs)}
-          ${goalInput("joints","Objectif joints / jour", S.habits.goal.joints)}
-          ${goalInput("alcohol","Objectif alcool / jour", S.habits.goal.alcohol)}
-          <label>Date d’arrêt (générale)
-            <input id="set-stopDate" type="date" value="${S.habits.stopDate ?? ''}">
-          </label>
-        </div>
-      </div>
-
-      <div class="card panel">
-        <h3>Santé • Majorité • Légal • Manuels • Numéros utiles</h3>
-        <div class="grid-2">
-          <label>
-            <input id="set-isAdult" type="checkbox" ${S.identity.isAdult ? 'checked' : ''}>
-            J’atteste avoir plus de 18 ans
-          </label>
-          <label>
-            <input id="set-acceptCGU" type="checkbox" ${S.legal.acceptedCGU ? 'checked' : ''}>
-            J’accepte les <a href="./docs/CGU.pdf" target="_blank">CGU</a>
-          </label>
-        </div>
-        <div class="legal-links">
-          <a href="./docs/CGU.pdf" target="_blank">CGU</a>
-          <a href="./docs/CGV.pdf" target="_blank">CGV</a>
-          <a href="./docs/Mentions.pdf" target="_blank">Mentions légales</a>
-          <a href="./docs/Manuel.pdf" target="_blank">Manuel utilisateur</a>
-          <a href="https://www.tabac-info-service.fr" target="_blank">Tabac Info Service</a>
-          <a href="https://www.alcool-info-service.fr" target="_blank">Alcool Info Service</a>
-          <a href="https://www.drogues-info-service.fr" target="_blank">Drogues Info Service</a>
-          <a href="tel:112">Urgence 112</a>
-        </div>
-        <div style="margin-top:.6rem">
-          <button id="btn-verify-identity">Vérifier identité / majorité</button>
-        </div>
-      </div>
-
-      <div class="card panel">
-        <h3>Données</h3>
-        <div class="flex">
-          <button id="btn-export">Exporter TOUT (.json)</button>
-          <label class="file-btn">
-            Importer TOUT (.json)
-            <input id="file-import" type="file" accept="application/json" hidden>
-          </label>
-        </div>
-      </div>
-    `;
-
-    bindEvents();
+  /* ---------- HELPERS ---------- */
+  function el(tag, cls, html) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (html) e.innerHTML = html;
+    return e;
+  }
+  function label(key, content) {
+    return `<label><span>${i18n(key)}</span>${content}</label>`;
+  }
+  function i18n(k) {
+    return window.I18N?.get(k) || k;
   }
 
-  /* ---------- ÉVÉNEMENTS ---------- */
-  function bindEvents() {
-    const S = window.S;
+  /* ---------- SECTIONS ---------- */
+  function renderProfile(S) {
+    const card = el("div","settings-card");
+    card.innerHTML = `
+      <h3>${i18n("settings.titleProfile")}</h3>
+      <div class="settings-row">
 
-    // Profil & région
-    onInput("#set-name", v => update(s => s.profile.name = v));
-    onInput("#set-age", v => update(s => s.identity.age = parseNumOrNull(v)));
-    onChange("#set-lang", v => update(s => s.profile.lang = v));
-    onChange("#set-currency", v => update(s => s.profile.currency = v));
-    onChange("#set-currencyPos", v => update(s => s.profile.currencyPos = v));
+        ${label("settings.name", `<input id="st-name" type="text" value="${S.profile.name||""}">`)}
 
-    // Modules disponibles (règle monolith alcool exclusif gérée dans ensureCoherence)
-    ["cigs","joints","alcohol","beer","hard","liqueur"].forEach(k => {
-      onChange(`#mod-${k}`, checked => update(s => s.modules[k] = !!checked));
-    });
+        ${label("settings.age", `<input id="st-age" type="number" min="0" value="${S.identity.age||""}">`)}
 
-    // Tarifs
-    ["cigs","joints","beer","hard","liqueur","alcohol"].forEach(k => {
-      onInput(`#price-${k}`, v => update(s => s.prices[k] = parseFloat(v || 0)));
-    });
+        ${label("settings.lang", `
+          <select id="st-lang">
+            <option value="fr" ${S.profile.lang==="fr"?"selected":""}>Français</option>
+            <option value="en" ${S.profile.lang==="en"?"selected":""}>English</option>
+          </select>
+        `)}
 
-    // Suivi depuis
-    onChange("#since-cigs", v => update(s => s.enabled_since.cigs = v || null));
-    onChange("#since-joints", v => update(s => s.enabled_since.joints = v || null));
-    onChange("#since-alcohol", v => update(s => s.enabled_since.alcohol = v || null));
+        ${label("settings.currency", `
+          <input id="st-currency" type="text" value="${S.profile.currency}">
+        `)}
 
-    // Habitudes
-    onInput("#goal-cigs", v => update(s => s.habits.goal.cigs = parseNumOrNull(v)));
-    onInput("#goal-joints", v => update(s => s.habits.goal.joints = parseNumOrNull(v)));
-    onInput("#goal-alcohol", v => update(s => s.habits.goal.alcohol = parseNumOrNull(v)));
-    onChange("#set-stopDate", v => update(s => s.habits.stopDate = v || null));
+        ${label("settings.currencyPos", `
+          <select id="st-currencyPos">
+            <option value="before" ${S.profile.currencyPos==="before"?"selected":""}>${i18n("settings.before")}</option>
+            <option value="after"  ${S.profile.currencyPos==="after" ?"selected":""}>${i18n("settings.after")}</option>
+          </select>
+        `)}
 
-    // Légal & majorité
-    onChange("#set-isAdult", checked => update(s => s.identity.isAdult = !!checked));
-    onChange("#set-acceptCGU", checked => update(s => s.legal.acceptedCGU = !!checked));
-    onClick("#btn-verify-identity", () => {
-      if (typeof window.showIdentityDialog === "function") window.showIdentityDialog();
-    });
+      </div>
+    `;
+    return card;
+  }
 
-    // Import / Export
-    onClick("#btn-export", () => window.StopAddictState.exportAll());
-    const file = document.querySelector("#file-import");
-    file.addEventListener("click", () => (file.value = "")); // reset for same-file reimport
-    file.addEventListener("change", e => {
-      const f = e.target.files?.[0];
-      if (!f) return;
-      window.StopAddictState.importAll(f, ok => {
-        if (!ok) alert("Import invalide.");
+  function renderModules(S) {
+    const card = el("div","settings-card");
+    card.innerHTML = `
+      <h3>${i18n("settings.titleModules")}</h3>
+
+      ${moduleCheckbox("cigs", S.modules.cigs)}
+      ${moduleCheckbox("joints", S.modules.joints)}
+      ${moduleCheckbox("alcohol", S.modules.alcohol)}
+      ${moduleCheckbox("beer", S.modules.beer)}
+      ${moduleCheckbox("hard", S.modules.hard)}
+      ${moduleCheckbox("liqueur", S.modules.liqueur)}
+
+      <div class="settings-note">${i18n("settings.noteAlcoholRule")}</div>
+    `;
+    return card;
+  }
+
+  function moduleCheckbox(key, value) {
+    return `
+      <div class="settings-module-toggle">
+        <input type="checkbox" id="st-mod-${key}" ${value?"checked":""}>
+        <label for="st-mod-${key}">${i18n("counters."+key)}</label>
+      </div>
+    `;
+  }
+
+  function renderPrices(S) {
+    const card = el("div","settings-card");
+    card.innerHTML = `
+      <h3>${i18n("settings.titlePrices")}</h3>
+      <div class="settings-row">
+        ${priceInput("cigs", S.prices.cigs)}
+        ${priceInput("joints", S.prices.joints)}
+        ${priceInput("beer", S.prices.beer)}
+        ${priceInput("hard", S.prices.hard)}
+        ${priceInput("liqueur", S.prices.liqueur)}
+        ${priceInput("alcohol", S.prices.alcohol)}
+      </div>
+    `;
+    return card;
+  }
+  function priceInput(key,val){
+    return label("counters."+key, `<input id="st-price-${key}" type="number" step="0.01" value="${val||""}">`);
+  }
+
+  function renderSince(S) {
+    const card = el("div","settings-card");
+    card.innerHTML = `
+      <h3>${i18n("settings.titleSince")}</h3>
+      <div class="settings-row">
+        ${sinceInput("cigs", S.enabled_since.cigs)}
+        ${sinceInput("joints", S.enabled_since.joints)}
+        ${sinceInput("alcohol", S.enabled_since.alcohol)}
+      </div>
+    `;
+    return card;
+  }
+  function sinceInput(key,val){
+    return label("settings.sinceKey".replace("{key}",key),
+      `<input id="st-since-${key}" type="date" value="${val||""}">`);
+  }
+
+  function renderHabits(S){
+    const card = el("div","settings-card");
+    card.innerHTML = `
+      <h3>${i18n("settings.titleHabits")}</h3>
+      <div class="settings-row">
+        ${goalInput("cigs", S.habits.goal.cigs)}
+        ${goalInput("joints", S.habits.goal.joints)}
+        ${goalInput("alcohol", S.habits.goal.alcohol)}
+      </div>
+      <label>${i18n("settings.stopDate")}
+        <input id="st-stopDate" type="date" value="${S.habits.stopDate||""}">
+      </label>
+    `;
+    return card;
+  }
+  function goalInput(key,val){
+    return label("settings.goalPerDay".replace("{key}",key),
+      `<input id="st-goal-${key}" type="number" min="0" value="${val||""}">`);
+  }
+
+  function renderLegal(S) {
+    const card = el("div","settings-card");
+    card.innerHTML = `
+      <h3>${i18n("settings.titleLegal")}</h3>
+
+      <label>
+        <input type="checkbox" id="st-adult" ${S.identity.isAdult?"checked":""}>
+        ${i18n("settings.isAdult")}
+      </label>
+
+      <label>
+        <input type="checkbox" id="st-cgu" ${S.legal.acceptedCGU?"checked":""}>
+        ${i18n("settings.acceptCGU")}
+      </label>
+
+      <div class="settings-legal-links">
+        <button onclick="window.open('./docs/CGU.pdf')">${i18n("legal.cgu")}</button>
+        <button onclick="window.open('./docs/CGV.pdf')">${i18n("legal.cgv")}</button>
+        <button onclick="window.open('./docs/Mentions.pdf')">${i18n("legal.mentions")}</button>
+        <button onclick="window.open('./docs/Manuel.pdf')">${i18n("legal.manual")}</button>
+        <button onclick="window.open('https://www.tabac-info-service.fr')">${i18n("legal.helpTabac")}</button>
+        <button onclick="window.open('https://www.alcool-info-service.fr')">${i18n("legal.helpAlcool")}</button>
+        <button onclick="window.open('https://www.drogues-info-service.fr')">${i18n("legal.helpDrugs")}</button>
+        <button onclick="window.open('tel:112')">${i18n("legal.emergency")}</button>
+      </div>
+
+      <button id="st-verify">${i18n("settings.verifyIdentity")}</button>
+    `;
+    return card;
+  }
+
+  function renderData(S){
+    const card = el("div","settings-card");
+    card.innerHTML = `
+      <h3>${i18n("settings.titleData")}</h3>
+      <div class="settings-import-export">
+        <button id="st-export">${i18n("settings.exportAll")}</button>
+        <button id="st-import">${i18n("settings.importAll")}</button>
+        <input id="st-import-file" type="file" accept=".json" style="display:none">
+      </div>
+    `;
+    return card;
+  }
+
+  /* ---------- MONTAGE ---------- */
+  function build(S) {
+    root.innerHTML = "";
+    root.append(
+      renderProfile(S),
+      renderModules(S),
+      renderPrices(S),
+      renderSince(S),
+      renderHabits(S),
+      renderLegal(S),
+      renderData(S)
+    );
+    attachHandlers(S);
+  }
+
+  /* ---------- HANDLERS ---------- */
+  function attachHandlers(S) {
+
+    // PROFIL
+    $("#st-name").addEventListener("input",e => { S.profile.name = e.target.value; save(S); });
+    $("#st-age").addEventListener("input",e => { S.identity.age = parseInt(e.target.value||0); save(S); });
+    $("#st-lang").addEventListener("change",e => { S.profile.lang=e.target.value; save(S); location.reload(); });
+    $("#st-currency").addEventListener("input",e=>{ S.profile.currency=e.target.value; save(S); });
+    $("#st-currencyPos").addEventListener("change",e=>{ S.profile.currencyPos=e.target.value; save(S); });
+
+    // MODULES
+    ["cigs","joints","alcohol","beer","hard","liqueur"].forEach(key=>{
+      $(`#st-mod-${key}`).addEventListener("change",e=>{
+        S.modules[key] = e.target.checked;
+        window.StopAddictState.ensureCoherence(S);
+        save(S);
+        window.App.onRefresh();
       });
     });
-  }
 
-  /* ---------- HELPERS DOM ---------- */
-  function onInput(sel, fn) {
-    const el = document.querySelector(sel);
-    if (!el) return;
-    el.addEventListener("input", e => fn(e.target.value));
-  }
-  function onChange(sel, fn) {
-    const el = document.querySelector(sel);
-    if (!el) return;
-    el.addEventListener("change", e => {
-      const t = e.target;
-      fn(t.type === "checkbox" ? t.checked : t.value);
+    // TARIFS
+    ["cigs","joints","beer","hard","liqueur","alcohol"].forEach(key=>{
+      $(`#st-price-${key}`).addEventListener("input",e=>{
+        S.prices[key] = parseFloat((e.target.value||"0").replace(",","."));
+        save(S);
+        window.App.onRefresh();
+      });
+    });
+
+    // SUIVI DEPUIS
+    ["cigs","joints","alcohol"].forEach(key=>{
+      $(`#st-since-${key}`).addEventListener("change",e=>{
+        S.enabled_since[key] = e.target.value || null;
+        save(S);
+        window.App.onRefresh();
+      });
+    });
+
+    // HABITUDES & ARRÊT
+    ["cigs","joints","alcohol"].forEach(key=>{
+      $(`#st-goal-${key}`).addEventListener("input",e=>{
+        S.habits.goal[key] = parseInt(e.target.value||0);
+        save(S); window.App.onRefresh();
+      });
+    });
+    $("#st-stopDate").addEventListener("change",e=>{
+      S.habits.stopDate = e.target.value || null;
+      save(S); window.App.onRefresh();
+    });
+
+    // LÉGAL
+    $("#st-adult").addEventListener("change",e=>{
+      S.identity.isAdult = e.target.checked;
+      save(S); window.App.onRefresh();
+    });
+
+    $("#st-cgu").addEventListener("change",e=>{
+      S.legal.acceptedCGU = e.target.checked;
+      save(S); window.App.onRefresh();
+    });
+
+    $("#st-verify").addEventListener("click",()=>{
+      window.App.showLegalDialog();
+    });
+
+    // IMPORT / EXPORT
+    $("#st-export").addEventListener("click",()=>{
+      window.StopAddictState.exportAll();
+    });
+
+    $("#st-import").addEventListener("click",()=>{
+      $("#st-import-file").click();
+    });
+
+    $("#st-import-file").addEventListener("change",e=>{
+      const file = e.target.files[0];
+      if (!file) return;
+      const fr = new FileReader();
+      fr.onload = ev => {
+        window.StopAddictState.importAll(ev.target.result);
+        window.App.onRefresh();
+      };
+      fr.readAsText(file);
     });
   }
-  function onClick(sel, fn) {
-    const el = document.querySelector(sel);
-    if (!el) return;
-    el.addEventListener("click", fn);
-  }
-  function update(mut) {
-    window.StopAddictState.updateState(mut);
-  }
-  function parseNumOrNull(v) {
-    const n = parseInt(v, 10);
-    return Number.isFinite(n) ? n : null;
-  }
-  function esc(s) {
-    return String(s ?? "").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+
+  /* ---------- SAVE ---------- */
+  function save(S){
+    window.StopAddictState.save(S);
   }
 
-  /* ---------- FRAGMENTS UI ---------- */
-  function moduleCheck(key, label, checked) {
-    return `
-      <label><input id="mod-${key}" type="checkbox" ${checked ? "checked" : ""}> ${label}</label>
-    `;
-  }
-  function priceInput(key, label, value) {
-    return `
-      <label>${label}
-        <input id="price-${key}" type="number" step="0.01" min="0" value="${value ?? 0}">
-      </label>
-    `;
-  }
-  function sinceInput(key, label, value) {
-    return `
-      <label>${label}
-        <input id="since-${key}" type="date" value="${value ?? ""}">
-      </label>
-    `;
-  }
-  function goalInput(key, label, value) {
-    return `
-      <label>${label}
-        <input id="goal-${key}" type="number" min="0" value="${value ?? ""}">
-      </label>
-    `;
-  }
-  function currencyOptions(current) {
-    const list = [
-      ["EUR","Euro €"], ["USD","US $"], ["GBP","Pound £"], ["CHF","Swiss Fr"],
-      ["CAD","Canadian $"], ["AUD","Australian $"]
-    ];
-    return list.map(([code, name]) =>
-      `<option value="${code}" ${current === code ? "selected" : ""}>${name}</option>`
-    ).join("");
+  /* ---------- API ---------- */
+  function init(){
+    refresh();
   }
 
-  /* ---------- API publique ---------- */
-  window.Settings = { render };
+  function refresh(){
+    const S = window.StopAddictState.load();
+    build(S);
+  }
 
-  // Auto-render quand on arrive sur la page Réglages
-  document.addEventListener("DOMContentLoaded", () => {
-    const page = document.getElementById("page-settings");
-    if (page && !page.hasAttribute("hidden")) render();
-  });
-  // Re-render à chaque rafraîchissement global (navigation / changements)
-  window.addEventListener("sa:render-settings", render);
+  return { init, refresh };
+
 })();
