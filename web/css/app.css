@@ -1,296 +1,74 @@
-/* ============================================================
-   StopAddict v3 — app.css
-   Thème sombre/bleu inspiré du monolith original
-   ============================================================ */
+/* =========================
+   StopAddict — Addons UI
+   ========================= */
 
-/* === Couleurs & thèmes === */
-:root {
-  --bg: #0b1220;
-  --panel: #10182b;
-  --text: #f0f4ff;
-  --accent: #1e88e5;
-  --accent-light: #42a5f5;
-  --danger: #ff5252;
-  --success: #43a047;
-  --border: #24304a;
+/* Thème (si variables manquent) */
+:root{
+  --bg:#0b1220; --panel:#0f172a; --panel-2:#111a2d;
+  --border:#24324a; --text:#e6ecff; --muted:#9fb0d1; --accent:#3b82f6;
 }
 
-/* === Reset global === */
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-  font-family: "Inter", "Segoe UI", sans-serif;
-  color: var(--text);
+/* Layouts génériques */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:1rem;margin:.6rem 0;}
+.panel h3{margin:.1rem 0 .6rem 0;color:var(--text);font-weight:600}
+.flex{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem;}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;}
+label{display:flex;flex-direction:column;gap:.25rem;color:var(--text);}
+input,select,button{background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:.5rem .6rem;}
+button{cursor:pointer;}
+.file-btn{position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:.4rem;padding:.5rem .8rem;background:var(--panel-2)}
+.file-btn input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer}
+
+/* Accueil — chips d’activation & état inactif */
+.activation-row{display:flex;flex-wrap:wrap;gap:.4rem;margin:.4rem 0;}
+.activation-row button{transition:transform .12s ease, opacity .12s ease;}
+.activation-row button:active{transform:scale(.98)}
+.disabled{opacity:.45;filter:grayscale(.3);pointer-events:none}
+
+/* Console intégrée */
+#console-content{background:#070b16;border:1px solid var(--border);border-radius:10px;padding:.6rem;white-space:pre-wrap;overflow:auto;max-height:40vh;color:#d7e1ff;}
+#console-tools{display:flex;gap:.4rem;margin:.4rem 0;}
+
+/* Dialogs (identité, fiche jour…) */
+dialog{border:none;border-radius:14px;background:var(--panel);color:var(--text);max-width:min(560px,90vw);max-height:min(80vh,100%);padding:1rem;overflow:auto;box-shadow:0 10px 40px #0008;z-index:9999}
+dialog::backdrop{background:#000c}
+.day-dialog{background:var(--panel);border:none;border-radius:12px;padding:1rem;color:var(--text);}
+
+/* Calendrier */
+.calendar-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem;}
+.calendar-header h3{margin:0;color:var(--text);font-weight:600}
+.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:.3rem;}
+.dow{color:var(--muted);text-align:center;font-size:.9rem;padding:.2rem 0;}
+.day{background:var(--panel);border:1px solid var(--border);padding:.4rem;border-radius:8px;cursor:pointer;position:relative;min-height:64px;}
+.day:hover{outline:1px solid var(--accent);}
+.day .num{font-weight:600;color:var(--text);}
+.day.today{outline:2px solid var(--accent);}
+.badge{position:absolute;top:.25rem;right:.25rem;background:var(--accent);color:#fff;font-size:.65rem;border-radius:6px;padding:2px 6px}
+.badge.stop{background:#f44336;}
+.badge.follow{background:#03a9f4;}
+.badge.milestone{background:#4caf50;}
+
+/* Stats — légende Chart.js lisible sur fond sombre */
+.chartjs-render-monitor, canvas{background:transparent}
+:root{--chart-grid:#223;--chart-text:#ccd6f6}
+.chart-dark .chartjs-size-monitor{color:var(--chart-text)}
+
+/* Z-index (panneaux au-dessus) */
+#settings-root, #debug-section, dialog{z-index:9999;position:relative}
+
+/* Accessibilité / préférences */
+@media (prefers-reduced-motion: reduce){
+  *{animation:none!important;transition:none!important}
 }
 
-html, body {
-  height: 100%;
-  background: var(--bg);
-  overflow-x: hidden;
+/* Responsive */
+@media (max-width:900px){
+  .grid-4{grid-template-columns:1fr 1fr}
 }
-
-/* === Navigation principale === */
-nav#main-nav {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-around;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
-  padding: 0.5rem;
-  position: sticky;
-  top: 0;
-  z-index: 50;
-}
-
-nav#main-nav button {
-  background: none;
-  border: none;
-  color: var(--accent-light);
-  font-size: 0.95rem;
-  padding: 0.4rem 0.8rem;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: 0.2s;
-}
-
-nav#main-nav button:hover {
-  background: var(--accent-light);
-  color: #fff;
-}
-
-/* === Pages === */
-.page {
-  display: block;
-  padding: 1rem;
-}
-
-h2 {
-  color: var(--accent-light);
-  margin-bottom: 0.8rem;
-}
-
-/* === Compteurs === */
-#home-counters {
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-  margin-bottom: 1rem;
-}
-
-.counter {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--panel);
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-}
-
-.counter span {
-  flex: 1;
-  text-align: center;
-}
-
-.counter button {
-  width: 2rem;
-  height: 2rem;
-  border: none;
-  border-radius: 6px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 1.2rem;
-  cursor: pointer;
-  transition: 0.2s;
-}
-
-.counter button:hover {
-  background: var(--accent-light);
-}
-
-/* === Groupes exclusifs (alcool global ↔ sous-types) === */
-.counter-group {
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 8px;
-  padding: 0.6rem 0.8rem;
-}
-
-.counter-group h4 {
-  color: var(--accent);
-  margin-bottom: 0.4rem;
-}
-
-.counter.sub {
-  opacity: 0.9;
-  background: var(--panel);
-  margin: 0.3rem 0;
-}
-
-/* Inactive states (désactivé par réglages ou exclusivité) */
-.counter.disabled {
-  opacity: 0.4;
-  pointer-events: none;
-}
-
-/* === KPI === */
-#home-kpis {
-  margin-top: 1rem;
-  padding: 0.8rem;
-  background: var(--panel);
-  border-radius: 6px;
-}
-
-/* === Dialog identité / majorité === */
-dialog#identity-dialog {
-  border: none;
-  border-radius: 12px;
-  background: var(--panel);
-  padding: 1.5rem;
-  color: var(--text);
-  max-width: 360px;
-  text-align: left;
-}
-
-dialog#identity-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(3px);
-}
-
-dialog#identity-dialog input[type="text"],
-dialog#identity-dialog input[type="number"] {
-  width: 100%;
-  margin-top: 0.3rem;
-  margin-bottom: 0.8rem;
-  padding: 0.4rem;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-}
-
-dialog#identity-dialog input[type="checkbox"] {
-  margin-right: 0.3rem;
-}
-
-.dialog-buttons {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 0.8rem;
-}
-
-.dialog-buttons button {
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 0.4rem 1rem;
-  cursor: pointer;
-  transition: 0.2s;
-}
-
-.dialog-buttons button:hover {
-  background: var(--accent-light);
-}
-
-/* === Scroll interne pour modales === */
-dialog {
-  overflow-y: auto;
-  max-height: 90vh;
-}
-
-/* === Conseils dynamiques (bandeau bas) === */
-#advice-panel {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: var(--accent);
-  color: #fff;
-  text-align: center;
-  padding: 0.5rem;
-  font-size: 0.95rem;
-  animation: slideUp 0.5s ease-out;
-  z-index: 99;
-}
-
-@keyframes slideUp {
-  from { transform: translateY(100%); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-
-/* === Panneau console (même page) === */
-#debug-section {
-  background: var(--panel);
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  padding: 1rem;
-  max-height: 60vh;
-  overflow-y: auto;
-}
-
-#console-content {
-  font-family: monospace;
-  font-size: 0.85rem;
-  line-height: 1.4;
-  white-space: pre-wrap;
-  background: #0d1528;
-  border-radius: 6px;
-  padding: 0.6rem;
-  margin-bottom: 0.5rem;
-  border: 1px solid var(--border);
-}
-
-#console-clear,
-#console-copy {
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  padding: 0.3rem 0.8rem;
-  border-radius: 6px;
-  margin-right: 0.4rem;
-  cursor: pointer;
-}
-
-#console-clear:hover,
-#console-copy:hover {
-  background: var(--accent-light);
-}
-
-/* === Boutons légaux & numéros utiles === */
-.legal-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 1rem;
-}
-
-.legal-links a {
-  color: var(--accent-light);
-  text-decoration: none;
-  font-size: 0.9rem;
-}
-
-.legal-links a:hover {
-  text-decoration: underline;
-}
-
-/* === Responsive === */
-@media (max-width: 600px) {
-  nav#main-nav {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  #home-counters {
-    gap: 0.6rem;
-  }
-
-  #advice-panel {
-    font-size: 0.85rem;
-  }
-
-  dialog#identity-dialog {
-    width: 90%;
-  }
+@media (max-width:700px){
+  .grid-3{grid-template-columns:1fr 1fr}
+  .grid-2{grid-template-columns:1fr}
+  .day{min-height:56px}
 }
