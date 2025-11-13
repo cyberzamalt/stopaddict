@@ -27,6 +27,8 @@
   ];
   const CURRENT_KEY = STORAGE_KEYS[0];
 
+  let currentState = null; // <- état en mémoire, partagé avec window.S
+
   function todayISO() {
     const d = new Date();
     const year = d.getFullYear();
@@ -199,8 +201,6 @@
     }
 
     // Règle alcool global vs sous-types :
-    // - Si alcool global ON => on force OFF beer/hard/liqueur
-    // - Si un sous-type ON => on force OFF alcool global
     const m = state.modules;
     if (m.alcohol) {
       m.beer = false;
@@ -209,9 +209,6 @@
     } else if (m.beer || m.hard || m.liqueur) {
       m.alcohol = false;
     }
-
-    // Enabled_since : si module désactivé et jamais utilisé → on peut laisser null
-    // (pas de logique supplémentaire ici pour l'instant)
 
     // Habitudes : valeurs négatives interdites
     ["cigs", "joints", "alcohol"].forEach((k) => {
@@ -237,7 +234,12 @@
   // Chargement public
   // ----------------------------------------------------------
   function load() {
+    if (currentState) {
+      return currentState;
+    }
     const s = ensureCoherence(loadRaw());
+    currentState = s;
+    window.S = s; // <- important pour app.js (S.today, etc.)
     log("INFO", "État initial chargé", s);
     return s;
   }
@@ -248,6 +250,8 @@
   function save(state) {
     try {
       const toSave = ensureCoherence(clone(state));
+      currentState = toSave;
+      window.S = toSave; // <- garder S synchronisé
       localStorage.setItem(CURRENT_KEY, JSON.stringify(toSave));
       log("INFO", "État sauvegardé", toSave);
     } catch (e) {
@@ -260,17 +264,17 @@
   // (pour éviter les boucles infinies)
   // ----------------------------------------------------------
   function updateState(mutator) {
-    const current = load();
+    const base = load(); // garantit que currentState & S sont initialisés
     let next;
 
     if (typeof mutator === "function") {
-      const draft = clone(current);
+      const draft = clone(base);
       const res = mutator(draft) || draft;
       next = res;
     } else if (mutator && typeof mutator === "object") {
-      next = Object.assign(clone(current), mutator);
+      next = Object.assign(clone(base), mutator);
     } else {
-      next = current;
+      next = base;
     }
 
     ensureCoherence(next);
@@ -364,5 +368,8 @@
     exportAll,
     importAll
   };
+
+  // Initialisation immédiate de S au premier chargement
+  load();
 
 })();
