@@ -72,3 +72,81 @@ dialog::backdrop{background:#000c}
   .grid-2{grid-template-columns:1fr}
   .day{min-height:56px}
 }
+/* ============================
+   RÉGLAGES — Structure visuelle
+   ============================ */
+#settings-root {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding-bottom: 5rem; /* pour laisser la place aux conseils */
+}
+
+.settings-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem;
+}
+
+.settings-card h3 {
+  margin: 0 0 .6rem 0;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .6rem;
+}
+
+.settings-row label {
+  display: flex;
+  flex-direction: column;
+  color: var(--text);
+  gap: .25rem;
+}
+
+.settings-legal-links button {
+  width: 100%;
+  text-align: left;
+  padding: .6rem;
+  margin-bottom: .4rem;
+}
+
+.settings-import-export button {
+  width: 100%;
+  padding: .6rem;
+  margin-bottom: .4rem;
+}
+
+.settings-module-toggle {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .4rem;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.settings-module-toggle input {
+  margin-right: .5rem;
+}
+
+.settings-note {
+  font-size: .8rem;
+  color: var(--muted);
+  margin-top: .4rem;
+}
+
+/* popup majorité */
+#dlg-legal-check {
+  background: var(--panel);
+  border-radius: 14px;
+  padding: 1.2rem;
+  max-width: 420px;
+  box-shadow: 0 10px 40px #0008;
+}
+#dlg-legal-check h2 { margin:0 0 .6rem 0; }
